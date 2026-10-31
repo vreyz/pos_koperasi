@@ -115,7 +115,7 @@ export default function AuthDropdown({ auth, isMobile }) {
                                             strokeWidth={"1.5"}
                                             size={"20"}
                                         />
-                                        Logout
+                                        Keluar
                                     </button>
                                 </Menu.Item>
                             </div>

@@ -56,12 +56,12 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
             <Head title={`SHU ${period.year}`} />
             <PageHeader
                 icon={IconCoins}
-                title={<>SHU Tahun Buku {period.year} {locked ? <Badge color="green">Final</Badge> : <Badge color="amber">Draft</Badge>}</>}
+                title={<>SHU Tahun Buku {period.year} {locked ? <Badge color="green">Final</Badge> : <Badge color="amber">Draf</Badge>}</>}
                 subtitle={`Dibagikan pada tahun ${period.year + 1}.${period.calculated_at ? " Terakhir dihitung " + new Date(period.calculated_at).toLocaleString("id-ID") + "." : " Belum dihitung."}`}
                 actions={
                     <>
                         <Link href={route("shu.index")} className={btn.secondary}><IconArrowLeft size={18} /> Kembali</Link>
-                        {allocations.length > 0 && <a href={route("shu.export", period.id)} className={btn.secondary}><IconDownload size={18} /> Export Excel</a>}
+                        {allocations.length > 0 && <a href={route("shu.export", period.id)} className={btn.secondary}><IconDownload size={18} /> Ekspor Excel</a>}
                         {editable && <button onClick={post("shu.calculate")} disabled={dirty} title={dirty ? "Simpan pengaturan dulu" : ""} className={btn.primary}><IconCalculator size={18} /> Hitung SHU</button>}
                         {can("shu-finalize") && !locked && period.calculated_at && <button onClick={post("shu.finalize", "Kunci SHU ini? Setelah final, pengaturan & hasil tidak bisa diubah sampai dibuka lagi.")} className={btn.secondary}><IconLock size={18} /> Kunci (final)</button>}
                         {can("shu-finalize") && locked && <button onClick={post("shu.reopen", "Buka kunci SHU ini?")} className={btn.secondary}><IconLockOpen size={18} /> Buka kunci</button>}
@@ -139,7 +139,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                 <Field label="Sumber data penjualan" error={errors.sales_source}>
                                     <select className={inputClass} value={form.sales_source} onChange={(e) => setForm({ ...form, sales_source: e.target.value })}>
                                         <option value="pos">Penjualan aplikasi (POS)</option>
-                                        <option value="excel">Import Excel</option>
+                                        <option value="excel">Impor Excel</option>
                                     </select>
                                 </Field>
                                 <Field label="Pembulatan" error={errors.rounding || errors.rounding_unit}>
@@ -204,10 +204,10 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                     {editable && (
                         <form onSubmit={(e) => { e.preventDefault(); salesUpload.post(route("shu.sales-import", period.id), { forceFormData: true, preserveScroll: true, onSuccess: () => salesUpload.reset() }); }} className="flex flex-col gap-3 px-4 pb-4 sm:flex-row sm:items-center">
                             <input type="file" accept=".xlsx,.xls,.csv" className={inputClass} onChange={(e) => salesUpload.setData("file", e.target.files[0])} />
-                            <button type="submit" className={btn.primary} disabled={!salesUpload.data.file || salesUpload.processing}><IconUpload size={18} /> {salesUpload.processing ? "Mengimport..." : "Import penjualan"}</button>
+                            <button type="submit" className={btn.primary} disabled={!salesUpload.data.file || salesUpload.processing}><IconUpload size={18} /> {salesUpload.processing ? "Mengimpor..." : "Impor penjualan"}</button>
                         </form>
                     )}
-                    <p className="px-4 pb-4 text-xs text-slate-500">Kolom: TGL BELANJA, NAMA PEGAWAI (atau "Nama Final"), TOTAL HARGA. Import menimpa data Excel tahun {period.year} sebelumnya.</p>
+                    <p className="px-4 pb-4 text-xs text-slate-500">Kolom: TGL BELANJA, NAMA PEGAWAI (atau "Nama Final"), TOTAL HARGA. Impor menimpa data Excel tahun {period.year} sebelumnya.</p>
                     {unmatched.length > 0 && (
                         <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-800">
                             <table className="w-full">

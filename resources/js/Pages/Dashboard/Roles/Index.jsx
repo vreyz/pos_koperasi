@@ -68,7 +68,7 @@ function RoleCard({ role, onEdit, onDelete, canUpdate, canDelete }) {
                             className="flex-1 flex items-center justify-center gap-1.5 py-3 text-warning-600 hover:bg-warning-50 dark:hover:bg-warning-950/50 text-sm font-medium transition-colors"
                         >
                             <IconPencilCog size={16} />
-                            <span>Edit</span>
+                            <span>Ubah</span>
                         </button>
                     )}
                     {canUpdate && canDelete && (

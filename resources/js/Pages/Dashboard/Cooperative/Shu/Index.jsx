@@ -62,7 +62,7 @@ export default function Index({ periods, suggestedYear }) {
                                     <td className={td}>{p.sales_source === "excel" ? "Excel" : "POS"}</td>
                                     <td className={td + " text-right"}>{p.allocations_count}</td>
                                     <td className={td + " text-right"}>{rupiah(p.allocations_sum_total_rounded)}</td>
-                                    <td className={td}>{p.status === "final" ? <Badge color="green">Final</Badge> : <Badge color="amber">Draft</Badge>}</td>
+                                    <td className={td}>{p.status === "final" ? <Badge color="green">Final</Badge> : <Badge color="amber">Draf</Badge>}</td>
                                 </tr>
                             ))}
                             {periods.length === 0 && <tr><td colSpan={7} className="p-10 text-center text-slate-500">Belum ada perhitungan SHU.</td></tr>}

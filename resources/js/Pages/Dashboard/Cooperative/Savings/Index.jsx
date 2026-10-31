@@ -7,7 +7,7 @@ import { IconCalendarPlus, IconDownload, IconPigMoney, IconPlus, IconTrash, Icon
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, MONTHS, PageHeader, Panel, Stat, btn, inputBase, inputClass, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 
-const SOURCE_LABELS = { manual: "Manual", potong_gaji: "Potong gaji", tunai: "Tunai", transfer: "Transfer", import: "Import Excel" };
+const SOURCE_LABELS = { manual: "Manual", potong_gaji: "Potong gaji", tunai: "Tunai", transfer: "Transfer", import: "Impor Excel" };
 
 export default function Index({ tab, year, years, filters, recap, history, totals, payers, typeLabels, employees }) {
     useFlashToasts();
@@ -36,8 +36,8 @@ export default function Index({ tab, year, years, filters, recap, history, total
                 subtitle="Simpanan pokok, wajib, sukarela, dan angsuran pinjaman per bulan."
                 actions={
                     <>
-                        <a href={route("savings.export", { year })} className={btn.secondary}><IconDownload size={18} /> Export {year}</a>
-                        {can("savings-import") && <Link href={route("savings.import")} className={btn.secondary}><IconUpload size={18} /> Import Excel</Link>}
+                        <a href={route("savings.export", { year })} className={btn.secondary}><IconDownload size={18} /> Ekspor {year}</a>
+                        {can("savings-import") && <Link href={route("savings.import")} className={btn.secondary}><IconUpload size={18} /> Impor Excel</Link>}
                         {can("savings-create") && (
                             <>
                                 <button onClick={() => { setErrors({}); setModal("generate"); }} className={btn.secondary}><IconCalendarPlus size={18} /> Generate Potongan</button>

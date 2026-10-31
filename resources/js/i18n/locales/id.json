@@ -7,26 +7,26 @@
             "save": "Simpan",
             "cancel": "Batal",
             "close": "Tutup",
-            "submit": "Submit",
+            "submit": "Kirim",
             "back": "Kembali",
             "next": "Next",
             "confirm": "Konfirmasi",
-            "export": "Export",
-            "import": "Import",
+            "export": "Ekspor",
+            "import": "Impor",
             "print": "Cetak",
             "search": "Cari",
             "filter": "Filter",
-            "reset": "Reset",
+            "reset": "Atur Ulang",
             "selectAll": "Pilih Semua",
             "view": "Lihat",
-            "download": "Download",
-            "upload": "Upload",
+            "download": "Unduh",
+            "upload": "Unggah",
             "send": "Kirim",
             "approve": "Setujui",
             "deny": "Tolak",
             "retry": "Coba Lagi",
             "selectFile": "Pilih File",
-            "downloadTemplate": "Download Template"
+            "downloadTemplate": "Unduh Template"
         },
         "labels": {
             "no": "No",
@@ -199,7 +199,7 @@
             "appName": "Aplikasi Kasir",
             "email": "Email",
             "emailPlaceholder": "nama@email.com",
-            "password": "Password",
+            "password": "Kata Sandi",
             "passwordPlaceholder": "••••••••",
             "remember": "Ingat saya",
             "forgotPassword": "Lupa Password?",
@@ -217,7 +217,7 @@
             "subtitle": "Buat Akun Baru",
             "name": "Nama Lengkap",
             "email": "Email",
-            "password": "Password",
+            "password": "Kata Sandi",
             "confirmPassword": "Konfirmasi Password",
             "submit": "Daftar Sekarang",
             "submitting": "Memproses...",
@@ -245,10 +245,10 @@
     },
     "sidebar": {
         "sections": {
-            "overview": "Overview",
-            "masterData": "Master Data",
+            "overview": "Ringkasan",
+            "masterData": "Data Master",
             "sales": "Penjualan",
-            "approval": "Approval",
+            "approval": "Persetujuan",
             "inventory": "Inventori",
             "procurement": "Pengadaan",
             "crmPricing": "CRM & Harga",
@@ -289,7 +289,7 @@
             "dineOrders": "Pesanan Dine-In",
             "salesReport": "Laporan Penjualan",
             "profitReport": "Laporan Keuntungan",
-            "advancedInsights": "Advanced Insights",
+            "advancedInsights": "Analisis Lanjutan",
             "cashierShifts": "Shift Kasir",
             "auditLogs": "Audit Log",
             "permissions": "Hak Akses",
@@ -300,7 +300,7 @@
             "paymentGateway": "Payment Gateway",
             "storeProfile": "Profil Toko",
             "bankAccounts": "Rekening Bank",
-            "loyalty": "Loyalty",
+            "loyalty": "Loyalitas",
             "salesTarget": "Target Penjualan",
             "priceLists": "Price List",
             "warehouses": "Gudang / Cabang",
@@ -313,9 +313,9 @@
             "shu": "SHU"
         },
         "menu": {
-            "overview": "Overview",
+            "overview": "Ringkasan",
             "dashboard": "Dashboard",
-            "masterData": "Master Data",
+            "masterData": "Data Master",
             "categories": "Kategori",
             "products": "Produk",
             "customers": "Pelanggan",
@@ -326,7 +326,7 @@
             "salesReturns": "Retur Penjualan",
             "receivables": "Piutang",
             "agingReminders": "Aging & Pengingat",
-            "approval": "Approval",
+            "approval": "Persetujuan",
             "discountApproval": "Approval Diskon",
             "inventory": "Inventori",
             "stockOpname": "Stock Opname",
@@ -361,9 +361,10 @@
             "paymentGateway": "Payment Gateway",
             "storeProfile": "Profil Toko",
             "bankAccounts": "Rekening Bank",
-            "loyalty": "Loyalty",
+            "loyalty": "Loyalitas",
             "salesTarget": "Target Penjualan",
             "warehouses": "Gudang / Cabang",
+            "outlets": "Outlet",
             "whatsapp": "WhatsApp",
             "printers": "Printer",
             "taxSettings": "Pajak"
@@ -405,8 +406,8 @@
         "maxStock": "Stok Max",
         "taxType": "Tipe Pajak",
         "taxRate": "Tarif Pajak",
-        "taxInclusive": "Inclusive",
-        "taxExclusive": "Exclusive",
+        "taxInclusive": "Termasuk pajak",
+        "taxExclusive": "Belum termasuk pajak",
         "isComposite": "Produk Komposit",
         "components": "Komponen",
         "actions": {
@@ -544,7 +545,7 @@
         "totalSales": "Total Penjualan",
         "totalCash": "Total Tunai",
         "totalNonCash": "Total Non-Tunai",
-        "totalRefund": "Total Refund",
+        "totalRefund": "Total Pengembalian",
         "selectWarehouse": "Pilih Gudang"
     },
     "stock": {
@@ -575,7 +576,7 @@
             "fromWarehouse": "Dari Gudang",
             "toWarehouse": "Ke Gudang",
             "status": {
-                "draft": "Draft",
+                "draft": "Draf",
                 "sent": "Dikirim",
                 "received": "Diterima",
                 "cancelled": "Dibatalkan"
@@ -594,7 +595,7 @@
         "qty": "Jumlah",
         "unitPrice": "Harga Satuan",
         "status": {
-            "draft": "Draft",
+            "draft": "Draf",
             "ordered": "Di-Order",
             "partial": "Sebagian",
             "completed": "Selesai",
@@ -604,7 +605,7 @@
     "goodsReceivings": {
         "title": "Penerimaan Barang",
         "createGR": "Buat Penerimaan",
-        "purchaseOrder": "Purchase Order",
+        "purchaseOrder": "Pesanan Pembelian",
         "receiveItems": "Terima Barang",
         "batchNumber": "No. Batch",
         "expiredDate": "Tanggal Expired"
@@ -634,7 +635,7 @@
         "customerScope": "Scope Pelanggan",
         "scopeAll": "Semua Pelanggan",
         "scopeWalkIn": "Walk-in",
-        "scopeRegistered": "Registered",
+        "scopeRegistered": "Terdaftar",
         "scopeMember": "Member",
         "startDate": "Tanggal Mulai",
         "endDate": "Tanggal Selesai",
@@ -646,7 +647,7 @@
             "bundlePrice": "Harga Bundle",
             "buyXGetY": "Buy X Get Y"
         },
-        "preview": "Preview"
+        "preview": "Pratinjau"
     },
     "priceLists": {
         "title": "Price List",
@@ -692,7 +693,7 @@
         "createCampaign": "Buat Campaign",
         "campaignName": "Nama Campaign",
         "campaignType": "Tipe Campaign",
-        "targetSegment": "Target Segment",
+        "targetSegment": "Segmen Target",
         "message": "Pesan",
         "schedule": "Jadwal",
         "process": "Proses",
@@ -703,7 +704,7 @@
             "broadcast": "Broadcast"
         },
         "status": {
-            "draft": "Draft",
+            "draft": "Draf",
             "scheduled": "Terjadwal",
             "processing": "Diproses",
             "completed": "Selesai",
@@ -854,13 +855,13 @@
     },
     "auditLogs": {
         "title": "Audit Log",
-        "event": "Event",
+        "event": "Kejadian",
         "user": "User",
         "module": "Modul",
         "description": "Deskripsi",
         "before": "Sebelum",
         "after": "Sesudah",
-        "ipAddress": "IP Address",
+        "ipAddress": "Alamat IP",
         "userAgent": "User Agent"
     },
     "users": {
@@ -880,10 +881,10 @@
         "addRole": "Tambah Role",
         "editRole": "Edit Role",
         "roleName": "Nama Role",
-        "permissions": "Permissions"
+        "permissions": "Hak Akses"
     },
     "pdf": {
-        "invoice": "Invoice",
+        "invoice": "Faktur",
         "receipt": "Struk",
         "shippingLabel": "Label Pengiriman",
         "printDocument": "Cetak Dokumen"
