@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\ExternalSale;
 use App\Models\MemberContribution;
 use App\Models\ShuPeriod;
+use App\Services\Cooperative\BoardService;
 use App\Services\Cooperative\ExternalSalesImportService;
 use App\Services\Cooperative\NameMatcher;
 use App\Services\Cooperative\ShuCalculator;
@@ -46,6 +47,7 @@ class ShuController extends Controller
 
         // Pakai pengaturan tahun sebelumnya bila ada, supaya user tidak mengisi ulang.
         $previous = ShuPeriod::where('year', '<', $data['year'])->orderByDesc('year')->first();
+        $fromDecrees = array_map(fn ($m) => ['customer_id' => $m['customer_id'], 'months' => $m['months']], app(BoardService::class)->membersForYear($data['year']));
         $period = ShuPeriod::create([
             'year' => $data['year'],
             'total_shu' => 0,
@@ -54,7 +56,7 @@ class ShuController extends Controller
             'base_for_ppnpn' => $previous->base_for_ppnpn ?? true,
             'base_mode' => $previous->base_mode ?? 'full',
             'board_amount' => $previous->board_amount ?? 0,
-            'board_members' => $previous->board_members ?? [],
+            'board_members' => $fromDecrees ?: ($previous->board_members ?? []),
             'rounding_unit' => $previous->rounding_unit ?? 1000,
             // Bawaan: simpanan 40%, jasa usaha 60% (belanja 40 + pembiayaan dana 10 + barang 10).
             'portion_savings' => $previous->portion_savings ?? 40,
@@ -108,6 +110,7 @@ class ShuController extends Controller
             'unmatched' => $unmatched,
             'employees' => Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type']),
             'typeLabels' => MemberContribution::TYPE_LABELS,
+            'boardFromDecrees' => app(BoardService::class)->membersForYear($shu->year),
         ]);
     }
 
@@ -126,7 +129,8 @@ class ShuController extends Controller
             'board_amount' => ['nullable', 'integer', 'min:0'],
             'board_members' => ['nullable', 'array'],
             'board_members.*.customer_id' => ['required', 'integer', 'exists:customers,id'],
-            'board_members.*.months' => ['required', 'integer', 'min:1', 'max:12'],
+            'board_members.*.months' => ['required', 'array', 'min:1'],
+            'board_members.*.months.*' => ['integer', 'between:1,12'],
             'portion_savings' => ['required', 'numeric', 'min:0', 'max:100'],
             'portion_purchases' => ['required', 'numeric', 'min:0', 'max:100'],
             'portion_financing_dana' => ['required', 'numeric', 'min:0', 'max:100'],
@@ -146,7 +150,10 @@ class ShuController extends Controller
         }
         $data['portion_loans'] = 0;
         $data['board_amount'] = (int) ($data['board_amount'] ?? 0);
-        $data['board_members'] = array_values($data['board_members'] ?? []);
+        $data['board_members'] = array_values(array_map(fn ($m) => [
+            'customer_id' => (int) $m['customer_id'],
+            'months' => ShuCalculator::boardMonths($m),
+        ], $data['board_members'] ?? []));
 
         $data['excluded_customer_ids'] = array_values(array_unique(array_map('intval', $data['excluded_customer_ids'] ?? [])));
         $shu->update($data);
@@ -309,6 +316,7 @@ class ShuController extends Controller
         $adjustments = $period->adjustments()->count();
 
         $boardCount = count($period->board_members ?? []);
+        $boardMonths = array_sum(array_map(fn ($m) => count(ShuCalculator::boardMonths($m)), $period->board_members ?? []));
 
         return array_values(array_filter([
             "SHU ini untuk tahun buku {$y} dan dibagikan pada tahun ".($y + 1).'.',
@@ -318,7 +326,7 @@ class ShuController extends Controller
                 .($period->base_requires_savings ? " untuk anggota yang membayar Iuran Koperasi (pokok/wajib/sukarela) di tahun {$y}." : ' untuk semua pegawai aktif yang ikut (iuran, belanja, atau pembiayaan).')
                 .($period->base_for_ppnpn ? ' PPNPN juga mendapat SHU dasar.' : ' PPNPN tidak mendapat SHU dasar.'),
             $period->base_requires_savings ? 'Pegawai yang berbelanja tetapi tidak membayar iuran tetap mendapat bagian Belanja Toko, tanpa SHU dasar.' : null,
-            $boardCount > 0 && $period->board_amount > 0 ? "SHU Pengurus Koperasi {$rupiah($period->board_amount)} per orang per tahun (sebanding bulan bertugas) untuk {$boardCount} pengurus, dipotong dari SHU lebih dulu." : null,
+            $boardCount > 0 && $period->board_amount > 0 ? "SHU Pengurus Koperasi {$rupiah($period->board_amount)} per orang per bulan bertugas ({$boardCount} pengurus, total {$boardMonths} orang-bulan = {$rupiah($period->board_amount * $boardMonths)}), dipotong dari SHU lebih dulu." : null,
             $adjustments > 0 ? "{$adjustments} koreksi manual (SHU dasar pengganti / tambahan nominal) diterapkan dan dipotong dari SHU lebih dulu." : null,
             'Sisa SHU (setelah SHU dasar, SHU pengurus koperasi, dan koreksi) dibagi: '.$period->portion_savings.'% Iuran Koperasi, '.$period->portion_purchases.'% Belanja Toko, '.$period->portion_financing_dana.'% Pembiayaan Dana, '.$period->portion_financing_barang.'% Pembiayaan Barang (total 100%).',
             "Bagian Iuran Koperasi dibagi sebanding jumlah {$types} ".($period->savings_period === 'all_time' ? "yang terkumpul sejak awal s.d. {$y}" : "yang dibayar selama tahun {$y}").' dibanding total semua anggota.',

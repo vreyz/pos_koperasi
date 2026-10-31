@@ -8,15 +8,29 @@ import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, Tip, PageHeader, Panel, Stat, btn, inputBase, inputClass, percent, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 import { MoneyInput, PercentInput, SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
 
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+// Data lama menyimpan jumlah bulan (angka) → anggap Januari s.d. bulan ke-n.
+const boardMonths = (m) => (Array.isArray(m.months) ? m.months : Array.from({ length: Math.min(12, Number(m.months || 0)) }, (_, i) => i + 1));
+
 const SETTING_KEYS = ["total_shu", "base_per_person", "base_requires_savings", "base_for_ppnpn", "base_mode", "board_amount", "board_members", "portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang", "savings_types", "savings_period", "sales_source", "rounding", "rounding_unit", "excluded_customer_ids"];
 
-export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [] }) {
+export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [], boardFromDecrees = [] }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const locked = period.status === "final";
     const editable = can("shu-manage") && !locked;
     const empty = (k) => (k.endsWith("ids") || k === "board_members" ? [] : "");
-    const [form, setForm] = useState(() => Object.fromEntries(SETTING_KEYS.map((k) => [k, period[k] ?? empty(k)])));
+    const [form, setForm] = useState(() => {
+        const initial = Object.fromEntries(SETTING_KEYS.map((k) => [k, period[k] ?? empty(k)]));
+        return { ...initial, board_members: initial.board_members.map((m) => ({ ...m, months: boardMonths(m) })) };
+    });
+    const setBoard = (i, patch) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+    const positionById = useMemo(() => Object.fromEntries(boardFromDecrees.map((m) => [m.customer_id, m.position])), [boardFromDecrees]);
+    const loadBoardFromDecrees = () => setForm({ ...form, board_members: boardFromDecrees.map((m) => ({ customer_id: m.customer_id, months: m.months })) });
+    const toggleMonth = (i, month) => {
+        const months = form.board_members[i].months;
+        setBoard(i, { months: months.includes(month) ? months.filter((x) => x !== month) : [...months, month].sort((a, b) => a - b) });
+    };
     const [errors, setErrors] = useState({});
     const [excludeId, setExcludeId] = useState("");
     const salesUpload = useForm({ file: null });
@@ -34,7 +48,8 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
 
     const portionTotal = ["portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
     const businessTotal = ["portion_purchases", "portion_financing_dana", "portion_financing_barang"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
-    const boardTotal = (form.board_members || []).reduce((sum, m) => sum + Math.round((Number(form.board_amount || 0) * Math.min(12, Number(m.months || 0))) / 12), 0);
+    const boardTotal = (form.board_members || []).reduce((sum, m) => sum + Number(form.board_amount || 0) * m.months.length, 0);
+    const boardPerMonth = MONTH_SHORT.map((_, i) => (form.board_members || []).filter((m) => m.customer_id && m.months.includes(i + 1)).length);
     const remainder = Number(form.total_shu || 0) - stats.base_total - boardTotal - stats.adjustment_total;
     const employeeById = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
     const empOptions = useMemo(() => employeeOptions(employees), [employees]);
@@ -143,21 +158,58 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                             </div>
                             <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                                 <div className="mb-2 flex flex-wrap items-end gap-3">
-                                    <Field label="SHU Pengurus Koperasi per orang per tahun" error={errors.board_amount} tip="Tambahan SHU untuk pengurus koperasi. Nilai per orang untuk 12 bulan; pengurus yang bertugas kurang dari 12 bulan mendapat sebanding bulan bertugas. Dipotong dari SHU yang dibagi sebelum sisa dibagi. Contoh 2023: Rp 300.000 per 6 bulan = Rp 600.000 per tahun.">
-                                        <MoneyInput className="w-56" value={form.board_amount} onChange={(v) => setForm({ ...form, board_amount: v })} />
+                                    <Field label="SHU Pengurus Koperasi per orang per bulan" error={errors.board_amount} tip="Tambahan SHU untuk pengurus koperasi, dihitung per orang per bulan bertugas. Centang bulan bertugas tiap pengurus, karena susunan pengurus bisa berganti di tengah tahun. SHU pengurus = nilai per bulan × jumlah bulan bertugas. Dipotong dari SHU yang dibagi sebelum sisa dibagi. Contoh 2023: Rp 300.000 per 6 bulan = Rp 50.000 per bulan.">
+                                        <MoneyInput className="w-56" value={form.board_amount} onChange={(v) => setForm({ ...form, board_amount: v })} disabled={!editable} />
                                     </Field>
                                     <span className="pb-2 text-sm text-slate-500">Total SHU pengurus koperasi: {rupiah(boardTotal)}</span>
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                     {(form.board_members || []).map((m, i) => (
-                                        <div key={i} className="flex flex-wrap items-center gap-2">
-                                            <SearchSelect className="min-w-[16rem] flex-1" options={empOptions} value={m.customer_id} onChange={(v) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? { ...x, customer_id: Number(v) } : x)) })} placeholder="Cari pengurus…" />
-                                            <input type="number" min="1" max="12" className={inputBase + " w-20 text-right"} value={m.months} onChange={(e) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? { ...x, months: Number(e.target.value) } : x)) })} title="Bulan bertugas" />
-                                            <span className="text-xs text-slate-500">bulan → {rupiah(Math.round((Number(form.board_amount || 0) * Math.min(12, Number(m.months || 0))) / 12))}</span>
-                                            {editable && <button type="button" onClick={() => setForm({ ...form, board_members: form.board_members.filter((_, j) => j !== i) })} className="text-danger-600"><IconX size={16} /></button>}
+                                        <div key={i} className="space-y-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <SearchSelect className="min-w-[16rem] flex-1" options={empOptions} value={m.customer_id} onChange={(v) => setBoard(i, { customer_id: Number(v) })} placeholder="Cari pengurus…" disabled={!editable} />
+                                                {positionById[m.customer_id] && <Badge color="blue">{positionById[m.customer_id]}</Badge>}
+                                                <span className="text-xs text-slate-500">{m.months.length} bulan × {rupiah(form.board_amount || 0)} = <b>{rupiah(Number(form.board_amount || 0) * m.months.length)}</b></span>
+                                                {editable && <button type="button" onClick={() => setForm({ ...form, board_members: form.board_members.filter((_, j) => j !== i) })} className="text-danger-600" title="Hapus"><IconX size={16} /></button>}
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                                {MONTH_SHORT.map((label, k) => (
+                                                    <button
+                                                        type="button"
+                                                        key={label}
+                                                        disabled={!editable}
+                                                        onClick={() => toggleMonth(i, k + 1)}
+                                                        className={`w-11 rounded-md border py-0.5 text-xs ${m.months.includes(k + 1) ? "border-primary-500 bg-primary-500 text-white" : "border-slate-200 text-slate-500 dark:border-slate-700"}`}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                ))}
+                                                {editable && (
+                                                    <button type="button" onClick={() => setBoard(i, { months: m.months.length === 12 ? [] : MONTH_SHORT.map((_, k) => k + 1) })} className="ml-1 text-xs text-primary-600 hover:underline">
+                                                        {m.months.length === 12 ? "Kosongkan" : "Setahun penuh"}
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
-                                    {editable && <button type="button" onClick={() => setForm({ ...form, board_members: [...(form.board_members || []), { customer_id: "", months: 12 }] })} className="text-sm text-primary-600 hover:underline">+ Tambah pengurus</button>}
+                                    {form.board_members?.length > 0 && (
+                                        <p className="text-xs text-slate-500">
+                                            Jumlah pengurus per bulan: {MONTH_SHORT.map((label, k) => `${label} ${boardPerMonth[k]}`).join(" · ")}
+                                        </p>
+                                    )}
+                                    {editable && (
+                                        <div className="flex flex-wrap items-center gap-4">
+                                            <button type="button" onClick={() => setForm({ ...form, board_members: [...(form.board_members || []), { customer_id: "", months: MONTH_SHORT.map((_, k) => k + 1) }] })} className="text-sm text-primary-600 hover:underline">+ Tambah pengurus</button>
+                                            {boardFromDecrees.length > 0 ? (
+                                                <button type="button" onClick={loadBoardFromDecrees} className="text-sm text-primary-600 hover:underline">
+                                                    Ambil dari SK pengurus ({boardFromDecrees.length} orang)
+                                                </button>
+                                            ) : (
+                                                <Link href={route("board.index")} className="text-sm text-slate-500 hover:underline">Belum ada SK pengurus untuk {period.year} — upload di menu Pengurus Koperasi</Link>
+                                            )}
+                                            <Tip text="Mengisi daftar pengurus dan bulan bertugas dari SK di menu Pengurus Koperasi. Bulan dihitung dari masa berlaku SK: SK yang berlaku di akhir bulan itu yang dipakai. Hapus yang tidak berhak (mis. pengawas) bila perlu, lalu Simpan." />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div>

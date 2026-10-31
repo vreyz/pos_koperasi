@@ -175,14 +175,17 @@ class ShuCalculationTest extends TestCase
         $this->pay($ketua, 'wajib', 2025, [1], 100000);
 
         $period = $this->period(['total_shu' => 1300000, 'base_per_person' => 0, 'portion_savings' => 100, 'portion_purchases' => 0,
-            'board_amount' => 600000, 'board_members' => [['customer_id' => $ketua->id, 'months' => 6]]]);
+            'board_amount' => 50000, 'board_members' => [['customer_id' => $ketua->id, 'months' => [7, 8, 9, 10, 11, 12]]]]);
         app(ShuCalculator::class)->calculate($period);
         $alloc = $period->allocations()->get()->keyBy('customer_id');
 
-        $this->assertSame(300000, $alloc[$ketua->id]->board_amount);              // 600rb × 6/12
+        $this->assertSame(300000, $alloc[$ketua->id]->board_amount);              // 50rb × 6 bulan (Jul–Des)
         $this->assertEqualsWithDelta(300000 + 500000, $alloc[$ketua->id]->total, 0.01); // sisa 1jt dibagi rata
         $this->assertEqualsWithDelta(500000, $alloc[$a->id]->total, 0.01);
         $this->assertSame(1, count(app(ShuCalculator::class)->summary($period)['buyers_without_dues']) + 1);
+
+        // Data lama (jumlah bulan berupa angka) tetap terbaca sebagai Jan s.d. bulan ke-n.
+        $this->assertSame([1, 2, 3], ShuCalculator::boardMonths(['months' => 3]));
     }
 
     public function test_pos_source_and_financing_income_portions_ignore_installments(): void

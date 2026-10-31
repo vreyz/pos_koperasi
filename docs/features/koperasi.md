@@ -60,9 +60,12 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
    - *PPNPN dapat base?* default **ya**, bisa dimatikan.
    - *Besaran*: penuh per orang **atau** proporsional bulan membayar (base × bulan ÷ 12).
    - Pegawai yang belanja tapi tidak iuran: dapat jasa pembelian, tanpa base (bila base hanya untuk pembayar).
-4. **Koreksi manual per orang** (base pengganti, tambahan/pengurangan nominal, mis. SHU pengurus koperasi) disimpan
+4. **SHU Pengurus Koperasi**: nominal **per orang per bulan bertugas**; bulan bertugas tiap pengurus
+   dicentang (Jan–Des) karena susunan pengurus bisa berganti di tengah tahun. SHU pengurus = nominal × jumlah
+   bulan dicentang, dipotong dari SHU lebih dulu.
+5. **Koreksi manual per orang** (base pengganti, tambahan/pengurangan nominal, mis. SHU pengurus koperasi) disimpan
    terpisah, tetap berlaku saat dihitung ulang, dan dipotong dari SHU lebih dulu.
-5. Sisa = total − base − koreksi, dibagi ke **4 komponen** dengan porsi (%) yang bisa diubah dan wajib total 100%
+6. Sisa = total − base − SHU pengurus − koreksi, dibagi ke **4 komponen** dengan porsi (%) yang bisa diubah dan wajib total 100%
    (bawaan periode baru: simpanan 40%, belanja 40%, pembiayaan dana 10%, pembiayaan barang 10%):
    - Simpanan: jenis (pokok/wajib/sukarela) dan periode (tahun Y / sejak awal) bisa dipilih.
    - Belanja: POS (`paid`/`unpaid`, dikurangi retur `completed`) atau import Excel.
@@ -95,6 +98,17 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
 - **Impor**: daftar dana (PEMBIAYAAN KOPERASI / Data Pembiayaan LK), daftar barang, dan Permohonan Pencairan (biaya formulir,
   rekening) — dikenali otomatis per sheet, tidak dobel saat diimpor ulang.
 
+## Pengurus Koperasi (`board.*`)
+
+- Upload SK pengurus (PDF/Word/foto, maks 20 MB). File disimpan di storage privat (`storage/app/private/board-decrees`,
+  tidak masuk git) dan hanya bisa dibuka pengguna dengan izin `board-access`.
+- Nama pengurus dibaca otomatis: Word di server (`BoardService::text`), PDF di browser (pdf.js, `?worker`), lalu
+  dicocokkan ke Data Pegawai lewat NIP 18 digit atau nama lengkap (≥ 2 kata). Jabatan ditebak dari baris yang sama
+  atau 2 baris di atasnya. Scan/foto tidak terbaca → diisi manual.
+- Masa berlaku: `effective_from` s.d. `effective_until`, atau sehari sebelum SK berikutnya mulai. Bulan bertugas =
+  SK yang berlaku di **akhir bulan** (`BoardService::membersForYear`).
+- SHU: periode baru langsung terisi pengurus + bulan dari SK; di halaman SHU ada tombol *Ambil dari SK pengurus*.
+
 ## Anggota & customer
 
 - Pembayar simpanan pokok/wajib/sukarela otomatis ditandai **anggota** (member, kode = NIP atau `AGT-xxxxx`).
@@ -110,7 +124,7 @@ Pengaturan → Tampilan Menu (`menu-settings`): sembunyikan menu sidebar yang ti
 ## Permission
 
 `employees-access|create|edit|delete|import`, `savings-access|create|delete|import`,
-`shu-access|manage|finalize`, `financing-access|create|check|review|approve|disburse|import`, `menu-settings`. Dibuat oleh `PermissionSeeder` dan oleh migrasi
+`shu-access|manage|finalize`, `financing-access|create|check|review|approve|disburse|import`, `board-access|manage`, `menu-settings`. Dibuat oleh `PermissionSeeder` dan oleh migrasi
 `2026_10_31_000002_add_cooperative_permissions` (untuk instalasi yang sudah berjalan).
 
 ## File terkait

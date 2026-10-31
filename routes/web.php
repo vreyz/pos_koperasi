@@ -3,6 +3,7 @@
 use App\Http\Controllers\Apps\AgingController;
 use App\Http\Controllers\Apps\AuditLogController;
 use App\Http\Controllers\Apps\BankAccountController;
+use App\Http\Controllers\Apps\BoardController;
 use App\Http\Controllers\Apps\CashierShiftController;
 use App\Http\Controllers\Apps\CategoryController;
 use App\Http\Controllers\Apps\CrmCampaignController;
@@ -234,6 +235,12 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('financing/{type}/create', [FinancingController::class, 'create'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.create');
     Route::post('financing/{type}', [FinancingController::class, 'store'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.store');
 
+    Route::get('board', [BoardController::class, 'index'])->middleware('permission:board-access')->name('board.index');
+    Route::post('board/preview', [BoardController::class, 'preview'])->middleware('permission:board-manage')->name('board.preview');
+    Route::post('board', [BoardController::class, 'store'])->middleware('permission:board-manage')->name('board.store');
+    Route::put('board/{decree}', [BoardController::class, 'update'])->middleware('permission:board-manage')->name('board.update');
+    Route::delete('board/{decree}', [BoardController::class, 'destroy'])->middleware('permission:board-manage')->name('board.destroy');
+    Route::get('board/{decree}/file', [BoardController::class, 'file'])->middleware('permission:board-access')->name('board.file');
     Route::get('shu', [ShuController::class, 'index'])->middleware('permission:shu-access')->name('shu.index');
     Route::post('shu', [ShuController::class, 'store'])->middleware('permission:shu-manage')->name('shu.store');
     Route::get('shu/{shu}', [ShuController::class, 'show'])->middleware('permission:shu-access')->name('shu.show');
