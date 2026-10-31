@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconChevronDown, IconSearch, IconX } from "@tabler/icons-react";
 import { inputBase, inputClass } from "@/Components/Cooperative/ui";
 
@@ -77,6 +78,8 @@ export function SearchSelect({ options, value, onChange, placeholder = "Cari…"
     const [query, setQuery] = useState("");
     const [active, setActive] = useState(0);
     const box = useRef(null);
+    const list = useRef(null);
+    const [pos, setPos] = useState(null);
     const all = useMemo(() => [...extra, ...options], [extra, options]);
     const selected = all.find((o) => String(o.value) === String(value ?? ""));
 
@@ -88,10 +91,33 @@ export function SearchSelect({ options, value, onChange, placeholder = "Cari…"
     }, [query, options, extra]);
 
     useEffect(() => {
-        const close = (e) => box.current && !box.current.contains(e.target) && setOpen(false);
+        const close = (e) => box.current && !box.current.contains(e.target) && !list.current?.contains(e.target) && setOpen(false);
         document.addEventListener("mousedown", close);
         return () => document.removeEventListener("mousedown", close);
     }, []);
+
+    // Di dalam modal, area di luar modal tidak bisa diklik → daftar tetap di tempat (absolute).
+    const inDialog = open && !!box.current?.closest('[role="dialog"]');
+    const portal = (node) => (inDialog ? node : createPortal(node, document.body));
+
+    // Daftar digambar di <body> (posisi fixed) supaya tidak terpotong panel/tabel; buka ke atas bila ruang bawah sempit.
+    useLayoutEffect(() => {
+        if (!open || box.current?.closest('[role="dialog"]')) return;
+        const place = () => {
+            const r = box.current?.getBoundingClientRect();
+            if (!r) return;
+            const below = window.innerHeight - r.bottom;
+            const up = below < 240 && r.top > below;
+            setPos({ left: r.left, width: r.width, top: up ? undefined : r.bottom + 4, bottom: up ? window.innerHeight - r.top + 4 : undefined, maxHeight: Math.max(160, Math.min(288, (up ? r.top : below) - 12)) });
+        };
+        place();
+        window.addEventListener("scroll", place, true);
+        window.addEventListener("resize", place);
+        return () => {
+            window.removeEventListener("scroll", place, true);
+            window.removeEventListener("resize", place);
+        };
+    }, [open]);
 
     const choose = (o) => {
         onChange(o ? o.value : "");
@@ -125,8 +151,8 @@ export function SearchSelect({ options, value, onChange, placeholder = "Cari…"
                     <IconChevronDown size={16} />
                 </div>
             </div>
-            {open && !disabled && (
-                <ul className="absolute z-50 mt-1 max-h-72 w-full min-w-[16rem] overflow-auto rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900">
+            {open && !disabled && (inDialog || pos) && portal(
+                <ul ref={list} style={inDialog ? undefined : { position: "fixed", ...pos }} className={`${inDialog ? "absolute mt-1 max-h-72 w-full" : ""} z-[9999] min-w-[16rem] overflow-auto rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900`}>
                     {results.map((o, i) => (
                         <li key={`${o.value}`}>
                             <button
@@ -142,7 +168,7 @@ export function SearchSelect({ options, value, onChange, placeholder = "Cari…"
                     ))}
                     {results.length === 0 && <li className="px-3 py-2 text-slate-500">Tidak ditemukan</li>}
                     {options.length > 60 && results.length >= 60 && <li className="px-3 py-1 text-xs text-slate-400">Ketik untuk mempersempit…</li>}
-                </ul>
+                </ul>,
             )}
         </div>
     );
