@@ -50,10 +50,10 @@ export default function Import({ preview, fieldLabels }) {
 
     return (
         <>
-            <Head title="Import Pegawai" />
+            <Head title="Impor Pegawai" />
             <PageHeader
                 icon={IconFileSpreadsheet}
-                title="Import Data Pegawai"
+                title="Impor Data Pegawai"
                 subtitle="Data yang sama dilewati, data berbeda dikonfirmasi, data baru langsung diimport. NIP/nama mirip ditandai untuk dicek."
                 actions={
                     <>

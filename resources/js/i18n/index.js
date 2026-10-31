@@ -21,7 +21,8 @@ i18n
             escapeValue: false,
         },
         detection: {
-            order: ['localStorage', 'navigator'],
+            // Tanpa 'navigator': selalu Indonesia kecuali user memilih bahasa lain.
+            order: ['localStorage'],
             caches: ['localStorage'],
         },
     });

@@ -46,7 +46,7 @@ export default function Index({ rows, employees, shuPeriods, shuYear }) {
             <PageHeader
                 icon={IconLink}
                 title="Pencocokan Nama"
-                subtitle="Hubungkan nama di penjualan dan di file simpanan ke data pegawai. Perubahan langsung memindahkan data, diingat untuk import berikutnya, dan ikut di SHU setelah dihitung ulang."
+                subtitle="Hubungkan nama di penjualan dan di file simpanan ke data pegawai. Perubahan langsung memindahkan data, diingat untuk impor berikutnya, dan ikut di SHU setelah dihitung ulang."
             />
 
             <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">

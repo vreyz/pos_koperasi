@@ -90,7 +90,7 @@ function CustomerCard({ customer, canUpdate, canDelete }) {
                             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-warning-100 text-warning-600 hover:bg-warning-200 dark:bg-warning-900/50 dark:text-warning-400 text-sm font-medium transition-colors"
                         >
                             <IconPencilCog size={16} />
-                            <span>Edit</span>
+                            <span>Ubah</span>
                         </Link>
                     )}
                     {canDelete && (

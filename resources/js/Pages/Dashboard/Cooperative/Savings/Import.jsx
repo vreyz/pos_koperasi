@@ -37,11 +37,11 @@ export default function Import({ preview, employees }) {
 
     return (
         <>
-            <Head title="Import Simpanan" />
+            <Head title="Impor Simpanan" />
             <PageHeader
                 icon={IconFileSpreadsheet}
-                title="Import Rekap Simpanan"
-                subtitle="Format sheet Master: Nama Pegawai, Wajib, Pokok, Sukarela, Angsuran Koperasi, Bulan, Tahun (NIP opsional). Import ulang periode yang sama menimpa hasil import sebelumnya."
+                title="Impor Rekap Simpanan"
+                subtitle="Format sheet Master: Nama Pegawai, Wajib, Pokok, Sukarela, Angsuran Koperasi, Bulan, Tahun (NIP opsional). Impor ulang periode yang sama menimpa hasil import sebelumnya."
                 actions={
                     <>
                         <Link href={route("savings.index")} className={btn.secondary}><IconArrowLeft size={18} /> Kembali</Link>
@@ -120,7 +120,7 @@ export default function Import({ preview, employees }) {
                             </tbody>
                         </table>
                     </div>
-                    <p className="p-4 text-xs text-slate-500">Pilihan pencocokan disimpan sebagai alias, jadi nama yang sama otomatis cocok di import berikutnya (simpanan maupun penjualan).</p>
+                    <p className="p-4 text-xs text-slate-500">Pilihan pencocokan disimpan sebagai alias, jadi nama yang sama otomatis cocok di impor berikutnya (simpanan maupun penjualan).</p>
                 </Panel>
             )}
         </>

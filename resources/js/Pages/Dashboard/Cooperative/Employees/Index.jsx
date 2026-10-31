@@ -59,11 +59,11 @@ export default function Index({ employees, filters, types, statuses, summary }) 
                 actions={
                     <>
                         <a href={route("employees.export")} className={btn.secondary}>
-                            <IconDownload size={18} /> Export
+                            <IconDownload size={18} /> Ekspor
                         </a>
                         {can("employees-import") && (
                             <Link href={route("employees.import")} className={btn.secondary}>
-                                <IconUpload size={18} /> Import Excel
+                                <IconUpload size={18} /> Impor Excel
                             </Link>
                         )}
                         {can("employees-create") && (
@@ -164,7 +164,7 @@ export default function Index({ employees, filters, types, statuses, summary }) 
                             {employees.data.length === 0 && (
                                 <tr>
                                     <td colSpan={7} className="p-10 text-center text-slate-500">
-                                        Belum ada data pegawai. Gunakan <b>Import Excel</b> untuk memasukkan daftar pegawai.
+                                        Belum ada data pegawai. Gunakan <b>Impor Excel</b> untuk memasukkan daftar pegawai.
                                     </td>
                                 </tr>
                             )}
