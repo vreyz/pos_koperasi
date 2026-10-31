@@ -14,7 +14,7 @@ const boardMonths = (m) => (Array.isArray(m.months) ? m.months : Array.from({ le
 
 const SETTING_KEYS = ["total_shu", "base_per_person", "base_requires_savings", "base_for_ppnpn", "base_mode", "board_amount", "board_members", "portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang", "savings_types", "savings_period", "sales_source", "rounding", "rounding_unit", "excluded_customer_ids"];
 
-export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [], boardFromDecrees = [] }) {
+export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [], boardFromDecrees = [], nonEmployeeBuyers = [] }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const locked = period.status === "final";
@@ -271,27 +271,46 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     </div>
                                 </Field>
                             </div>
-                            {buyersWithoutDues.length > 0 && (
-                                <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm dark:border-warning-900/40 dark:bg-warning-900/10">
-                                    <p className="mb-2 font-medium text-warning-800 dark:text-warning-300">
-                                        Belanja di {period.year} tetapi tidak tercatat iuran di {period.year} ({buyersWithoutDues.length} orang)
-                                        <Tip text="Pegawai aktif yang namanya ada di data belanja tahun ini tetapi tidak ada di data iuran tahun ini. Mereka tetap mendapat bagian Belanja Toko (tanpa SHU dasar bila SHU dasar hanya untuk pembayar iuran). Kecualikan bila tidak berhak, atau cocokkan namanya di menu Pencocokan Nama bila ternyata salah ejaan." />
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {buyersWithoutDues.map((b) => {
-                                            const out = form.excluded_customer_ids.includes(b.customer_id);
-                                            return (
-                                                <span key={b.customer_id} className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-xs ${out ? "bg-slate-200 line-through dark:bg-slate-700" : "bg-white dark:bg-slate-900"}`}>
-                                                    {b.name}{b.employee_type === "PPNPN" ? " · PPNPN" : ""} · {rupiah(b.amount)}
-                                                    {editable && (
-                                                        <button type="button" className="text-primary-600 hover:underline" onClick={() => setForm({ ...form, excluded_customer_ids: out ? form.excluded_customer_ids.filter((x) => x !== b.customer_id) : [...form.excluded_customer_ids, b.customer_id] })}>
-                                                            {out ? "batal" : "kecualikan"}
-                                                        </button>
-                                                    )}
-                                                </span>
-                                            );
-                                        })}
-                                    </div>
+                            {(buyersWithoutDues.length > 0 || nonEmployeeBuyers.length > 0) && (
+                                <div className="space-y-4 rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm dark:border-warning-900/40 dark:bg-warning-900/10">
+                                    {buyersWithoutDues.length > 0 && (
+                                        <div>
+                                            <p className="mb-2 font-medium text-warning-800 dark:text-warning-300">
+                                                Belanja di {period.year} tetapi tidak tercatat iuran di {period.year} ({buyersWithoutDues.length} orang)
+                                                <Tip text="Pegawai aktif yang namanya ada di data belanja tahun ini tetapi tidak ada di data iuran tahun ini. Mereka tetap mendapat bagian Belanja Toko (tanpa SHU dasar bila SHU dasar hanya untuk pembayar iuran). Kecualikan bila tidak berhak, atau cocokkan namanya di menu Pencocokan Nama bila ternyata salah ejaan." />
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {buyersWithoutDues.map((b) => {
+                                                    const out = form.excluded_customer_ids.includes(b.customer_id);
+                                                    return (
+                                                        <span key={b.customer_id} className={`inline-flex items-center gap-2 rounded-lg px-2 py-1 text-xs ${out ? "bg-slate-200 line-through dark:bg-slate-700" : "bg-white dark:bg-slate-900"}`}>
+                                                            {b.name}{b.employee_type === "PPNPN" ? " · PPNPN" : ""} · {rupiah(b.amount)}
+                                                            {editable && (
+                                                                <button type="button" className="text-primary-600 hover:underline" onClick={() => setForm({ ...form, excluded_customer_ids: out ? form.excluded_customer_ids.filter((x) => x !== b.customer_id) : [...form.excluded_customer_ids, b.customer_id] })}>
+                                                                    {out ? "batal" : "kecualikan"}
+                                                                </button>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {nonEmployeeBuyers.length > 0 && (
+                                        <div>
+                                            <p className="mb-2 font-medium text-warning-800 dark:text-warning-300">
+                                                Pembeli bukan pegawai di {period.year} — tidak ikut SHU ({nonEmployeeBuyers.length} nama)
+                                                <Tip text="Pembeli umum (mis. Umum, P2, Audit, tukang pijat) atau nama di data belanja yang belum cocok dengan Data Pegawai. Non-pegawai tidak mendapat SHU. Bila ternyata pegawai (salah ejaan / nama panggilan), cocokkan namanya di bagian Penjualan dari Excel di bawah atau di menu Pencocokan Nama." />
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {nonEmployeeBuyers.map((b) => (
+                                                    <span key={b.name} className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                                                        {b.name} · {rupiah(b.amount)}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             <Field label="Dikecualikan dari SHU" error={errors.excluded_customer_ids} tip="Pegawai di daftar ini tidak mendapat SHU sama sekali (mis. akun kantor, pengurus yang sudah mendapat SHU pengurus koperasi, atau keputusan rapat).">

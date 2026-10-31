@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\ExternalSale;
 use App\Models\MemberContribution;
 use App\Models\ShuPeriod;
+use App\Models\Transaction;
 use App\Services\Cooperative\BoardService;
 use App\Services\Cooperative\ExternalSalesImportService;
 use App\Services\Cooperative\NameMatcher;
@@ -111,6 +112,7 @@ class ShuController extends Controller
             'employees' => Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type']),
             'typeLabels' => MemberContribution::TYPE_LABELS,
             'boardFromDecrees' => app(BoardService::class)->membersForYear($shu->year),
+            'nonEmployeeBuyers' => $this->nonEmployeeBuyers($shu, $unmatched),
         ]);
     }
 
@@ -287,6 +289,28 @@ class ShuController extends Controller
     /**
      * @param  array<int, array{customer_id: int, amount: int}>  $rows
      */
+    /**
+     * Pembeli di tahun buku yang bukan pegawai (pembeli umum, atau nama belum cocok): tidak ikut SHU.
+     *
+     * @return list<array{name: string, amount: int}>
+     */
+    private function nonEmployeeBuyers(ShuPeriod $shu, $unmatched): array
+    {
+        if ($shu->sales_source === 'excel') {
+            return $unmatched->map(fn ($r) => ['name' => $r->buyer_name, 'amount' => (int) $r->total])->values()->all();
+        }
+
+        return Transaction::query()
+            ->leftJoin('customers', 'customers.id', '=', 'transactions.customer_id')
+            ->whereNull('customers.employee_type')
+            ->whereIn('transactions.payment_status', ShuCalculator::PURCHASE_STATUSES)
+            ->where('transactions.created_at', '>=', sprintf('%04d-01-01 00:00:00', $shu->year))
+            ->where('transactions.created_at', '<', sprintf('%04d-01-01 00:00:00', $shu->year + 1))
+            ->selectRaw("COALESCE(customers.name, 'Umum (tanpa pelanggan)') as name, SUM(transactions.grand_total) as amount")
+            ->groupBy('name')->orderByDesc('amount')->get()
+            ->map(fn ($r) => ['name' => $r->name, 'amount' => (int) $r->amount])->all();
+    }
+
     private function namesFor(array $rows): array
     {
         $people = Customer::whereIn('id', array_column($rows, 'customer_id'))->get(['id', 'name', 'nip', 'employee_type', 'employment_status'])->keyBy('id');

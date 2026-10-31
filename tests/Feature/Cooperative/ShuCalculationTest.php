@@ -188,6 +188,22 @@ class ShuCalculationTest extends TestCase
         $this->assertSame([1, 2, 3], ShuCalculator::boardMonths(['months' => 3]));
     }
 
+    public function test_non_employee_buyers_are_listed_separately(): void
+    {
+        $a = $this->person('A');
+        $umum = Customer::create(['name' => 'Umum', 'no_telp' => 0, 'address' => '']); // pembeli umum (bukan pegawai)
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'A', 'customer_id' => $a->id, 'amount' => 50000]);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'Umum', 'customer_id' => $umum->id, 'amount' => 70000]);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'Tukang Pijat', 'amount' => 20000]);
+        $period = $this->period();
+
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('shu-access');
+        $this->actingAs($admin)->get(route('shu.show', $period))->assertInertia(fn (Assert $page) => $page
+            ->where('nonEmployeeBuyers', [['name' => 'Umum', 'amount' => 70000], ['name' => 'Tukang Pijat', 'amount' => 20000]])
+            ->where('buyersWithoutDues.0.customer_id', $a->id));
+    }
+
     public function test_pos_source_and_financing_income_portions_ignore_installments(): void
     {
         $cashier = User::factory()->create();
