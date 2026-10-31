@@ -256,7 +256,8 @@
             "dineIn": "Dine-In",
             "operations": "Operasional",
             "userManagement": "Manajemen User",
-            "settings": "Pengaturan"
+            "settings": "Pengaturan",
+            "cooperative": "Koperasi"
         },
         "items": {
             "dashboard": "Dashboard",
@@ -305,7 +306,10 @@
             "warehouses": "Gudang / Cabang",
             "outlets": "Outlet",
             "units": "Satuan",
-            "whatsApp": "WhatsApp"
+            "whatsApp": "WhatsApp",
+            "employees": "Data Pegawai",
+            "savings": "Simpanan Anggota",
+            "shu": "SHU"
         },
         "menu": {
             "overview": "Overview",

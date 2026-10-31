@@ -48,6 +48,7 @@
 | Modul | File | Status |
 |-------|------|--------|
 | Member Management | `docs/features/member-management.md` | ✅ |
+| Koperasi: Pegawai, Simpanan, SHU | `docs/features/koperasi.md` | ✅ |
 | Customer Segments | `docs/features/crm-segments.md` | ✅ |
 | Campaigns & Reminders | `docs/features/crm-segments.md` | ✅ |
 

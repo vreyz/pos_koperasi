@@ -256,7 +256,8 @@
             "dineIn": "Dine-In",
             "operations": "Operations & Control",
             "userManagement": "User Management",
-            "settings": "Settings"
+            "settings": "Settings",
+            "cooperative": "Cooperative"
         },
         "items": {
             "dashboard": "Dashboard",
@@ -304,7 +305,10 @@
             "priceLists": "Price Lists",
             "warehouses": "Warehouses / Branches",
             "units": "Units",
-            "whatsApp": "WhatsApp"
+            "whatsApp": "WhatsApp",
+            "employees": "Employees",
+            "savings": "Member Savings",
+            "shu": "Profit Sharing (SHU)"
         },
         "menu": {
             "overview": "Overview",

@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
@@ -49,89 +49,6 @@ jobs:
           SESSION_DRIVER: array
           CACHE_STORE: array
 
-  deploy:
-    name: Deploy to VPS
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    needs: ci
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          script: |
-            set -e
-            cd /var/www/dikasir.web.id
-            export GIT_SSH_COMMAND="ssh -o ConnectTimeout=20 -o BatchMode=yes"
-
-            # Ensure deploy user can modify the web root (fix root-owned dirs from manual ops)
-            sudo chown -R deploy:deploy public
-
-            echo "==> Sync code to production (main)"
-            FETCH_OK=0
-            for i in 1 2 3 4 5; do
-              if sudo -u deploy git fetch origin; then FETCH_OK=1; break; fi
-              echo "git fetch failed (attempt $i/5), retrying in 8s..."
-              sleep 8
-            done
-            [ "$FETCH_OK" = "1" ] || { echo "❌ git fetch failed after 5 attempts"; exit 1; }
-            sudo -u deploy git checkout -f -B main origin/main
-            sudo -u deploy git clean -fd
-
-            echo "==> Backend dependencies"
-            COMPOSER_OK=0
-            for i in 1 2 3; do
-              if sudo -u deploy /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction --no-progress; then COMPOSER_OK=1; break; fi
-              echo "composer install failed (attempt $i/3), retrying in 8s..."
-              sleep 8
-            done
-            [ "$COMPOSER_OK" = "1" ] || { echo "❌ composer install failed after 3 attempts"; exit 1; }
-
-            echo "==> Frontend dependencies + build"
-            NPM_OK=0
-            for i in 1 2 3; do
-              if sudo -u deploy bash -lc 'export PATH=/home/deploy/.nvm/versions/node/v24.15.0/bin:$PATH; cd /var/www/dikasir.web.id && PUPPETEER_SKIP_DOWNLOAD=true npm ci --no-audit --no-fund && npm run build'; then NPM_OK=1; break; fi
-              echo "npm ci/build failed (attempt $i/3), retrying in 8s..."
-              sleep 8
-            done
-            [ "$NPM_OK" = "1" ] || { echo "❌ npm ci/build failed after 3 attempts"; exit 1; }
-
-            echo "==> Laravel housekeeping"
-            sudo -u deploy php8.4 artisan migrate --force
-            sudo -u deploy php8.4 artisan config:clear
-            sudo -u deploy php8.4 artisan view:clear
-            sudo -u deploy php8.4 artisan route:clear
-            sudo -u deploy php8.4 artisan storage:link || true
-
-            echo "==> Permissions"
-            # deploy owns, www-data (php-fpm) needs group write
-            sudo chown -R deploy:www-data storage bootstrap/cache
-            sudo chmod -R g+w storage bootstrap/cache
-            sudo chown -R deploy:deploy public/build
-
-            echo "==> Reload PHP-FPM"
-            sudo systemctl reload php8.4-fpm
-
-            echo "==> Verify"
-            sleep 3
-            check_http() {
-              local url="$1"
-              local expected="$2"
-              local actual
-              actual=$(curl --silent --show-error --location --max-time 20 -o /dev/null -w "%{http_code}" "$url")
-              if [ "$actual" != "$expected" ]; then
-                echo "❌ Smoke check failed: $url returned HTTP $actual (expected $expected)"
-                exit 1
-              fi
-              echo "✅ Smoke check passed: $url (HTTP $actual)"
-            }
-
-            # Follow the install redirect, then verify the public shell and
-            # unauthenticated API boundary independently.
-            check_http https://dikasir.web.id/ 200
-            check_http https://dikasir.web.id/login 200
-            check_http https://dikasir.web.id/api/v1/products 401
-            echo "✅ Deploy smoke checks passed"
+# Deploy otomatis ke VPS upstream (dikasir.web.id) dihapus di fork ini.
+# Aplikasi koperasi berjalan lokal dan diakses online lewat Cloudflare Tunnel
+# (lihat docs/deploy-lokal-cloudflare-tunnel.md).

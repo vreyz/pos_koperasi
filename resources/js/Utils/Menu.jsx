@@ -41,6 +41,9 @@ IconRulerMeasure,
     IconListDetails,
     IconBrandWhatsapp,
     IconToolsKitchen2,
+    IconId,
+    IconPigMoney,
+    IconCoins,
 } from "@tabler/icons-react";
 import hasAnyPermission from "./Permission";
 import React from "react";
@@ -93,6 +96,32 @@ export default function Menu() {
                     active: url.startsWith("/dashboard/suppliers"),
                     icon: <IconBuildingWarehouse size={20} strokeWidth={1.5} />,
                     permissions: hasAnyPermission(["suppliers-access"]),
+                },
+            ],
+        },
+        {
+            title: t("sidebar.sections.cooperative"),
+            details: [
+                {
+                    title: t("sidebar.items.employees"),
+                    href: route("employees.index"),
+                    active: url.startsWith("/dashboard/employees"),
+                    icon: <IconId size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["employees-access"]),
+                },
+                {
+                    title: t("sidebar.items.savings"),
+                    href: route("savings.index"),
+                    active: url.startsWith("/dashboard/savings"),
+                    icon: <IconPigMoney size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["savings-access"]),
+                },
+                {
+                    title: t("sidebar.items.shu"),
+                    href: route("shu.index"),
+                    active: url.startsWith("/dashboard/shu"),
+                    icon: <IconCoins size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["shu-access"]),
                 },
             ],
         },
