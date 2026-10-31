@@ -63,6 +63,12 @@ class NameMatcher
                 if (str_starts_with($employee['key'], $key) || str_starts_with($key, $employee['key'])) {
                     $percent = max($percent, 80);
                 }
+                // Urutan kata terbalik: "ADITYA GUNAWAN" ~ "GUNAWAN ADITYA NUGROHO" (semua kata ada di nama lain).
+                $a = array_filter(explode(' ', $key), fn ($w) => strlen($w) > 1);
+                $b = explode(' ', $employee['key']);
+                if (count($a) >= 2 && array_diff($a, $b) === []) {
+                    $percent = max($percent, 92);
+                }
 
                 return ['id' => $employee['id'], 'name' => $employee['name'], 'nip' => $employee['nip'], 'score' => (int) round($percent)];
             })

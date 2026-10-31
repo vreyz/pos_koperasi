@@ -2,8 +2,10 @@ import React, { useMemo, useState } from "react";
 import { Head, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { IconLink, IconUnlink } from "@tabler/icons-react";
+import SortableTable from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, PageHeader, Panel, Stat, btn, inputBase, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
+import { MoneyInput, PercentInput, SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
 
 const SOURCES = {
     sales: { label: "Penjualan", color: "blue" },
@@ -15,20 +17,11 @@ export default function Index({ rows, employees, shuPeriods, shuYear }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const canEdit = can("employees-edit");
-    const [source, setSource] = useState("all");
     const [status, setStatus] = useState(rows.some((r) => !r.customer_id) ? "unmatched" : "all");
-    const [search, setSearch] = useState("");
     const [choice, setChoice] = useState({});
     const employeeById = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
+    const empOptions = useMemo(() => employeeOptions(employees), [employees]);
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        return rows.filter((r) =>
-            (source === "all" || r.source === source) &&
-            (status === "all" || (status === "unmatched" ? !r.customer_id : !!r.customer_id)) &&
-            (!q || r.name.toLowerCase().includes(q) || (employeeById[r.customer_id]?.name || "").toLowerCase().includes(q))
-        );
-    }, [rows, source, status, search, employeeById]);
 
     const key = (r) => `${r.source}|${r.name}|${r.customer_id || ""}`;
     const unmatched = rows.filter((r) => !r.customer_id).length;
@@ -57,92 +50,70 @@ export default function Index({ rows, employees, shuPeriods, shuYear }) {
             </div>
 
             <Panel
-                title={`Daftar nama (${filtered.length})`}
+                title="Daftar nama"
                 actions={
-                    <div className="flex flex-wrap gap-2">
-                        <select className={inputBase + " w-auto pr-9"} value={source} onChange={(e) => setSource(e.target.value)}>
-                            <option value="all">Semua sumber</option>
-                            {Object.entries(SOURCES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>
-                        <select className={inputBase + " w-auto pr-9"} value={status} onChange={(e) => setStatus(e.target.value)}>
-                            <option value="unmatched">Belum cocok</option>
-                            <option value="matched">Sudah cocok</option>
-                            <option value="all">Semua</option>
-                        </select>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
+                            <input type="checkbox" checked={status === "unmatched"} onChange={(e) => setStatus(e.target.checked ? "unmatched" : "all")} /> Hanya yang belum cocok ke pegawai
+                        </label>
                         {shuPeriods.length > 0 && (
                             <select className={inputBase + " w-auto pr-9"} value={shuYear || ""} onChange={(e) => router.get(route("name-links.index"), { shu_year: e.target.value }, { preserveState: true })}>
                                 {shuPeriods.map((p) => <option key={p.id} value={p.year}>Kolom SHU {p.year}</option>)}
                             </select>
                         )}
-                        <input className={inputBase + " w-56"} placeholder="Cari nama..." value={search} onChange={(e) => setSearch(e.target.value)} />
                     </div>
                 }
             >
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-slate-50 dark:bg-slate-950">
-                            <tr>
-                                <th className={th}>Nama di sumber</th>
-                                <th className={th}>Sumber</th>
-                                <th className={th}>Tahun</th>
-                                <th className={th + " text-right"}>Jumlah</th>
-                                <th className={th}>Pegawai terhubung</th>
-                                {shuYear && <th className={th + " text-right"}>SHU {shuYear}</th>}
-                                {canEdit && <th className={th}>Hubungkan / pindahkan ke</th>}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {filtered.map((r) => {
+                <SortableTable
+                    key={status}
+                    rows={status === "unmatched" ? rows.filter((r) => !r.customer_id) : rows}
+                    rowKey={key}
+                    initialSort={{ key: "name", dir: "asc" }}
+                    emptyText="Tidak ada nama dengan saringan ini."
+                    columns={[
+                        { key: "name", label: "Nama di sumber", filter: "text", value: (r) => r.name, render: (r) => <span className="font-medium">{r.name}</span> },
+                        { key: "source", label: "Sumber", filter: "select", options: Object.entries(SOURCES).map(([value, v]) => ({ value, label: v.label })), value: (r) => r.source, render: (r) => <Badge color={SOURCES[r.source].color}>{SOURCES[r.source].label}</Badge> },
+                        { key: "period", label: "Tahun", filter: "text", value: (r) => r.period || "" },
+                        { key: "total", label: "Jumlah", align: "right", filter: "number", value: (r) => Number(r.total || 0), render: (r) => (r.total == null ? "-" : rupiah(r.total)) },
+                        {
+                            key: "employee", label: "Pegawai terhubung", filter: "text",
+                            value: (r) => employeeById[r.customer_id]?.name || (r.buyer_customer ? "pembeli umum" : "belum cocok"),
+                            render: (r) => {
                                 const emp = employeeById[r.customer_id];
-                                return (
-                                    <tr key={key(r)} className="align-top">
-                                        <td className={td + " font-medium"}>{r.name}</td>
-                                        <td className={td}><Badge color={SOURCES[r.source].color}>{SOURCES[r.source].label}</Badge></td>
-                                        <td className={td}>{r.period || "-"}</td>
-                                        <td className={td + " text-right"}>{r.total == null ? "-" : rupiah(r.total)}</td>
-                                        <td className={td}>
-                                            {emp ? (
-                                                <>
-                                                    <div>{emp.name}</div>
-                                                    <div className="text-xs text-slate-500">{[emp.nip, emp.employee_type, emp.employment_status].filter(Boolean).join(" · ")}</div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Badge color="amber">Belum cocok</Badge>
-                                                    <div className="mt-1 whitespace-normal">
-                                                        {(r.suggestions || []).map((s) => (
-                                                            <button key={s.id} onClick={() => setChoice({ ...choice, [key(r)]: String(s.id) })} className="mb-1 mr-1 rounded-lg border border-slate-200 px-2 py-0.5 text-xs hover:bg-primary-50 dark:border-slate-700">
-                                                                {s.name} <span className="text-slate-400">{s.score}%</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </>
-                                            )}
-                                        </td>
-                                        {shuYear && <td className={td + " text-right"}>{r.shu == null ? <span className="text-slate-400">-</span> : rupiah(r.shu)}</td>}
-                                        {canEdit && (
-                                            <td className={td}>
-                                                <div className="flex gap-2">
-                                                    <select className={inputBase + " w-52"} value={choice[key(r)] || ""} onChange={(e) => setChoice({ ...choice, [key(r)]: e.target.value })}>
-                                                        <option value="">— pilih pegawai —</option>
-                                                        {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.nip ? ` (${e.nip})` : ""}{e.employee_type === "PPNPN" ? " · PPNPN" : ""}</option>)}
-                                                    </select>
-                                                    <button className={btn.primary} disabled={!choice[key(r)] || Number(choice[key(r)]) === r.customer_id} onClick={() => link(r)}>Simpan</button>
-                                                    {emp && r.source !== "savings" && (
-                                                        <button className={btn.secondary} onClick={() => unlink(r)} title="Putuskan"><IconUnlink size={16} /></button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        )}
-                                    </tr>
+                                return emp ? (
+                                    <>
+                                        <div>{emp.name}</div>
+                                        <div className="text-xs text-slate-500">{[emp.nip, emp.employee_type, emp.employment_status].filter(Boolean).join(" · ")}</div>
+                                    </>
+                                ) : (
+                                    <>
+                                        {r.buyer_customer ? <Badge color="gray">Pembeli umum (bukan pegawai)</Badge> : <Badge color="amber">Belum cocok</Badge>}
+                                        <div className="mt-1 whitespace-normal">
+                                            {(r.suggestions || []).map((sg) => (
+                                                <button key={sg.id} onClick={() => setChoice({ ...choice, [key(r)]: String(sg.id) })} className="mb-1 mr-1 rounded-lg border border-slate-200 px-2 py-0.5 text-xs hover:bg-primary-50 dark:border-slate-700">
+                                                    {sg.name} <span className="text-slate-400">{sg.score}%</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
                                 );
-                            })}
-                            {filtered.length === 0 && <tr><td colSpan={7} className="p-10 text-center text-slate-500">Tidak ada nama dengan filter ini.</td></tr>}
-                        </tbody>
-                    </table>
-                </div>
+                            },
+                        },
+                        ...(shuYear ? [{ key: "shu", label: `SHU ${shuYear}`, align: "right", filter: "number", value: (r) => Number(r.shu || 0), render: (r) => (r.shu == null ? <span className="text-slate-400">-</span> : rupiah(r.shu)) }] : []),
+                        ...(canEdit ? [{
+                            key: "action", label: "Hubungkan / pindahkan ke", value: () => "",
+                            render: (r) => (
+                                <div className="flex gap-2">
+                                    <SearchSelect className="w-64" options={empOptions} value={choice[key(r)] || ""} onChange={(v) => setChoice({ ...choice, [key(r)]: String(v) })} placeholder="Cari pegawai…" />
+                                    <button className={btn.primary} disabled={!choice[key(r)] || Number(choice[key(r)]) === r.customer_id} onClick={() => link(r)}>Simpan</button>
+                                    {employeeById[r.customer_id] && r.source !== "savings" && <button className={btn.secondary} onClick={() => unlink(r)} title="Putuskan"><IconUnlink size={16} /></button>}
+                                </div>
+                            ),
+                        }] : []),
+                    ]}
+                />
                 <p className="p-4 text-xs text-slate-500">
-                    Nama non-pegawai (UMUM, KANTOR, DOKTER, dll.) cukup dibiarkan belum cocok — tidak mendapat SHU. Nama simpanan hanya bisa dipindahkan ke pegawai lain (datanya tidak boleh tanpa pemilik).
+                    Nama non-pegawai (UMUM, KANTOR, DOKTER, dll.) otomatis tercatat sebagai pembeli umum (customer non-member) dan tidak mendapat SHU. Hubungkan ke pegawai bila ternyata pegawai. Nama simpanan hanya bisa dipindahkan ke pegawai lain.
                 </p>
             </Panel>
         </>

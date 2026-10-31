@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import Pagination from "@/Components/Dashboard/Pagination";
+import SortableTable from "@/Components/Cooperative/SortableTable";
 import Modal from "@/Components/Modal";
 import { IconAlertTriangle, IconDownload, IconId, IconPencil, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { useAuthorization } from "@/Utils/authorization";
@@ -12,16 +12,12 @@ const EMPTY = { nip: "", name: "", employee_type: "PNS", rank: "", grade: "", po
 const statusColor = (status) =>
     status === "AKTIF" ? "green" : ["MUTASI", "PENSIUN", "KELUAR"].includes(status) ? "amber" : "gray";
 
-export default function Index({ employees, filters, types, statuses, summary }) {
+export default function Index({ employees, types, statuses, summary }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState(EMPTY);
     const [errors, setErrors] = useState({});
-    const [search, setSearch] = useState(filters.search || "");
-
-    const applyFilter = (changes) =>
-        router.get(route("employees.index"), { ...filters, ...changes }, { preserveState: true, replace: true });
 
     const open = (employee) => {
         setErrors({});
@@ -87,94 +83,45 @@ export default function Index({ employees, filters, types, statuses, summary }) 
                 </p>
             )}
 
-            <Panel
-                title={`Daftar Pegawai (${employees.total})`}
-                actions={
-                    <div className="flex flex-wrap gap-2">
-                        <form onSubmit={(e) => { e.preventDefault(); applyFilter({ search, page: 1 }); }}>
-                            <input className={inputBase + " w-56"} placeholder="Cari nama / NIP / alias..." value={search} onChange={(e) => setSearch(e.target.value)} />
-                        </form>
-                        <select className={inputBase + " w-auto"} value={filters.type} onChange={(e) => applyFilter({ type: e.target.value, page: 1 })}>
-                            <option value="">Semua jenis</option>
-                            {types.map((t) => <option key={t}>{t}</option>)}
-                        </select>
-                        <select className={inputBase + " w-auto"} value={filters.status} onChange={(e) => applyFilter({ status: e.target.value, page: 1 })}>
-                            <option value="">Semua status</option>
-                            {statuses.map((s) => <option key={s}>{s}</option>)}
-                        </select>
-                    </div>
-                }
-            >
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-slate-50 dark:bg-slate-950">
-                            <tr>
-                                <th className={th}>NIP</th>
-                                <th className={th}>Nama</th>
-                                <th className={th}>Jenis</th>
-                                <th className={th}>Unit / Jabatan</th>
-                                <th className={th}>Status</th>
-                                <th className={th + " text-right"}>Saldo Simpanan</th>
-                                <th className={th}></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {employees.data.map((e) => (
-                                <tr key={e.id}>
-                                    <td className={td + " font-mono"}>
-                                        {e.nip || <span className="text-slate-400">—</span>}
-                                        {e.nip_problem && (
-                                            <span title={e.nip_problem} className="ml-1 inline-block align-middle text-warning-600">
-                                                <IconAlertTriangle size={16} />
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className={td}>
-                                        <div className="font-medium text-slate-900 dark:text-white">{e.name}</div>
-                                        {e.aliases?.length > 0 && (
-                                            <div className="max-w-xs truncate text-xs text-slate-500" title={e.aliases.map((a) => a.alias).join(", ")}>
-                                                alias: {e.aliases.map((a) => a.alias).join(", ")}
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className={td}><Badge color={e.employee_type === "PPNPN" ? "blue" : "gray"}>{e.employee_type}</Badge></td>
-                                    <td className={td}>
-                                        <div>{e.work_unit || "-"}</div>
-                                        <div className="text-xs text-slate-500">{[e.position, e.grade].filter(Boolean).join(" · ")}</div>
-                                    </td>
-                                    <td className={td}>
-                                        <Badge color={statusColor(e.employment_status)}>{e.employment_status || "-"}</Badge>
-                                        {e.active_until && <div className="text-xs text-slate-500">s.d. {new Date(e.active_until).toLocaleDateString("id-ID")}</div>}
-                                    </td>
-                                    <td className={td + " text-right"}>{rupiah(e.savings_total)}</td>
-                                    <td className={td + " text-right"}>
-                                        {can("employees-edit") && (
-                                            <button onClick={() => open(e)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Ubah">
-                                                <IconPencil size={18} />
-                                            </button>
-                                        )}
-                                        {can("employees-delete") && (
-                                            <button onClick={() => destroy(e)} className="rounded-lg p-2 text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-900/20" title="Hapus">
-                                                <IconTrash size={18} />
-                                            </button>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                            {employees.data.length === 0 && (
-                                <tr>
-                                    <td colSpan={7} className="p-10 text-center text-slate-500">
-                                        Belum ada data pegawai. Gunakan <b>Impor Excel</b> untuk memasukkan daftar pegawai.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+            <Panel title={`Daftar Pegawai (${employees.length})`}>
+                <SortableTable
+                    rows={employees}
+                    rowKey={(e) => e.id}
+                    initialSort={{ key: "name", dir: "asc" }}
+                    emptyText="Belum ada data pegawai. Gunakan Impor Excel untuk memasukkan daftar pegawai."
+                    columns={[
+                        {
+                            key: "nip", label: "NIP", filter: "text", value: (e) => e.nip || "",
+                            render: (e) => <span className="font-mono">{e.nip || <span className="text-slate-400">—</span>}{e.nip_problem && <span title={e.nip_problem} className="ml-1 inline-block align-middle text-warning-600"><IconAlertTriangle size={16} /></span>}</span>,
+                        },
+                        {
+                            key: "name", label: "Nama", filter: "text", value: (e) => `${e.name} ${(e.aliases || []).map((a) => a.alias).join(" ")}`,
+                            render: (e) => (
+                                <>
+                                    <div className="font-medium text-slate-900 dark:text-white">{e.name}</div>
+                                    {e.aliases?.length > 0 && <div className="max-w-xs truncate text-xs text-slate-500" title={e.aliases.map((a) => a.alias).join(", ")}>alias: {e.aliases.map((a) => a.alias).join(", ")}</div>}
+                                </>
+                            ),
+                        },
+                        { key: "type", label: "Jenis", filter: "select", options: types.map((t) => ({ value: t, label: t })), value: (e) => e.employee_type, render: (e) => <Badge color={e.employee_type === "PPNPN" ? "blue" : "gray"}>{e.employee_type}</Badge> },
+                        { key: "unit", label: "Unit / Jabatan", filter: "text", value: (e) => `${e.work_unit || ""} ${e.position || ""}`, render: (e) => <><div>{e.work_unit || "-"}</div><div className="text-xs text-slate-500">{[e.position, e.grade].filter(Boolean).join(" · ")}</div></> },
+                        {
+                            key: "status", label: "Status", filter: "select", options: statuses.map((st) => ({ value: st, label: st })), value: (e) => e.employment_status || "",
+                            render: (e) => <><Badge color={statusColor(e.employment_status)}>{e.employment_status || "-"}</Badge>{e.active_until && <div className="text-xs text-slate-500">s.d. {new Date(e.active_until).toLocaleDateString("id-ID")}</div>}</>,
+                        },
+                        { key: "savings", label: "Saldo simpanan", align: "right", filter: "number", value: (e) => Number(e.savings_total || 0), render: (e) => rupiah(e.savings_total) },
+                        {
+                            key: "actions", label: "", value: () => "",
+                            render: (e) => (
+                                <div className="text-right">
+                                    {can("employees-edit") && <button onClick={() => open(e)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Ubah"><IconPencil size={18} /></button>}
+                                    {can("employees-delete") && <button onClick={() => destroy(e)} className="rounded-lg p-2 text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-900/20" title="Hapus"><IconTrash size={18} /></button>}
+                                </div>
+                            ),
+                        },
+                    ]}
+                />
             </Panel>
-            <div className="mt-4">
-                <Pagination links={employees.links} />
-            </div>
 
             <Modal show={editing !== null} onClose={() => setEditing(null)} maxWidth="2xl">
                 <form onSubmit={submit} className="space-y-4 p-6">

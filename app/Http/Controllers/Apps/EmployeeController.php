@@ -26,32 +26,16 @@ class EmployeeController extends Controller
 
     public function index(Request $request)
     {
-        $search = trim((string) $request->query('search', ''));
-        $type = (string) $request->query('type', '');
-        $status = (string) $request->query('status', '');
-
         $employees = Customer::employees()
             ->with('aliases:id,customer_id,alias')
             ->withSum(['contributions as savings_total' => fn ($q) => $q->whereIn('type', MemberContribution::SAVINGS_TYPES)], 'amount')
-            ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
-                ->where('name', 'like', "%{$search}%")
-                ->orWhere('nip', 'like', "%{$search}%")
-                ->orWhereHas('aliases', fn ($a) => $a->where('alias', 'like', '%'.NameMatcher::normalize($search).'%'))))
-            ->when($type !== '', fn ($q) => $q->where('employee_type', $type))
-            ->when($status !== '', fn ($q) => $q->where('employment_status', $status))
             ->orderBy('name')
-            ->paginate($this->perPage(25))
-            ->withQueryString();
+            ->get();
 
-        $employees->getCollection()->transform(function (Customer $c) {
-            $c->setAttribute('nip_problem', $c->nip ? Nip::problem($c->nip) : null);
-
-            return $c;
-        });
+        $employees->each(fn (Customer $c) => $c->setAttribute('nip_problem', $c->nip ? Nip::problem($c->nip) : null));
 
         return Inertia::render('Dashboard/Cooperative/Employees/Index', [
             'employees' => $employees,
-            'filters' => ['search' => $search, 'type' => $type, 'status' => $status],
             'types' => Customer::EMPLOYEE_TYPES,
             'statuses' => Customer::employees()->whereNotNull('employment_status')->distinct()->orderBy('employment_status')->pluck('employment_status'),
             'summary' => [
@@ -92,6 +76,7 @@ class EmployeeController extends Controller
 
     public function import(Request $request)
     {
+        set_time_limit(600); // file Excel besar (mis. rekap potongan 2020–2026)
         $token = $request->query('token');
         $preview = null;
         $path = $this->files->path('employees', $token);
@@ -128,6 +113,7 @@ class EmployeeController extends Controller
 
     public function commitImport(Request $request)
     {
+        set_time_limit(600); // file Excel besar (mis. rekap potongan 2020–2026)
         $validated = $request->validate([
             'token' => ['required', 'uuid'],
             'actions' => ['array'],

@@ -6,6 +6,7 @@ import Modal from "@/Components/Modal";
 import { IconCalendarPlus, IconDownload, IconPigMoney, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, MONTHS, PageHeader, Panel, Stat, btn, inputBase, inputClass, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
+import { MoneyInput, PercentInput, SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
 
 const SOURCE_LABELS = { manual: "Manual", potong_gaji: "Potong gaji", tunai: "Tunai", transfer: "Transfer", import: "Impor Excel" };
 
@@ -14,6 +15,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
     const { can } = useAuthorization();
     const [merged, setMerged] = useState(false);
     const [detail, setDetail] = useState(null);
+    const empOptions = useMemo(() => employeeOptions(employees), [employees]);
     const [modal, setModal] = useState(null);
     const [errors, setErrors] = useState({});
     const now = new Date();
@@ -244,10 +246,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
                 <form onSubmit={submit(route("savings.store"), entry)} className="space-y-4 p-6">
                     <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Setor / Tarik Simpanan</h2>
                     <Field label="Pegawai" error={errors.customer_id}>
-                        <select className={inputClass} value={entry.customer_id} onChange={(e) => setEntry({ ...entry, customer_id: e.target.value })} required>
-                            <option value="">— pilih pegawai —</option>
-                            {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.nip ? ` (${e.nip})` : ""}</option>)}
-                        </select>
+                        <SearchSelect required options={empOptions} value={entry.customer_id} onChange={(v) => setEntry({ ...entry, customer_id: v })} placeholder="Cari nama / NIP…" />
                     </Field>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Jenis" error={errors.type}>
@@ -269,8 +268,8 @@ export default function Index({ tab, year, years, filters, recap, history, total
                         <Field label="Tahun" error={errors.period_year}>
                             <input type="number" className={inputClass} value={entry.period_year} onChange={(e) => setEntry({ ...entry, period_year: e.target.value })} />
                         </Field>
-                        <Field label="Jumlah (Rp)" error={errors.amount}>
-                            <input type="number" min="1" className={inputClass} value={entry.amount} onChange={(e) => setEntry({ ...entry, amount: e.target.value })} required />
+                        <Field label="Jumlah" error={errors.amount}>
+                            <MoneyInput value={entry.amount} onChange={(v) => setEntry({ ...entry, amount: v })} required />
                         </Field>
                         <Field label="Sumber" error={errors.source}>
                             <select className={inputClass} value={entry.source} onChange={(e) => setEntry({ ...entry, source: e.target.value })}>
@@ -301,8 +300,8 @@ export default function Index({ tab, year, years, filters, recap, history, total
                                 <option value="pokok">Simpanan Pokok</option>
                             </select>
                         </Field>
-                        <Field label="Jumlah per orang (Rp)" error={errors.amount}>
-                            <input type="number" min="1" className={inputClass} value={gen.amount} onChange={(e) => setGen({ ...gen, amount: e.target.value })} />
+                        <Field label="Jumlah per orang" error={errors.amount}>
+                            <MoneyInput value={gen.amount} onChange={(v) => setGen({ ...gen, amount: v })} />
                         </Field>
                         <Field label="Bulan" error={errors.period_month}>
                             <select className={inputClass} value={gen.period_month} onChange={(e) => setGen({ ...gen, period_month: e.target.value })}>

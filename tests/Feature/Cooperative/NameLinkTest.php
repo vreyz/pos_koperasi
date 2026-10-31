@@ -8,6 +8,7 @@ use App\Models\ExternalSale;
 use App\Models\MemberContribution;
 use App\Models\ShuPeriod;
 use App\Models\User;
+use App\Services\Cooperative\MemberSync;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -53,11 +54,36 @@ class NameLinkTest extends TestCase
         $this->assertTrue(CustomerAlias::where('alias', 'BUDI SANTOSA')->where('customer_id', $budi->id)->exists());
 
         $this->actingAs($user)->post(route('name-links.unlink'), ['source' => 'sales', 'name' => 'BUDI S']);
-        $this->assertNull(ExternalSale::first()->customer_id);
+        $buyer = ExternalSale::first()->customer;
+        $this->assertNotSame($budi->id, $buyer->id);
+        $this->assertNull($buyer->employee_type, 'kembali jadi pembeli umum (customer non-pegawai)');
         $this->assertFalse(CustomerAlias::where('alias', 'BUDI S')->exists());
 
         // Simpanan tidak boleh diputus tanpa pemilik.
         $this->actingAs($user)->post(route('name-links.unlink'), ['source' => 'savings', 'name' => 'Budi Santosa'])->assertSessionHasErrors('source');
+    }
+
+    public function test_contributors_become_members_and_buyers_become_customers(): void
+    {
+        $budi = $this->person('Budi Santoso');
+        $budi->update(['nip' => '197003151991031001']);
+        $citra = $this->person('Citra Lestari');
+        MemberContribution::create(['customer_id' => $budi->id, 'type' => 'wajib', 'period_year' => 2024, 'period_month' => 3, 'amount' => 100000]);
+        MemberContribution::create(['customer_id' => $citra->id, 'type' => 'angsuran', 'period_year' => 2024, 'period_month' => 3, 'amount' => 100000]);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'DOKTER', 'amount' => 16000]);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'Dokter', 'amount' => 5000]);
+
+        $result = app(MemberSync::class)->run();
+
+        $this->assertSame(['members' => 1, 'buyers_created' => 1, 'buyers_linked' => 2], $result);
+        $this->assertTrue($budi->fresh()->is_loyalty_member);
+        $this->assertSame('197003151991031001', $budi->fresh()->member_code);
+        $this->assertSame('2024-03-01', $budi->fresh()->loyalty_member_since->toDateString());
+        $this->assertFalse((bool) $citra->fresh()->is_loyalty_member, 'angsuran saja bukan iuran anggota');
+        $dokter = Customer::where('name', 'DOKTER')->firstOrFail();
+        $this->assertNull($dokter->employee_type);
+        $this->assertFalse((bool) $dokter->is_loyalty_member);
+        $this->assertSame(['members' => 0, 'buyers_created' => 0, 'buyers_linked' => 0], app(MemberSync::class)->run(), 'idempotent');
     }
 
     public function test_linking_requires_edit_permission(): void

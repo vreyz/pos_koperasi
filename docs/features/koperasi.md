@@ -62,10 +62,13 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
    - Pegawai yang belanja tapi tidak iuran: dapat jasa pembelian, tanpa base (bila base hanya untuk pembayar).
 4. **Koreksi manual per orang** (base pengganti, tambahan/pengurangan nominal, mis. jasa pengurus) disimpan
    terpisah, tetap berlaku saat dihitung ulang, dan dipotong dari SHU lebih dulu.
-5. Sisa = total − base − koreksi, dibagi ke jasa simpanan / pembelian / pinjaman sesuai porsi (%), proporsional.
+5. Sisa = total − base − koreksi, dibagi ke **4 komponen** dengan porsi (%) yang bisa diubah dan wajib total 100%
+   (bawaan periode baru: simpanan 40%, belanja 40%, pembiayaan dana 10%, pembiayaan barang 10%):
    - Simpanan: jenis (pokok/wajib/sukarela) dan periode (tahun Y / sejak awal) bisa dipilih.
-   - Pembelian: POS (`paid`/`unpaid`, dikurangi retur `completed`) atau import Excel.
-   - Pinjaman: angsuran yang dibayar di Y.
+   - Belanja: POS (`paid`/`unpaid`, dikurangi retur `completed`) atau import Excel.
+   - Pembiayaan dana: **biaya formulir** kontrak yang dicairkan di Y.
+   - Pembiayaan barang: **biaya lain** saat pencairan di Y + **bagi hasil** dari cicilan yang dibayar di Y.
+   - Cicilan/angsuran tidak dihitung (kolom `portion_loans` lama tidak dipakai; nilainya dipindah ke pembiayaan dana).
 6. Pembulatan: terdekat / ke atas / ke bawah / tidak, dengan kelipatan Rp 100–10.000.
 
 ## Pencocokan Nama (`name-links.*`)
@@ -75,10 +78,39 @@ dan alias. Kolom SHU menampilkan hasil SHU tahun terpilih per pegawai. Menghubun
 memindahkan baris datanya dan menyimpan alias untuk import berikutnya. Nama penjualan dan alias bisa diputus;
 nama simpanan hanya bisa dipindahkan ke pegawai lain.
 
+## Pembiayaan Dana & Pembiayaan Barang (`financing.*`)
+
+- **Dana**: pinjaman uang tanpa bagi hasil, tenor 1–10 bulan. Biaya formulir pegawai Rp 250.000 / PPNPN Rp 150.000
+  per Rp 5 jt; plafon pegawai Rp 15 jt, PPNPN Rp 10 jt.
+- **Barang**: harga + bagi hasil 7,5% dicicil (bawaan 12 bulan, bisa dilunasi lebih cepat); biaya lain 1,5% dipotong saat cair.
+- Semua angka di atas ada di **Aturan** (tabel `settings`, `FinancingSettings`) dan dipakai di formulir cetak.
+- Alur & otorisasi: pengajuan (`financing-create`) → diperiksa Divisi Pembiayaan (`financing-check`) → direview Kepala
+  Unit Usaha (`financing-review`) → disetujui Ketua (`financing-approve`) → dicairkan Bendahara (`financing-disburse`,
+  membuat jadwal cicilan mulai bulan berikutnya). Bisa ditolak dengan alasan sebelum cair.
+- Cicilan dicentang lunas manual, otomatis dari potongan gaji, atau pelunasan dipercepat. Tanda macet; peringatan
+  bila pegawai mutasi (`active_until`) masih punya sisa.
+- Cetak: formulir permohonan (versi pegawai/PPNPN untuk dana, versi barang), formulir kosong, bukti pencairan (dengan terbilang).
+- **Cek Angsuran** (`financing.reconcile`): per pegawai per bulan membandingkan jadwal cicilan, status lunas (monitoring),
+  dan potongan gaji `angsuran` dari rekap Master → selisih + tombol tandai lunas sesuai potongan.
+- **Impor**: daftar dana (PEMBIAYAAN KOPERASI / Data Pembiayaan LK), daftar barang, dan Permohonan Pencairan (biaya formulir,
+  rekening) — dikenali otomatis per sheet, tidak dobel saat diimpor ulang.
+
+## Anggota & customer
+
+- Pembayar simpanan pokok/wajib/sukarela otomatis ditandai **anggota** (member, kode = NIP atau `AGT-xxxxx`).
+- Nama pembeli di data penjualan Excel yang bukan pegawai otomatis dibuat sebagai **customer biasa** (non-member, tanpa SHU).
+- Jalan saat impor simpanan/penjualan, saat migrasi, atau manual: `php artisan koperasi:sync-anggota`.
+- Impor rekap simpanan memakai sheet berformat Master dengan data **paling baru** (mis. "Master (backup)" s.d. 2026).
+
+## Tampilan Menu
+
+Pengaturan → Tampilan Menu (`menu-settings`): sembunyikan menu sidebar yang tidak dipakai (disimpan di setting
+`hidden_menus`). Hanya tampilan; hak akses tetap lewat Role.
+
 ## Permission
 
 `employees-access|create|edit|delete|import`, `savings-access|create|delete|import`,
-`shu-access|manage|finalize`. Dibuat oleh `PermissionSeeder` dan oleh migrasi
+`shu-access|manage|finalize`, `financing-access|create|check|review|approve|disburse|import`, `menu-settings`. Dibuat oleh `PermissionSeeder` dan oleh migrasi
 `2026_10_31_000002_add_cooperative_permissions` (untuk instalasi yang sudah berjalan).
 
 ## File terkait

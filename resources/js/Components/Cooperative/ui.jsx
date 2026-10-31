@@ -80,10 +80,23 @@ export const inputBase =
 
 export const inputClass = "w-full " + inputBase;
 
-export function Field({ label, error, hint, children }) {
+/** Ikon ⓘ dengan penjelasan saat disentuh/diarahkan kursor. */
+export function Tip({ text }) {
+    if (!text) return null;
+    return (
+        <span className="group relative ml-1 inline-flex align-middle" tabIndex={0}>
+            <span className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">i</span>
+            <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 hidden w-72 -translate-x-1/2 whitespace-normal rounded-lg bg-slate-900 p-2 text-xs font-normal leading-snug text-white shadow-lg group-hover:block group-focus:block dark:bg-slate-700">
+                {text}
+            </span>
+        </span>
+    );
+}
+
+export function Field({ label, error, hint, tip, children }) {
     return (
         <label className="block">
-            <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</span>
+            <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}<Tip text={tip} /></span>
             {children}
             {hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
             {error && <span className="mt-1 block text-xs text-danger-600">{error}</span>}
