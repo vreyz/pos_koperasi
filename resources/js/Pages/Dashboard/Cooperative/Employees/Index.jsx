@@ -7,7 +7,7 @@ import { IconAlertTriangle, IconDownload, IconId, IconPencil, IconPlus, IconTras
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, PageHeader, Panel, Stat, btn, inputBase, inputClass, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 
-const EMPTY = { nip: "", name: "", employee_type: "PNS", rank: "", grade: "", position: "", work_unit: "", employment_status: "AKTIF", aliases: "" };
+const EMPTY = { nip: "", name: "", employee_type: "PNS", rank: "", grade: "", position: "", work_unit: "", employment_status: "AKTIF", active_from: "", active_until: "", aliases: "" };
 
 const statusColor = (status) =>
     status === "AKTIF" ? "green" : ["MUTASI", "PENSIUN", "KELUAR"].includes(status) ? "amber" : "gray";
@@ -142,7 +142,10 @@ export default function Index({ employees, filters, types, statuses, summary }) 
                                         <div>{e.work_unit || "-"}</div>
                                         <div className="text-xs text-slate-500">{[e.position, e.grade].filter(Boolean).join(" · ")}</div>
                                     </td>
-                                    <td className={td}><Badge color={statusColor(e.employment_status)}>{e.employment_status || "-"}</Badge></td>
+                                    <td className={td}>
+                                        <Badge color={statusColor(e.employment_status)}>{e.employment_status || "-"}</Badge>
+                                        {e.active_until && <div className="text-xs text-slate-500">s.d. {new Date(e.active_until).toLocaleDateString("id-ID")}</div>}
+                                    </td>
                                     <td className={td + " text-right"}>{rupiah(e.savings_total)}</td>
                                     <td className={td + " text-right"}>
                                         {can("employees-edit") && (
@@ -205,6 +208,12 @@ export default function Index({ employees, filters, types, statuses, summary }) 
                         </Field>
                         <Field label="Golongan" error={errors.grade}>
                             <input className={inputClass} value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} />
+                        </Field>
+                        <Field label="Aktif sejak" error={errors.active_from} hint="Kosongkan bila tidak tahu">
+                            <input type="date" className={inputClass} value={form.active_from} onChange={(e) => setForm({ ...form, active_from: e.target.value })} />
+                        </Field>
+                        <Field label="Aktif sampai" error={errors.active_until} hint="Tanggal mutasi/pensiun/keluar. Kosong = masih aktif. Menentukan hak SHU per tahun.">
+                            <input type="date" className={inputClass} value={form.active_until} onChange={(e) => setForm({ ...form, active_until: e.target.value })} />
                         </Field>
                     </div>
                     <Field label="Nama lain / alias" error={errors.aliases} hint="Pisahkan dengan koma. Contoh: ADHI, ADHI Y, ADHI YOGA — dipakai untuk mencocokkan nama di Excel penjualan & simpanan.">

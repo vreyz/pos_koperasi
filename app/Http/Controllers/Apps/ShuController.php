@@ -50,6 +50,10 @@ class ShuController extends Controller
             'year' => $data['year'],
             'total_shu' => 0,
             'base_per_person' => $previous->base_per_person ?? 100000,
+            'base_requires_savings' => $previous->base_requires_savings ?? true,
+            'base_for_ppnpn' => $previous->base_for_ppnpn ?? true,
+            'base_mode' => $previous->base_mode ?? 'full',
+            'rounding_unit' => $previous->rounding_unit ?? 1000,
             'portion_savings' => $previous->portion_savings ?? 70,
             'portion_purchases' => $previous->portion_purchases ?? 30,
             'portion_loans' => $previous->portion_loans ?? 0,
@@ -81,18 +85,14 @@ class ShuController extends Controller
         }
 
         $excelSales = ExternalSale::where('year', $shu->year);
-        $payers = $this->calculator->payersInYear($shu->year);
-        $purchases = $this->calculator->purchases($shu);
+        $summary = $this->calculator->summary($shu);
 
         return Inertia::render('Dashboard/Cooperative/Shu/Show', [
             'period' => $shu,
             'allocations' => $allocations,
+            'adjustments' => $shu->adjustments()->with('customer:id,name,nip,employee_type')->get(),
             'rules' => $this->rules($shu),
-            'stats' => [
-                'payers' => count($payers),
-                'base_total' => count($payers) * $shu->base_per_person,
-                'purchase_total' => array_sum($purchases),
-                'purchase_buyers' => count($purchases),
+            'stats' => $summary + [
                 'excel_rows' => (clone $excelSales)->count(),
                 'excel_total' => (int) (clone $excelSales)->sum('amount'),
                 'distributed' => (float) $allocations->sum('total'),
@@ -113,6 +113,9 @@ class ShuController extends Controller
         $data = $request->validate([
             'total_shu' => ['required', 'integer', 'min:0'],
             'base_per_person' => ['required', 'integer', 'min:0'],
+            'base_requires_savings' => ['required', 'boolean'],
+            'base_for_ppnpn' => ['required', 'boolean'],
+            'base_mode' => ['required', Rule::in(['full', 'monthly'])],
             'portion_savings' => ['required', 'numeric', 'min:0', 'max:100'],
             'portion_purchases' => ['required', 'numeric', 'min:0', 'max:100'],
             'portion_loans' => ['required', 'numeric', 'min:0', 'max:100'],
@@ -121,6 +124,7 @@ class ShuController extends Controller
             'savings_period' => ['required', Rule::in(['year', 'all_time'])],
             'sales_source' => ['required', Rule::in(['pos', 'excel'])],
             'rounding' => ['required', Rule::in(['round', 'ceil', 'floor', 'none'])],
+            'rounding_unit' => ['required', 'integer', Rule::in([1, 100, 500, 1000, 5000, 10000])],
             'excluded_customer_ids' => ['nullable', 'array'],
             'excluded_customer_ids.*' => ['integer', 'exists:customers,id'],
         ]);
@@ -144,6 +148,31 @@ class ShuController extends Controller
         }
 
         return back()->with('success', "SHU {$shu->year} dihitung: {$result['recipients']} penerima ({$result['base_recipients']} dapat base SHU).");
+    }
+
+    public function saveAdjustment(Request $request, ShuPeriod $shu)
+    {
+        if ($shu->isFinal()) {
+            return back()->with('error', 'SHU sudah final. Buka kunci dulu untuk mengubah koreksi.');
+        }
+        $data = $request->validate([
+            'customer_id' => ['required', Rule::exists('customers', 'id')->whereNotNull('employee_type')],
+            'base_override' => ['nullable', 'integer', 'min:0'],
+            'amount' => ['nullable', 'integer'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+        $data['amount'] = (int) ($data['amount'] ?? 0);
+        $data['base_override'] ??= null;
+
+        if ($data['base_override'] === null && $data['amount'] === 0) {
+            $shu->adjustments()->where('customer_id', $data['customer_id'])->delete();
+
+            return back()->with('success', 'Koreksi dihapus. Klik "Hitung SHU" untuk memperbarui hasil.');
+        }
+
+        $shu->adjustments()->updateOrCreate(['customer_id' => $data['customer_id']], $data);
+
+        return back()->with('success', 'Koreksi disimpan. Klik "Hitung SHU" untuk memperbarui hasil.');
     }
 
     public function finalize(ShuPeriod $shu)
@@ -210,16 +239,19 @@ class ShuController extends Controller
             round($a->purchase_share * 100, 4),
             $a->loan_amount,
             round($a->loan_share * 100, 4),
+            $a->months_paid,
             $a->base_amount,
             round($a->shu_savings),
             round($a->shu_purchases),
             round($a->shu_loans),
+            $a->adjustment_amount,
+            $a->adjustment_note,
             round($a->total),
             $a->total_rounded,
         ])->all();
 
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Status', 'Simpanan', 'Porsi Simpanan (%)', 'Pembelian', 'Porsi Pembelian (%)', 'Angsuran Pinjaman', 'Porsi Pinjaman (%)', 'Base SHU', 'SHU Simpanan', 'SHU Pembelian', 'SHU Pinjaman', 'Total SHU', 'Total Dibulatkan'],
+            ['NIP', 'Nama', 'Jenis', 'Status', 'Simpanan', 'Porsi Simpanan (%)', 'Pembelian', 'Porsi Pembelian (%)', 'Angsuran Pinjaman', 'Porsi Pinjaman (%)', 'Bulan Bayar', 'Base SHU', 'SHU Simpanan', 'SHU Pembelian', 'SHU Pinjaman', 'Koreksi', 'Catatan Koreksi', 'Total SHU', 'Total Dibulatkan'],
             $rows,
             ['A' => '@'],
         ), "shu-{$shu->year}.xlsx");
@@ -234,24 +266,31 @@ class ShuController extends Controller
     {
         $rupiah = fn ($v) => 'Rp '.number_format($v, 0, ',', '.');
         $types = implode(', ', array_map(fn ($t) => strtolower(MemberContribution::TYPE_LABELS[$t]), $period->savings_types ?? []));
+
+        $unit = $rupiah($period->rounding_unit ?: 1000);
         $roundingText = [
-            'round' => 'dibulatkan ke Rp 1.000 terdekat',
-            'ceil' => 'dibulatkan ke atas ke kelipatan Rp 1.000',
-            'floor' => 'dibulatkan ke bawah ke kelipatan Rp 1.000',
+            'round' => "dibulatkan ke {$unit} terdekat",
+            'ceil' => "dibulatkan ke atas ke kelipatan {$unit}",
+            'floor' => "dibulatkan ke bawah ke kelipatan {$unit}",
             'none' => 'tidak dibulatkan',
         ][$period->rounding] ?? '';
+        $y = $period->year;
+        $adjustments = $period->adjustments()->count();
 
         return array_values(array_filter([
-            "SHU ini untuk tahun buku {$period->year} dan dibagikan pada tahun ".($period->year + 1).'.',
-            'Base SHU '.$rupiah($period->base_per_person)." per orang diberikan kepada setiap pegawai (selain PPNPN) yang membayar simpanan (pokok/wajib/sukarela) pada tahun {$period->year}.",
-            "Pegawai yang mutasi atau pensiun pada tahun {$period->year} tetap berhak selama masih tercatat membayar simpanan di tahun itu. Yang berhenti membayar sebelum {$period->year} tidak berhak.",
-            'Sisa SHU setelah base dibagi: '.$period->portion_savings.'% jasa simpanan, '.$period->portion_purchases.'% jasa pembelian'.($period->portion_loans > 0 ? ', '.$period->portion_loans.'% jasa pinjaman' : '').'.',
-            "Jasa simpanan dihitung dari {$types} ".($period->savings_period === 'all_time' ? "yang terkumpul sejak awal s.d. {$period->year}" : "yang dibayar selama tahun {$period->year}").', proporsional terhadap total semua anggota yang membayar.',
-            'Jasa pembelian dihitung dari total belanja '.($period->sales_source === 'excel' ? 'yang diimport dari Excel' : 'di POS (dikurangi retur)')." selama tahun {$period->year}, proporsional terhadap total belanja semua pegawai.",
-            'Pegawai PPNPN/kontrak tidak mendapat base SHU, tetapi tetap mendapat jasa pembelian (dan jasa simpanan bila membayar simpanan).',
-            $period->portion_loans > 0 ? "Jasa pinjaman dihitung dari angsuran pinjaman yang dibayar selama tahun {$period->year}." : null,
+            "SHU ini untuk tahun buku {$y} dan dibagikan pada tahun ".($y + 1).'.',
+            "Yang ikut hanya pegawai yang aktif di tahun {$y} (masa aktif di Data Pegawai mencakup {$y}). Non-pegawai tidak mendapat SHU walaupun berbelanja.",
+            "Penerima harus punya simpanan/iuran, pembelian, atau angsuran pinjaman di tahun {$y}. Pegawai mutasi/pensiun di tahun {$y} tetap berhak.",
+            'Base SHU '.$rupiah($period->base_per_person).($period->base_mode === 'monthly' ? ' × (jumlah bulan membayar ÷ 12)' : ' per orang')
+                .($period->base_requires_savings ? " untuk pegawai yang membayar simpanan di tahun {$y}." : ' untuk semua pegawai aktif yang ikut (simpanan, pembelian, atau pinjaman).')
+                .($period->base_for_ppnpn ? ' PPNPN juga mendapat base.' : ' PPNPN tidak mendapat base.'),
+            $period->base_requires_savings ? 'Pegawai yang berbelanja tetapi tidak membayar iuran tetap mendapat jasa pembelian, tanpa base SHU.' : null,
+            $adjustments > 0 ? "{$adjustments} koreksi manual (base pengganti / tambahan nominal) diterapkan dan dipotong dari SHU lebih dulu." : null,
+            'Sisa SHU dibagi: '.$period->portion_savings.'% jasa simpanan, '.$period->portion_purchases.'% jasa pembelian'.($period->portion_loans > 0 ? ', '.$period->portion_loans.'% jasa pinjaman' : '').'.',
+            "Jasa simpanan dihitung dari {$types} ".($period->savings_period === 'all_time' ? "yang terkumpul sejak awal s.d. {$y}" : "yang dibayar selama tahun {$y}").', proporsional terhadap total semua anggota.',
+            'Jasa pembelian dihitung dari total belanja '.($period->sales_source === 'excel' ? 'yang diimport dari Excel' : 'di POS (dikurangi retur)')." selama tahun {$y}, proporsional terhadap total belanja semua pegawai aktif.",
+            $period->portion_loans > 0 ? "Jasa pinjaman dihitung dari angsuran pinjaman yang dibayar selama tahun {$y}." : null,
             count($period->excluded_customer_ids ?? []) > 0 ? count($period->excluded_customer_ids).' nama dikecualikan dan tidak mendapat SHU.' : null,
-            'Pembeli umum/non-pegawai tidak mendapat SHU.',
             "Nilai SHU per orang {$roundingText}.",
         ]));
     }

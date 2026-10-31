@@ -159,6 +159,7 @@ class ContributionImportService
                         'period_month' => $row['month'],
                         'amount' => $amount,
                         'source' => 'import',
+                        'source_name' => $row['name'],
                         'created_by' => $userId,
                         'created_at' => $now,
                         'updated_at' => $now,

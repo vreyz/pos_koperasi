@@ -44,6 +44,7 @@ IconRulerMeasure,
     IconId,
     IconPigMoney,
     IconCoins,
+    IconLink,
 } from "@tabler/icons-react";
 import hasAnyPermission from "./Permission";
 import React from "react";
@@ -107,6 +108,13 @@ export default function Menu() {
                     href: route("employees.index"),
                     active: url.startsWith("/dashboard/employees"),
                     icon: <IconId size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["employees-access"]),
+                },
+                {
+                    title: t("sidebar.items.nameLinks"),
+                    href: route("name-links.index"),
+                    active: url.startsWith("/dashboard/name-links"),
+                    icon: <IconLink size={20} strokeWidth={1.5} />,
                     permissions: hasAnyPermission(["employees-access"]),
                 },
                 {

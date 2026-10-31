@@ -1,13 +1,14 @@
 import React, { useMemo, useState } from "react";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import { IconArrowLeft, IconCalculator, IconCoins, IconDownload, IconLock, IconLockOpen, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconCalculator, IconCoins, IconDownload, IconLock, IconLockOpen, IconLink, IconPencil, IconPlus, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
+import Modal from "@/Components/Modal";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, PageHeader, Panel, Stat, btn, inputBase, inputClass, percent, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 
-const SETTING_KEYS = ["total_shu", "base_per_person", "portion_savings", "portion_purchases", "portion_loans", "savings_types", "savings_period", "sales_source", "rounding", "excluded_customer_ids"];
+const SETTING_KEYS = ["total_shu", "base_per_person", "base_requires_savings", "base_for_ppnpn", "base_mode", "portion_savings", "portion_purchases", "portion_loans", "savings_types", "savings_period", "sales_source", "rounding", "rounding_unit", "excluded_customer_ids"];
 
-export default function Show({ period, allocations, rules, stats, unmatched, employees, typeLabels }) {
+export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const locked = period.status === "final";
@@ -18,9 +19,19 @@ export default function Show({ period, allocations, rules, stats, unmatched, emp
     const [excludeId, setExcludeId] = useState("");
     const salesUpload = useForm({ file: null });
     const [mapChoice, setMapChoice] = useState({});
+    const [adjust, setAdjust] = useState(null);
+    const adjustmentByCustomer = useMemo(() => Object.fromEntries(adjustments.map((a) => [a.customer_id, a])), [adjustments]);
+    const openAdjust = (customerId) => {
+        const a = adjustmentByCustomer[customerId];
+        setAdjust({ customer_id: customerId || "", base_override: a?.base_override ?? "", amount: a?.amount || "", note: a?.note || "" });
+    };
+    const saveAdjust = (e) => {
+        e.preventDefault();
+        router.post(route("shu.adjustments.save", period.id), { ...adjust, base_override: adjust.base_override === "" ? null : adjust.base_override }, { preserveScroll: true, onSuccess: () => setAdjust(null) });
+    };
 
     const portionTotal = Number(form.portion_savings || 0) + Number(form.portion_purchases || 0) + Number(form.portion_loans || 0);
-    const remainder = Number(form.total_shu || 0) - stats.payers * Number(form.base_per_person || 0);
+    const remainder = Number(form.total_shu || 0) - stats.base_total - stats.adjustment_total;
     const employeeById = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
     const dirty = SETTING_KEYS.some((k) => JSON.stringify(form[k]) !== JSON.stringify(period[k] ?? (k.endsWith("ids") ? [] : "")));
 
@@ -67,7 +78,7 @@ export default function Show({ period, allocations, rules, stats, unmatched, emp
                                 <Field label="Jumlah SHU yang dibagi (Rp)" error={errors.total_shu}>
                                     <input type="number" min="0" className={inputClass} value={form.total_shu} onChange={(e) => setForm({ ...form, total_shu: e.target.value })} />
                                 </Field>
-                                <Field label="Base SHU per orang (Rp)" error={errors.base_per_person} hint={`${stats.payers} orang membayar simpanan di ${period.year} → total base ${rupiah(stats.payers * Number(form.base_per_person || 0))}`}>
+                                <Field label="Base SHU per orang (Rp)" error={errors.base_per_person} hint={`Pengaturan tersimpan: ${stats.base_recipients} orang dapat base → total ${rupiah(stats.base_total)}`}>
                                     <input type="number" min="0" className={inputClass} value={form.base_per_person} onChange={(e) => setForm({ ...form, base_per_person: e.target.value })} />
                                 </Field>
                             </div>
@@ -87,7 +98,27 @@ export default function Show({ period, allocations, rules, stats, unmatched, emp
                                         <input type="number" step="0.01" min="0" max="100" className={inputClass} value={form.portion_loans} onChange={(e) => setForm({ ...form, portion_loans: e.target.value })} />
                                     </Field>
                                 </div>
-                                {remainder < 0 && <p className="mt-1 text-sm text-danger-600">Total base SHU melebihi SHU yang dibagi.</p>}
+                                {remainder < 0 && <p className="mt-1 text-sm text-danger-600">Total base SHU + koreksi melebihi SHU yang dibagi.</p>}
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-3">
+                                <Field label="Siapa dapat base SHU" error={errors.base_requires_savings}>
+                                    <select className={inputClass} value={form.base_requires_savings ? "1" : "0"} onChange={(e) => setForm({ ...form, base_requires_savings: e.target.value === "1" })}>
+                                        <option value="1">Hanya yang membayar simpanan/iuran</option>
+                                        <option value="0">Semua pegawai aktif yang ikut</option>
+                                    </select>
+                                </Field>
+                                <Field label="PPNPN dapat base?" error={errors.base_for_ppnpn}>
+                                    <select className={inputClass} value={form.base_for_ppnpn ? "1" : "0"} onChange={(e) => setForm({ ...form, base_for_ppnpn: e.target.value === "1" })}>
+                                        <option value="1">Ya, PPNPN dapat base</option>
+                                        <option value="0">Tidak</option>
+                                    </select>
+                                </Field>
+                                <Field label="Besaran base" error={errors.base_mode}>
+                                    <select className={inputClass} value={form.base_mode} onChange={(e) => setForm({ ...form, base_mode: e.target.value })}>
+                                        <option value="full">Penuh per orang</option>
+                                        <option value="monthly">Proporsional bulan membayar (÷12)</option>
+                                    </select>
+                                </Field>
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field label="Simpanan yang dihitung" error={errors.savings_types}>
@@ -111,13 +142,18 @@ export default function Show({ period, allocations, rules, stats, unmatched, emp
                                         <option value="excel">Import Excel</option>
                                     </select>
                                 </Field>
-                                <Field label="Pembulatan" error={errors.rounding}>
-                                    <select className={inputClass} value={form.rounding} onChange={(e) => setForm({ ...form, rounding: e.target.value })}>
-                                        <option value="round">Ke Rp 1.000 terdekat</option>
-                                        <option value="ceil">Ke atas (kelipatan Rp 1.000)</option>
-                                        <option value="floor">Ke bawah (kelipatan Rp 1.000)</option>
-                                        <option value="none">Tidak dibulatkan</option>
-                                    </select>
+                                <Field label="Pembulatan" error={errors.rounding || errors.rounding_unit}>
+                                    <div className="flex gap-2">
+                                        <select className={inputClass} value={form.rounding} onChange={(e) => setForm({ ...form, rounding: e.target.value })}>
+                                            <option value="round">Terdekat</option>
+                                            <option value="ceil">Ke atas</option>
+                                            <option value="floor">Ke bawah</option>
+                                            <option value="none">Tidak dibulatkan</option>
+                                        </select>
+                                        <select className={inputClass} value={form.rounding_unit} onChange={(e) => setForm({ ...form, rounding_unit: Number(e.target.value) })} disabled={form.rounding === "none"}>
+                                            {[100, 500, 1000, 5000, 10000].map((u) => <option key={u} value={u}>{rupiah(u)}</option>)}
+                                        </select>
+                                    </div>
                                 </Field>
                             </div>
                             <Field label="Dikecualikan dari SHU" error={errors.excluded_customer_ids}>
@@ -210,7 +246,7 @@ export default function Show({ period, allocations, rules, stats, unmatched, emp
             )}
 
             <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Stat label="Penerima SHU" value={allocations.length} helper={`${stats.payers} dapat base SHU`} />
+                <Stat label="Penerima SHU" value={allocations.length} helper={`${stats.active} pegawai aktif · ${stats.base_recipients} dapat base`} />
                 <Stat label="Belanja pegawai" value={rupiah(stats.purchase_total)} helper={`${stats.purchase_buyers} pembeli · sumber ${period.sales_source === "excel" ? "Excel" : "POS"}`} />
                 <Stat label="Total terbagi" value={rupiah(stats.distributed)} helper={period.total_shu ? `dari ${rupiah(period.total_shu)}` : ""} />
                 <Stat label="Total dibulatkan" value={rupiah(stats.distributed_rounded)} helper="jumlah uang yang perlu disiapkan" />
@@ -218,7 +254,13 @@ export default function Show({ period, allocations, rules, stats, unmatched, emp
 
             <Panel
                 title={`Hasil perhitungan (${allocations.length} orang)`}
-                actions={<input className={inputBase + " w-64"} placeholder="Cari nama / NIP..." value={search} onChange={(e) => setSearch(e.target.value)} />}
+                actions={
+                    <div className="flex flex-wrap gap-2">
+                        <Link href={route("name-links.index", { shu_year: period.year })} className={btn.secondary}><IconLink size={18} /> Pencocokan nama</Link>
+                        {editable && <button onClick={() => openAdjust(null)} className={btn.secondary}><IconPlus size={18} /> Koreksi / penerima manual</button>}
+                        <input className={inputBase + " w-56"} placeholder="Cari nama / NIP..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                    </div>
+                }
             >
                 <div className="overflow-x-auto">
                     <table className="w-full">
@@ -232,8 +274,10 @@ export default function Show({ period, allocations, rules, stats, unmatched, emp
                                 <th className={th + " text-right"}>SHU simpanan</th>
                                 <th className={th + " text-right"}>SHU pembelian</th>
                                 {period.portion_loans > 0 && <th className={th + " text-right"}>SHU pinjaman</th>}
+                                <th className={th + " text-right"}>Koreksi</th>
                                 <th className={th + " text-right"}>Total</th>
                                 <th className={th + " text-right"}>Dibulatkan</th>
+                                {editable && <th className={th}></th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -246,19 +290,68 @@ export default function Show({ period, allocations, rules, stats, unmatched, emp
                                     <td className={td + " text-right"}>{rupiah(a.savings_amount)}<div className="text-xs text-slate-500">{percent(a.savings_share)}</div></td>
                                     <td className={td + " text-right"}>{rupiah(a.purchase_amount)}<div className="text-xs text-slate-500">{percent(a.purchase_share)}</div></td>
                                     {period.portion_loans > 0 && <td className={td + " text-right"}>{rupiah(a.loan_amount)}<div className="text-xs text-slate-500">{percent(a.loan_share)}</div></td>}
-                                    <td className={td + " text-right"}>{rupiah(a.base_amount)}</td>
+                                    <td className={td + " text-right"}>
+                                        {rupiah(a.base_amount)}
+                                        {period.base_mode === "monthly" && <div className="text-xs text-slate-500">{a.months_paid} bln</div>}
+                                        {adjustmentByCustomer[a.customer_id]?.base_override != null && <div className="text-xs text-warning-700">manual</div>}
+                                    </td>
                                     <td className={td + " text-right"}>{rupiah(a.shu_savings)}</td>
                                     <td className={td + " text-right"}>{rupiah(a.shu_purchases)}</td>
                                     {period.portion_loans > 0 && <td className={td + " text-right"}>{rupiah(a.shu_loans)}</td>}
+                                    <td className={td + " text-right"}>
+                                        {a.adjustment_amount ? rupiah(a.adjustment_amount) : "-"}
+                                        {a.adjustment_note && <div className="max-w-[10rem] truncate text-xs text-slate-500" title={a.adjustment_note}>{a.adjustment_note}</div>}
+                                    </td>
                                     <td className={td + " text-right"}>{rupiah(a.total)}</td>
                                     <td className={td + " text-right font-semibold text-slate-900 dark:text-white"}>{rupiah(a.total_rounded)}</td>
+                                    {editable && (
+                                        <td className={td}>
+                                            <button onClick={() => openAdjust(a.customer_id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Koreksi manual"><IconPencil size={16} /></button>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
-                            {rows.length === 0 && <tr><td colSpan={10} className="p-10 text-center text-slate-500">{allocations.length ? "Tidak ada yang cocok." : "Belum dihitung. Isi pengaturan, simpan, lalu klik “Hitung SHU”."}</td></tr>}
+                            {rows.length === 0 && <tr><td colSpan={13} className="p-10 text-center text-slate-500">{allocations.length ? "Tidak ada yang cocok." : "Belum dihitung. Isi pengaturan, simpan, lalu klik “Hitung SHU”."}</td></tr>}
                         </tbody>
                     </table>
                 </div>
             </Panel>
+
+            {adjustments.length > 0 && (
+                <p className="mt-3 text-sm text-slate-500">
+                    {adjustments.length} koreksi manual tersimpan: {adjustments.map((a) => a.customer?.name).join(", ")}. Koreksi tetap berlaku saat dihitung ulang.
+                </p>
+            )}
+
+            <Modal show={adjust !== null} onClose={() => setAdjust(null)}>
+                {adjust && (
+                    <form onSubmit={saveAdjust} className="space-y-4 p-6">
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Koreksi manual SHU</h2>
+                        <p className="text-sm text-slate-500">Dipotong dari SHU yang dibagi sebelum jasa simpanan/pembelian dihitung. Kosongkan kedua nilai untuk menghapus koreksi.</p>
+                        <Field label="Pegawai">
+                            <select className={inputClass} value={adjust.customer_id} onChange={(e) => { const id = Number(e.target.value); const a = adjustmentByCustomer[id]; setAdjust({ customer_id: id, base_override: a?.base_override ?? "", amount: a?.amount || "", note: a?.note || "" }); }} required>
+                                <option value="">— pilih pegawai —</option>
+                                {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.nip ? ` (${e.nip})` : ""}</option>)}
+                            </select>
+                        </Field>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <Field label="Base SHU pengganti (Rp)" hint="Kosong = ikut aturan. Isi 0 untuk meniadakan base.">
+                                <input type="number" min="0" className={inputClass} value={adjust.base_override} onChange={(e) => setAdjust({ ...adjust, base_override: e.target.value })} />
+                            </Field>
+                            <Field label="Tambahan / pengurangan (Rp)" hint="mis. jasa pengurus 300000, atau -50000">
+                                <input type="number" className={inputClass} value={adjust.amount} onChange={(e) => setAdjust({ ...adjust, amount: e.target.value })} />
+                            </Field>
+                        </div>
+                        <Field label="Catatan">
+                            <input className={inputClass} value={adjust.note} onChange={(e) => setAdjust({ ...adjust, note: e.target.value })} placeholder="mis. jasa pengurus 2025" />
+                        </Field>
+                        <div className="flex justify-end gap-2">
+                            <button type="button" onClick={() => setAdjust(null)} className={btn.secondary}>Batal</button>
+                            <button type="submit" className={btn.primary}>Simpan koreksi</button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
         </>
     );
 }

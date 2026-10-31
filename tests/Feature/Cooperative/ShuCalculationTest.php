@@ -86,21 +86,82 @@ class ShuCalculationTest extends TestCase
         $this->assertEqualsWithDelta(10000000, $alloc->sum('total'), 0.05);
     }
 
-    public function test_ppnpn_never_gets_base_even_when_paying_savings(): void
+    public function test_ppnpn_base_is_an_option_and_on_by_default(): void
     {
         $pns = $this->person('PNS');
         $ppnpn = $this->person('Kontrak', 'PPNPN');
         $this->pay($pns, 'wajib', 2025, [1], 100000);
         $this->pay($ppnpn, 'wajib', 2025, [1], 100000);
 
-        $period = $this->period(['total_shu' => 1100000, 'portion_savings' => 100, 'portion_purchases' => 0]);
-        $result = app(ShuCalculator::class)->calculate($period);
+        $period = $this->period(['total_shu' => 1200000, 'portion_savings' => 100, 'portion_purchases' => 0]);
+        $this->assertTrue($period->fresh()->base_for_ppnpn);
+        app(ShuCalculator::class)->calculate($period->fresh());
         $alloc = $period->allocations()->get()->keyBy('customer_id');
+        $this->assertSame(100000, $alloc[$ppnpn->id]->base_amount);
+        $this->assertEqualsWithDelta(600000, $alloc[$ppnpn->id]->total, 0.01);
 
+        $period->update(['base_for_ppnpn' => false]);
+        $result = app(ShuCalculator::class)->calculate($period->fresh());
+        $alloc = $period->allocations()->get()->keyBy('customer_id');
         $this->assertSame(1, $result['base_recipients']);
         $this->assertSame(0, $alloc[$ppnpn->id]->base_amount);
-        $this->assertEqualsWithDelta(500000, $alloc[$ppnpn->id]->shu_savings, 0.01);
-        $this->assertEqualsWithDelta(600000, $alloc[$pns->id]->total, 0.01);
+        $this->assertEqualsWithDelta(550000, $alloc[$ppnpn->id]->shu_savings, 0.01);
+    }
+
+    public function test_only_employees_active_in_the_year_participate(): void
+    {
+        $active = $this->person('Aktif');
+        $mutasiMaret = $this->person('Mutasi Maret 2025', 'PNS', 'MUTASI');
+        $mutasiMaret->update(['active_until' => '2025-03-31']);
+        $keluar2024 = $this->person('Keluar Des 2024', 'PNS', 'MUTASI');
+        $keluar2024->update(['active_until' => '2024-12-31']);
+        foreach ([$active, $mutasiMaret, $keluar2024] as $c) {
+            ExternalSale::create(['year' => 2025, 'buyer_name' => $c->name, 'customer_id' => $c->id, 'amount' => 100000]);
+        }
+        $this->pay($active, 'wajib', 2025, [1], 100000);
+
+        $period = $this->period(['total_shu' => 400000, 'portion_savings' => 0, 'portion_purchases' => 100]);
+        app(ShuCalculator::class)->calculate($period);
+        $alloc = $period->allocations()->get()->keyBy('customer_id');
+
+        $this->assertArrayNotHasKey($keluar2024->id, $alloc, 'belanja tercatat tapi sudah tidak aktif di 2025');
+        $this->assertSame(0, $alloc[$mutasiMaret->id]->base_amount, 'belanja tanpa iuran: tanpa base');
+        $this->assertEqualsWithDelta(150000, $alloc[$mutasiMaret->id]->total, 0.01);
+        $this->assertEqualsWithDelta(250000, $alloc[$active->id]->total, 0.01);
+    }
+
+    public function test_flexible_base_modes_and_manual_adjustments(): void
+    {
+        $a = $this->person('A');
+        $b = $this->person('B');
+        $pengurus = $this->person('Pengurus');
+        $this->pay($a, 'wajib', 2025, range(1, 12), 50000);
+        $this->pay($b, 'wajib', 2025, [10, 11, 12], 50000);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'Pengurus', 'customer_id' => $pengurus->id, 'amount' => 10000]);
+
+        $period = $this->period([
+            'total_shu' => 1000000, 'base_per_person' => 120000, 'base_mode' => 'monthly',
+            'portion_savings' => 100, 'portion_purchases' => 0, 'rounding' => 'ceil', 'rounding_unit' => 500,
+        ]);
+        $period->adjustments()->create(['customer_id' => $pengurus->id, 'amount' => 300000, 'note' => 'jasa pengurus']);
+        $period->adjustments()->create(['customer_id' => $b->id, 'base_override' => 100000]);
+
+        app(ShuCalculator::class)->calculate($period->fresh());
+        $alloc = $period->allocations()->get()->keyBy('customer_id');
+
+        $this->assertSame(120000, $alloc[$a->id]->base_amount);           // 12/12 bulan
+        $this->assertSame(100000, $alloc[$b->id]->base_amount);           // pengganti manual (aturan: 3/12 = 30.000)
+        $this->assertSame(300000, $alloc[$pengurus->id]->adjustment_amount);
+        // sisa = 1.000.000 - 220.000 base - 300.000 koreksi = 480.000 → simpanan 600rb : 150rb
+        $this->assertEqualsWithDelta(120000 + 384000, $alloc[$a->id]->total, 0.01);
+        $this->assertSame(196000, $alloc[$b->id]->total_rounded);          // 196.000 tepat
+        $this->assertEqualsWithDelta(1000000, $period->allocations()->sum('total'), 0.05);
+
+        // Base untuk semua pegawai aktif yang ikut (tidak wajib iuran)
+        $period->update(['base_requires_savings' => false, 'base_mode' => 'full', 'base_per_person' => 10000]);
+        $period->adjustments()->delete();
+        app(ShuCalculator::class)->calculate($period->fresh());
+        $this->assertSame(10000, $period->allocations()->where('customer_id', $pengurus->id)->value('base_amount'));
     }
 
     public function test_pos_source_uses_transactions_minus_failed_and_loans_portion(): void
@@ -143,8 +204,9 @@ class ShuCalculationTest extends TestCase
         $this->actingAs($user)->post(route('shu.store'), ['year' => 2025])->assertRedirect();
         $period = ShuPeriod::firstWhere('year', 2025);
         $this->actingAs($user)->put(route('shu.update', $period), [
-            'total_shu' => 1000000, 'base_per_person' => 100000, 'portion_savings' => 70, 'portion_purchases' => 30, 'portion_loans' => 0,
-            'savings_types' => ['pokok', 'wajib', 'sukarela'], 'savings_period' => 'year', 'sales_source' => 'excel', 'rounding' => 'round',
+            'total_shu' => 1000000, 'base_per_person' => 100000, 'base_requires_savings' => true, 'base_for_ppnpn' => true, 'base_mode' => 'full',
+            'portion_savings' => 70, 'portion_purchases' => 30, 'portion_loans' => 0,
+            'savings_types' => ['pokok', 'wajib', 'sukarela'], 'savings_period' => 'year', 'sales_source' => 'excel', 'rounding' => 'round', 'rounding_unit' => 1000,
         ])->assertSessionHasNoErrors();
 
         $path = $this->xlsx([
@@ -163,11 +225,16 @@ class ShuCalculationTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Dashboard/Cooperative/Shu/Show')
-                ->where('stats.payers', 1)
+                ->where('stats.base_recipients', 1)
                 ->where('stats.purchase_total', 15000)
                 ->has('unmatched', 1)
                 ->where('allocations.0.total_rounded', 1000000)
                 ->has('rules'));
+
+        $this->actingAs($user)->post(route('shu.adjustments.save', $period), ['customer_id' => $budi->id, 'amount' => 50000, 'note' => 'uji'])->assertSessionHasNoErrors();
+        $this->assertSame(50000, $period->adjustments()->value('amount'));
+        $this->actingAs($user)->post(route('shu.adjustments.save', $period), ['customer_id' => $budi->id, 'base_override' => null, 'amount' => 0]);
+        $this->assertSame(0, $period->adjustments()->count());
 
         $this->actingAs($user)->post(route('shu.finalize', $period));
         $this->assertTrue($period->fresh()->isFinal());

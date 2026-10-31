@@ -14,7 +14,9 @@ use RuntimeException;
  */
 class EmployeeImportService
 {
-    public const FIELDS = ['nip', 'name', 'employee_type', 'rank', 'grade', 'position', 'work_unit', 'employment_status'];
+    public const FIELDS = ['nip', 'name', 'employee_type', 'rank', 'grade', 'position', 'work_unit', 'employment_status', 'active_from', 'active_until'];
+
+    private const EXACT_FIELDS = ['nip', 'active_from', 'active_until'];
 
     public const FIELD_LABELS = [
         'nip' => 'NIP',
@@ -25,6 +27,8 @@ class EmployeeImportService
         'position' => 'Jabatan',
         'work_unit' => 'Unit',
         'employment_status' => 'Status',
+        'active_from' => 'Aktif sejak',
+        'active_until' => 'Aktif sampai',
         'aliases' => 'Alias',
     ];
 
@@ -38,6 +42,8 @@ class EmployeeImportService
         'work_unit' => ['unit', 'unit kerja', 'bagian', 'bidang'],
         'employment_status' => ['status', 'status pegawai'],
         'aliases' => ['alias', 'nama lain', 'ejaan nama lain'],
+        'active_from' => ['aktif sejak', 'tanggal masuk', 'tgl masuk', 'mulai aktif'],
+        'active_until' => ['aktif sampai', 'tanggal keluar', 'tgl keluar', 'tanggal mutasi', 'tanggal pensiun'],
     ];
 
     public function __construct(private readonly SpreadsheetReader $reader) {}
@@ -91,6 +97,8 @@ class EmployeeImportService
                 'position' => $this->dash($value('position')),
                 'work_unit' => $this->dash($value('work_unit')) ?? $section,
                 'employment_status' => $this->dash(strtoupper($value('employment_status'))),
+                'active_from' => $this->date($row[$map['active_from'] ?? -1] ?? null),
+                'active_until' => $this->date($row[$map['active_until'] ?? -1] ?? null),
                 'aliases' => array_values(array_unique(array_filter(array_map(
                     fn ($a) => NameMatcher::normalize($a),
                     preg_split('/[;,\n]/', $value('aliases')) ?: []
@@ -256,7 +264,13 @@ class EmployeeImportService
                 continue; // kolom kosong di file tidak menghapus data
             }
             $old = $existing->{$field};
-            if (NameMatcher::normalize((string) $old) !== NameMatcher::normalize((string) $new) || ($field === 'nip' && $old !== $new)) {
+            if ($old instanceof \DateTimeInterface) {
+                $old = $old->format('Y-m-d');
+            }
+            $changed = in_array($field, self::EXACT_FIELDS, true)
+                ? (string) $old !== (string) $new
+                : NameMatcher::normalize((string) $old) !== NameMatcher::normalize((string) $new);
+            if ($changed) {
                 $diff[$field] = ['old' => $old, 'new' => $new];
             }
         }
@@ -317,6 +331,25 @@ class EmployeeImportService
         }
 
         return strlen($nip) === 18 ? 'PNS' : ($raw === '' ? 'PPNPN' : 'LAINNYA');
+    }
+
+    private function date(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+        $value = trim((string) $value);
+        if ($value === '' || $value === '-') {
+            return null;
+        }
+        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y'] as $format) {
+            $date = \DateTime::createFromFormat('!'.$format, $value);
+            if ($date && $date->format($format) === $value) {
+                return $date->format('Y-m-d');
+            }
+        }
+
+        return null;
     }
 
     private function dash(?string $value): ?string

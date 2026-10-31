@@ -18,6 +18,7 @@ use App\Http\Controllers\Apps\GoodsReceivingController;
 use App\Http\Controllers\Apps\ImportExportController;
 use App\Http\Controllers\Apps\MemberContributionController;
 use App\Http\Controllers\Apps\MemberController;
+use App\Http\Controllers\Apps\NameLinkController;
 use App\Http\Controllers\Apps\OutletController;
 use App\Http\Controllers\Apps\PayableController;
 use App\Http\Controllers\Apps\PaymentSettingController;
@@ -199,6 +200,10 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::put('employees/{employee}', [EmployeeController::class, 'update'])->middleware('permission:employees-edit')->name('employees.update');
     Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])->middleware('permission:employees-delete')->name('employees.destroy');
 
+    Route::get('name-links', [NameLinkController::class, 'index'])->middleware('permission:employees-access')->name('name-links.index');
+    Route::post('name-links/link', [NameLinkController::class, 'link'])->middleware('permission:employees-edit')->name('name-links.link');
+    Route::post('name-links/unlink', [NameLinkController::class, 'unlink'])->middleware('permission:employees-edit')->name('name-links.unlink');
+
     Route::get('savings', [MemberContributionController::class, 'index'])->middleware('permission:savings-access')->name('savings.index');
     Route::get('savings/export', [MemberContributionController::class, 'export'])->middleware('permission:savings-access')->name('savings.export');
     Route::get('savings/import', [MemberContributionController::class, 'import'])->middleware('permission:savings-import')->name('savings.import');
@@ -218,6 +223,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::post('shu/{shu}/calculate', [ShuController::class, 'calculate'])->middleware('permission:shu-manage')->name('shu.calculate');
     Route::post('shu/{shu}/sales-import', [ShuController::class, 'importSales'])->middleware('permission:shu-manage')->name('shu.sales-import');
     Route::post('shu/{shu}/sales-map', [ShuController::class, 'mapSalesName'])->middleware('permission:shu-manage')->name('shu.sales-map');
+    Route::post('shu/{shu}/adjustments', [ShuController::class, 'saveAdjustment'])->middleware('permission:shu-manage')->name('shu.adjustments.save');
     Route::post('shu/{shu}/finalize', [ShuController::class, 'finalize'])->middleware('permission:shu-finalize')->name('shu.finalize');
     Route::post('shu/{shu}/reopen', [ShuController::class, 'reopen'])->middleware('permission:shu-finalize')->name('shu.reopen');
 
