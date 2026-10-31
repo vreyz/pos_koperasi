@@ -54,6 +54,20 @@ class PermissionSeeder extends Seeder
         $create('pricing-rules-update');
         $create('pricing-rules-delete');
 
+        // koperasi: pegawai, simpanan, SHU
+        $create('employees-access');
+        $create('employees-create');
+        $create('employees-edit');
+        $create('employees-delete');
+        $create('employees-import');
+        $create('savings-access');
+        $create('savings-create');
+        $create('savings-delete');
+        $create('savings-import');
+        $create('shu-access');
+        $create('shu-manage');
+        $create('shu-finalize');
+
         // permission customers
         $create('customers-access');
         $create('customers-create');

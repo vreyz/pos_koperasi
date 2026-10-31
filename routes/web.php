@@ -13,8 +13,10 @@ use App\Http\Controllers\Apps\CustomerVoucherController;
 use App\Http\Controllers\Apps\DineAreaController;
 use App\Http\Controllers\Apps\DineTableController;
 use App\Http\Controllers\Apps\DiscountApprovalController;
+use App\Http\Controllers\Apps\EmployeeController;
 use App\Http\Controllers\Apps\GoodsReceivingController;
 use App\Http\Controllers\Apps\ImportExportController;
+use App\Http\Controllers\Apps\MemberContributionController;
 use App\Http\Controllers\Apps\MemberController;
 use App\Http\Controllers\Apps\OutletController;
 use App\Http\Controllers\Apps\PayableController;
@@ -26,6 +28,7 @@ use App\Http\Controllers\Apps\PurchaseOrderController;
 use App\Http\Controllers\Apps\ReceivableController;
 use App\Http\Controllers\Apps\SalesReturnController;
 use App\Http\Controllers\Apps\SettingController;
+use App\Http\Controllers\Apps\ShuController;
 use App\Http\Controllers\Apps\StockMutationController;
 use App\Http\Controllers\Apps\StockOpnameController;
 use App\Http\Controllers\Apps\StockTransferController;
@@ -185,6 +188,39 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
         ->middlewareFor(['index', 'show'], 'permission:customers-access')
         ->middlewareFor(['create', 'store'], 'permission:customers-create')
         ->middlewareFor(['edit', 'update'], 'permission:customers-edit');
+    // Koperasi: pegawai, simpanan, SHU
+    Route::get('employees', [EmployeeController::class, 'index'])->middleware('permission:employees-access')->name('employees.index');
+    Route::get('employees/export', [EmployeeController::class, 'export'])->middleware('permission:employees-access')->name('employees.export');
+    Route::get('employees/import', [EmployeeController::class, 'import'])->middleware('permission:employees-import')->name('employees.import');
+    Route::get('employees/import/template', [EmployeeController::class, 'template'])->middleware('permission:employees-import')->name('employees.import.template');
+    Route::post('employees/import/preview', [EmployeeController::class, 'previewImport'])->middleware('permission:employees-import')->name('employees.import.preview');
+    Route::post('employees/import/commit', [EmployeeController::class, 'commitImport'])->middleware('permission:employees-import')->name('employees.import.commit');
+    Route::post('employees', [EmployeeController::class, 'store'])->middleware('permission:employees-create')->name('employees.store');
+    Route::put('employees/{employee}', [EmployeeController::class, 'update'])->middleware('permission:employees-edit')->name('employees.update');
+    Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])->middleware('permission:employees-delete')->name('employees.destroy');
+
+    Route::get('savings', [MemberContributionController::class, 'index'])->middleware('permission:savings-access')->name('savings.index');
+    Route::get('savings/export', [MemberContributionController::class, 'export'])->middleware('permission:savings-access')->name('savings.export');
+    Route::get('savings/import', [MemberContributionController::class, 'import'])->middleware('permission:savings-import')->name('savings.import');
+    Route::get('savings/import/template', [MemberContributionController::class, 'template'])->middleware('permission:savings-import')->name('savings.import.template');
+    Route::post('savings/import/preview', [MemberContributionController::class, 'previewImport'])->middleware('permission:savings-import')->name('savings.import.preview');
+    Route::post('savings/import/commit', [MemberContributionController::class, 'commitImport'])->middleware('permission:savings-import')->name('savings.import.commit');
+    Route::post('savings', [MemberContributionController::class, 'store'])->middleware('permission:savings-create')->name('savings.store');
+    Route::post('savings/generate', [MemberContributionController::class, 'generate'])->middleware('permission:savings-create')->name('savings.generate');
+    Route::delete('savings/{contribution}', [MemberContributionController::class, 'destroy'])->middleware('permission:savings-delete')->name('savings.destroy');
+
+    Route::get('shu', [ShuController::class, 'index'])->middleware('permission:shu-access')->name('shu.index');
+    Route::post('shu', [ShuController::class, 'store'])->middleware('permission:shu-manage')->name('shu.store');
+    Route::get('shu/{shu}', [ShuController::class, 'show'])->middleware('permission:shu-access')->name('shu.show');
+    Route::get('shu/{shu}/export', [ShuController::class, 'export'])->middleware('permission:shu-access')->name('shu.export');
+    Route::put('shu/{shu}', [ShuController::class, 'update'])->middleware('permission:shu-manage')->name('shu.update');
+    Route::delete('shu/{shu}', [ShuController::class, 'destroy'])->middleware('permission:shu-manage')->name('shu.destroy');
+    Route::post('shu/{shu}/calculate', [ShuController::class, 'calculate'])->middleware('permission:shu-manage')->name('shu.calculate');
+    Route::post('shu/{shu}/sales-import', [ShuController::class, 'importSales'])->middleware('permission:shu-manage')->name('shu.sales-import');
+    Route::post('shu/{shu}/sales-map', [ShuController::class, 'mapSalesName'])->middleware('permission:shu-manage')->name('shu.sales-map');
+    Route::post('shu/{shu}/finalize', [ShuController::class, 'finalize'])->middleware('permission:shu-finalize')->name('shu.finalize');
+    Route::post('shu/{shu}/reopen', [ShuController::class, 'reopen'])->middleware('permission:shu-finalize')->name('shu.reopen');
+
     Route::resource('customer-vouchers', CustomerVoucherController::class)
         ->except(['show'])
         ->middlewareFor('index', 'permission:customer-vouchers-access')

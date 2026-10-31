@@ -36,6 +36,8 @@ Dokumentasi ini ditujukan untuk developer yang ingin setup, memahami alur modul,
 
 ### CRM
 - `docs/features/member-management.md` — member CRUD
+- `docs/features/koperasi.md` — data pegawai (NIP), simpanan pokok/wajib/sukarela, SHU 🆕
+- `docs/deploy-lokal-cloudflare-tunnel.md` — jalankan lokal + akses online lewat Cloudflare Tunnel 🆕
 - `docs/features/crm-segments.md` — segments, campaigns, reminders 🆕
 
 ### Settings & Admin

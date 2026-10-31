@@ -1,0 +1,18 @@
+{
+    "name": "kabanjawara",
+    "main": "src/index.js",
+    "compatibility_date": "2026-10-01",
+    "workers_dev": true,
+    "vars": {
+        // Alamat aplikasi dilihat dari PC tempat cloudflared berjalan.
+        "ORIGIN_URL": "http://127.0.0.1:8000"
+    },
+    "vpc_services": [
+        {
+            "binding": "POS",
+            // Ganti dengan ID VPC Service dari dashboard (Workers VPC → VPC Services).
+            "service_id": "GANTI-DENGAN-ID-VPC-SERVICE",
+            "remote": true
+        }
+    ]
+}

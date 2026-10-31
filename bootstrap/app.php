@@ -34,6 +34,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // cloudflared / reverse proxy di mesin yang sama meneruskan request HTTPS
+        // dari localhost; percayai header X-Forwarded-* hanya dari loopback.
+        $middleware->trustProxies(at: ['127.0.0.1', '::1']);
+
         $middleware->web(append: [
             SetLocale::class,
             SecureHeaders::class,

@@ -14,8 +14,17 @@ class Customer extends Model
      *
      * @var array
      */
+    public const EMPLOYEE_TYPES = ['PNS', 'PPPK', 'PPNPN', 'LAINNYA'];
+
     protected $fillable = [
         'name',
+        'nip',
+        'employee_type',
+        'rank',
+        'grade',
+        'position',
+        'work_unit',
+        'employment_status',
         'no_telp',
         'address',
         'is_loyalty_member',
@@ -44,6 +53,21 @@ class Customer extends Model
         'loyalty_member_since' => 'datetime',
         'last_purchase_at' => 'datetime',
     ];
+
+    public function scopeEmployees($query)
+    {
+        return $query->whereNotNull('employee_type');
+    }
+
+    public function aliases()
+    {
+        return $this->hasMany(CustomerAlias::class);
+    }
+
+    public function contributions()
+    {
+        return $this->hasMany(MemberContribution::class);
+    }
 
     public function salesReturns()
     {
