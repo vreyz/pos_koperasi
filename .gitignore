@@ -38,3 +38,4 @@ whatsapp-service/bun.lock
 # Data koperasi asli (Excel pegawai/simpanan/penjualan) — jangan pernah di-commit
 /data-private/
 /backups/
+deploy/cloudflare-worker/wrangler.local.jsonc
