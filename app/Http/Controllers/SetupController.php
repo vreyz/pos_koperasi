@@ -75,6 +75,15 @@ class SetupController extends Controller
                         ->exists();
                     if ($exists) {
                         $fail('Kode gudang sudah digunakan.');
+
+                        return;
+                    }
+                    $branchCodes = array_map(
+                        fn ($branch) => strtoupper(trim((string) ($branch['warehouse_code'] ?? ''))),
+                        (array) $request->input('branches', []),
+                    );
+                    if (in_array(strtoupper(trim((string) $value)), $branchCodes, true)) {
+                        $fail('Kode gudang utama tidak boleh sama dengan kode gudang cabang.');
                     }
                 },
             ],

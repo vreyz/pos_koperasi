@@ -164,6 +164,17 @@ class SetupWizardTest extends TestCase
             ->assertSessionHasErrors(['branches.1.outlet_code']);
     }
 
+    public function test_setup_rejects_branch_warehouse_code_equal_to_main_warehouse_code(): void
+    {
+        $payload = $this->validPayload(['warehouse_code' => 'kkj-wh']);
+        $payload['warehouse_code'] = 'KKJ-WH';
+
+        $this->post(route('setup.store'), $payload)
+            ->assertSessionHasErrors(['warehouse_code']);
+
+        $this->assertDatabaseMissing('users', ['email' => $payload['user_email']]);
+    }
+
     public function test_setup_requires_unique_email_and_warehouse_code(): void
     {
         User::create([
