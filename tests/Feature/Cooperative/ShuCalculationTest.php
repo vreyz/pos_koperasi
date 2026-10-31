@@ -86,6 +86,23 @@ class ShuCalculationTest extends TestCase
         $this->assertEqualsWithDelta(10000000, $alloc->sum('total'), 0.05);
     }
 
+    public function test_ppnpn_never_gets_base_even_when_paying_savings(): void
+    {
+        $pns = $this->person('PNS');
+        $ppnpn = $this->person('Kontrak', 'PPNPN');
+        $this->pay($pns, 'wajib', 2025, [1], 100000);
+        $this->pay($ppnpn, 'wajib', 2025, [1], 100000);
+
+        $period = $this->period(['total_shu' => 1100000, 'portion_savings' => 100, 'portion_purchases' => 0]);
+        $result = app(ShuCalculator::class)->calculate($period);
+        $alloc = $period->allocations()->get()->keyBy('customer_id');
+
+        $this->assertSame(1, $result['base_recipients']);
+        $this->assertSame(0, $alloc[$ppnpn->id]->base_amount);
+        $this->assertEqualsWithDelta(500000, $alloc[$ppnpn->id]->shu_savings, 0.01);
+        $this->assertEqualsWithDelta(600000, $alloc[$pns->id]->total, 0.01);
+    }
+
     public function test_pos_source_uses_transactions_minus_failed_and_loans_portion(): void
     {
         $cashier = User::factory()->create();

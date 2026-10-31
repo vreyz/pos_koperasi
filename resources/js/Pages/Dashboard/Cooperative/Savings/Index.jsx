@@ -56,7 +56,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
             </div>
 
             <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-6">
-                <Stat label="Anggota membayar" value={payers} helper={`Berhak base SHU ${year}`} />
+                <Stat label="Anggota membayar" value={payers} helper={`membayar simpanan di ${year}`} />
                 <Stat label="Pokok" value={rupiah(totals.pokok)} />
                 <Stat label="Wajib" value={rupiah(totals.wajib)} />
                 <Stat label="Sukarela" value={rupiah(totals.sukarela)} />

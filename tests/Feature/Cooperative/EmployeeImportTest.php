@@ -124,6 +124,31 @@ class EmployeeImportTest extends TestCase
         $this->assertSame('new', $rows[2]['status']);
     }
 
+    public function test_alias_column_and_invalid_nip_are_handled(): void
+    {
+        $existing = $this->employee(['name' => 'Budi Santoso', 'nip' => '197003151991031001']);
+        $path = $this->xlsx([
+            ['NIP', 'Nama', 'Jenis', 'Status', 'Alias'],
+            ['197003151991031001', 'Budi Santoso', 'PNS', 'AKTIF', 'BUDI S; BUDI'],
+            ['', 'Slamet Riyadi', 'PPNPN', 'AKTIF', 'SLAMET PPNPN'],
+            ['1973909181994021002', 'Pegawai NIP Salah', 'PNS', 'AKTIF', ''],
+        ]);
+
+        $service = app(EmployeeImportService::class);
+        $rows = collect($service->classify($service->parse($path)))->keyBy(fn ($r) => $r['data']['name']);
+
+        $this->assertSame('changed', $rows['Budi Santoso']['status']);
+        $this->assertArrayHasKey('aliases', $rows['Budi Santoso']['diff']);
+        $this->assertSame('suspect', $rows['Pegawai NIP Salah']['status']);
+        $this->assertSame('skip', $rows['Pegawai NIP Salah']['default_action']);
+
+        $service->commit($service->classify($service->parse($path)), []);
+
+        $this->assertEqualsCanonicalizing(['BUDI S', 'BUDI'], $existing->aliases()->pluck('alias')->all());
+        $this->assertDatabaseHas('customer_aliases', ['alias' => 'SLAMET PPNPN']);
+        $this->assertDatabaseMissing('customers', ['name' => 'Pegawai NIP Salah']);
+    }
+
     public function test_nip_validation(): void
     {
         $this->assertNull(Nip::problem('197003151991031001'));

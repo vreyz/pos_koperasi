@@ -23,12 +23,12 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
 
 ### Koperasi → Data Pegawai (`employees.*`)
 - CRUD pegawai + alias nama, filter jenis/status, export Excel.
-- **Import Excel** dua langkah (pratinjau → simpan). Kolom: NIP, Nama / "N A M A", Jenis, Pangkat, Gol, Jabatan, Unit, Status.
+- **Import Excel** dua langkah (pratinjau → simpan). Kolom: NIP, Nama / "N A M A", Jenis, Pangkat, Gol, Jabatan, Unit, Status, Alias (pisahkan dengan `;`).
   - NIP sudah ada & data sama → **dilewati**
   - NIP sudah ada & data beda → **dikonfirmasi** (tampil perbedaan lama → baru)
   - Belum ada → **langsung diimport**
   - NIP mirip (beda 1–2 digit), nama mirip dengan NIP beda, NIP sama tapi nama jauh beda,
-    NIP dobel di file, atau format NIP salah → **perlu dicek**, default dilewati
+    NIP dobel di file, atau format NIP salah → **perlu dicek**, default dilewati (NIP salah tidak pernah diimport otomatis)
 - Validasi NIP 18 digit: tanggal lahir, bulan TMT, digit jenis kelamin, dan akhiran `000`
   (tanda NIP dibulatkan Excel karena disimpan sebagai angka).
 
@@ -52,12 +52,12 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
 
 ## Aturan SHU
 
-1. **Base SHU** untuk setiap orang yang membayar simpanan (pokok/wajib/sukarela) pada tahun Y.
+1. **Base SHU** untuk setiap pegawai selain PPNPN yang membayar simpanan (pokok/wajib/sukarela) pada tahun Y.
    Pegawai mutasi/pensiun di tahun Y tetap dapat. Yang berhenti membayar sebelum Y tidak dapat.
 2. Sisa = total SHU − (base × jumlah pembayar), dibagi sesuai porsi.
 3. Jasa simpanan ∝ simpanan anggota yang membayar di Y.
 4. Jasa pembelian ∝ belanja pegawai di Y. POS: `payment_status` `paid`/`unpaid` dikurangi retur `completed`.
-   PPNPN tetap dapat jasa pembelian tanpa base.
+   PPNPN tidak pernah dapat base, tetapi tetap dapat jasa pembelian (dan jasa simpanan bila membayar).
 5. Jasa pinjaman ∝ angsuran pinjaman yang dibayar di Y.
 6. Pengecualian dan customer non-pegawai (UMUM, dll.) tidak mendapat SHU.
 

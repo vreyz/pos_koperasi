@@ -3,6 +3,7 @@
 namespace App\Services\Cooperative;
 
 use App\Models\Customer;
+use App\Models\CustomerAlias;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -24,6 +25,7 @@ class EmployeeImportService
         'position' => 'Jabatan',
         'work_unit' => 'Unit',
         'employment_status' => 'Status',
+        'aliases' => 'Alias',
     ];
 
     private const COLUMNS = [
@@ -35,6 +37,7 @@ class EmployeeImportService
         'position' => ['jabatan'],
         'work_unit' => ['unit', 'unit kerja', 'bagian', 'bidang'],
         'employment_status' => ['status', 'status pegawai'],
+        'aliases' => ['alias', 'nama lain', 'ejaan nama lain'],
     ];
 
     public function __construct(private readonly SpreadsheetReader $reader) {}
@@ -88,6 +91,10 @@ class EmployeeImportService
                 'position' => $this->dash($value('position')),
                 'work_unit' => $this->dash($value('work_unit')) ?? $section,
                 'employment_status' => $this->dash(strtoupper($value('employment_status'))),
+                'aliases' => array_values(array_unique(array_filter(array_map(
+                    fn ($a) => NameMatcher::normalize($a),
+                    preg_split('/[;,\n]/', $value('aliases')) ?: []
+                )))),
             ];
         }
 
@@ -100,7 +107,7 @@ class EmployeeImportService
      */
     public function classify(array $parsed): array
     {
-        $existing = Customer::employees()->get(array_merge(['id'], self::FIELDS));
+        $existing = Customer::employees()->with('aliases:id,customer_id,alias')->get(array_merge(['id'], self::FIELDS));
         $byNip = $existing->filter(fn ($c) => $c->nip)->keyBy('nip');
         $byName = $existing->groupBy(fn ($c) => NameMatcher::normalize($c->name));
         $nipCount = array_count_values(array_filter(array_column($parsed, 'nip')));
@@ -156,6 +163,9 @@ class EmployeeImportService
             if ($row['nip'] && ($nipCount[$row['nip']] ?? 0) > 1 && $status !== 'same') {
                 $status = 'suspect';
             }
+            if ($row['nip'] && Nip::problem($row['nip']) && $status === 'new') {
+                $status = 'suspect'; // NIP salah format tidak diimport tanpa konfirmasi
+            }
 
             $result[$rowNumber] = [
                 'row' => $rowNumber,
@@ -195,7 +205,8 @@ class EmployeeImportService
 
                         continue;
                     }
-                    Customer::create(['employment_status' => $data['employment_status'] ?? 'AKTIF'] + $data + ['no_telp' => 0, 'address' => '']);
+                    $customer = Customer::create(['employment_status' => $data['employment_status'] ?? 'AKTIF'] + $this->attributes($data) + ['no_telp' => 0, 'address' => '']);
+                    $this->addAliases($customer, $data['aliases'] ?? []);
                     $summary['created']++;
                 } elseif ($action === 'update' || str_starts_with($action, 'update:')) {
                     $targetId = str_starts_with($action, 'update:')
@@ -213,7 +224,8 @@ class EmployeeImportService
                         continue;
                     }
                     $oldName = $target->name;
-                    $target->update(array_filter($data, fn ($v) => $v !== null && $v !== ''));
+                    $target->update(array_filter($this->attributes($data), fn ($v) => $v !== null && $v !== ''));
+                    $this->addAliases($target, $data['aliases'] ?? []);
                     if (NameMatcher::normalize($oldName) !== NameMatcher::normalize($target->name)) {
                         NameMatcher::remember($oldName, $target->id);
                     }
@@ -233,6 +245,11 @@ class EmployeeImportService
     private function diff(Customer $existing, array $row): array
     {
         $diff = [];
+        $known = $existing->aliases->pluck('alias')->push(NameMatcher::normalize($existing->name))->all();
+        $newAliases = array_values(array_diff($row['aliases'] ?? [], $known));
+        if ($newAliases !== []) {
+            $diff['aliases'] = ['old' => $existing->aliases->pluck('alias')->implode(', '), 'new' => '+ '.implode(', ', $newAliases)];
+        }
         foreach (self::FIELDS as $field) {
             $new = $row[$field];
             if ($new === null || $new === '') {
@@ -245,6 +262,21 @@ class EmployeeImportService
         }
 
         return $diff;
+    }
+
+    private function attributes(array $data): array
+    {
+        return array_intersect_key($data, array_flip(self::FIELDS));
+    }
+
+    private function addAliases(Customer $customer, array $aliases): void
+    {
+        foreach ($aliases as $alias) {
+            // Alias yang sudah dipakai pegawai lain tidak dipindahkan diam-diam.
+            if ($alias !== NameMatcher::normalize($customer->name) && ! CustomerAlias::where('alias', $alias)->exists()) {
+                CustomerAlias::create(['customer_id' => $customer->id, 'alias' => $alias]);
+            }
+        }
     }
 
     private function candidate(Customer $customer, string $reason): array

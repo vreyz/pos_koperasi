@@ -148,10 +148,10 @@ class EmployeeController extends Controller
     public function template()
     {
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status'],
+            ['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status', 'Alias'],
             [
-                ['199001012015031001', 'Contoh Pegawai PNS', 'PNS', 'Penata Muda', 'III.a', 'Pelaksana', 'BAGIAN UMUM', 'AKTIF'],
-                ['', 'Contoh Pegawai Kontrak', 'PPNPN', '', '', 'Pramubakti', 'BAGIAN UMUM', 'AKTIF'],
+                ['199001012015031001', 'Contoh Pegawai PNS', 'PNS', 'Penata Muda', 'III.a', 'Pelaksana', 'BAGIAN UMUM', 'AKTIF', 'CONTOH; CONTOH P'],
+                ['', 'Contoh Pegawai Kontrak', 'PPNPN', '', '', 'Pramubakti', 'BAGIAN UMUM', 'AKTIF', 'KONTRAK PPNPN'],
             ],
             ['A' => '@'],
         ), 'template-pegawai.xlsx');
@@ -159,11 +159,12 @@ class EmployeeController extends Controller
 
     public function export()
     {
-        $rows = Customer::employees()->orderBy('name')->get()->map(fn (Customer $c) => [
+        $rows = Customer::employees()->with('aliases')->orderBy('name')->get()->map(fn (Customer $c) => [
             $c->nip, $c->name, $c->employee_type, $c->rank, $c->grade, $c->position, $c->work_unit, $c->employment_status,
+            $c->aliases->pluck('alias')->implode('; '),
         ])->all();
 
-        return Excel::download(new ArrayExport(['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status'], $rows, ['A' => '@']), 'pegawai.xlsx');
+        return Excel::download(new ArrayExport(['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status', 'Alias'], $rows, ['A' => '@']), 'pegawai.xlsx');
     }
 
     private function validated(Request $request, ?Customer $employee = null): array

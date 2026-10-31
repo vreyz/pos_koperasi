@@ -15,8 +15,8 @@ use RuntimeException;
 /**
  * Perhitungan SHU tahun buku Y (dibagikan di Y+1).
  *
- *  - Base SHU: nominal sama untuk setiap orang yang membayar simpanan
- *    (pokok/wajib/sukarela) di tahun Y. Pegawai mutasi/pensiun di tahun Y
+ *  - Base SHU: nominal sama untuk setiap pegawai non-PPNPN yang membayar
+ *    simpanan (pokok/wajib/sukarela) di tahun Y. Pegawai mutasi/pensiun di tahun Y
  *    tetap dapat karena masih membayar; yang berhenti sebelum Y tidak.
  *  - Sisa (total SHU - total base) dibagi ke pos jasa simpanan, jasa pembelian,
  *    dan jasa pinjaman sesuai porsi (%).
@@ -48,7 +48,7 @@ class ShuCalculator
         $savingsTypes = array_values(array_intersect($period->savings_types ?: MemberContribution::SAVINGS_TYPES, MemberContribution::SAVINGS_TYPES));
 
         $payers = $this->payersInYear($year, $excluded);
-        $savings = $this->savingsBasis($year, $savingsTypes, $period->savings_period, $payers);
+        $savings = $this->savingsBasis($year, $savingsTypes, $period->savings_period, $this->contributionTotals($year, MemberContribution::SAVINGS_TYPES, $excluded));
         $purchases = $this->purchases($period, $excluded);
         $loans = $this->contributionTotals($year, [MemberContribution::TYPE_ANGSURAN], $excluded);
 
@@ -138,6 +138,7 @@ class ShuCalculator
             ->where('period_year', $year)
             ->whereIn('type', MemberContribution::SAVINGS_TYPES)
             ->where('amount', '>', 0)
+            ->whereHas('customer', fn ($q) => $q->where(fn ($t) => $t->whereNull('employee_type')->orWhere('employee_type', '!=', 'PPNPN')))
             ->when($excluded !== [], fn ($q) => $q->whereNotIn('customer_id', $excluded))
             ->distinct()
             ->pluck('customer_id')

@@ -161,7 +161,8 @@ After seeding, a default `PUSAT` warehouse is created and existing product stock
 ## Fork Koperasi (vreyz/pos_koperasi)
 
 - Remote fork: `https://github.com/vreyz/pos_koperasi`. Deploy job ke VPS upstream dihapus; workflow hanya CI.
-- Aplikasi berjalan lokal (Windows) dan diakses online via Cloudflare Tunnel: `docs/deploy-lokal-cloudflare-tunnel.md`. Laravel mempercayai proxy `127.0.0.1`/`::1`.
+- Aplikasi berjalan lokal (Windows) dan diakses online di `kabanjawara.anzero.workers.dev` lewat Worker (`deploy/cloudflare-worker/`, Workers VPC) → Cloudflare Tunnel: `docs/deploy-lokal-cloudflare-tunnel.md`. Laravel mempercayai proxy `127.0.0.1`/`::1`.
+- Skrip Windows di `deploy/windows/` (`start.bat`, `backup.bat`, `update.bat`). `update.bat` menarik `main`, jadi pekerjaan koperasi harus di-merge ke `main`. Migrasi wajib aditif (jangan hapus/rename kolom berisi data).
 - **Data pegawai/simpanan/penjualan asli tidak boleh di-commit.** Simpan di `data-private/` (gitignored); test pakai data contoh.
 - Modul koperasi (Pegawai berbasis NIP, Simpanan, SHU): `docs/features/koperasi.md`, kode di `app/Services/Cooperative/`, test di `tests/Feature/Cooperative/`.
 

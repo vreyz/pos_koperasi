@@ -243,12 +243,12 @@ class ShuController extends Controller
 
         return array_values(array_filter([
             "SHU ini untuk tahun buku {$period->year} dan dibagikan pada tahun ".($period->year + 1).'.',
-            'Base SHU '.$rupiah($period->base_per_person)." per orang diberikan kepada setiap pegawai yang membayar simpanan (pokok/wajib/sukarela) pada tahun {$period->year}.",
+            'Base SHU '.$rupiah($period->base_per_person)." per orang diberikan kepada setiap pegawai (selain PPNPN) yang membayar simpanan (pokok/wajib/sukarela) pada tahun {$period->year}.",
             "Pegawai yang mutasi atau pensiun pada tahun {$period->year} tetap berhak selama masih tercatat membayar simpanan di tahun itu. Yang berhenti membayar sebelum {$period->year} tidak berhak.",
             'Sisa SHU setelah base dibagi: '.$period->portion_savings.'% jasa simpanan, '.$period->portion_purchases.'% jasa pembelian'.($period->portion_loans > 0 ? ', '.$period->portion_loans.'% jasa pinjaman' : '').'.',
             "Jasa simpanan dihitung dari {$types} ".($period->savings_period === 'all_time' ? "yang terkumpul sejak awal s.d. {$period->year}" : "yang dibayar selama tahun {$period->year}").', proporsional terhadap total semua anggota yang membayar.',
             'Jasa pembelian dihitung dari total belanja '.($period->sales_source === 'excel' ? 'yang diimport dari Excel' : 'di POS (dikurangi retur)')." selama tahun {$period->year}, proporsional terhadap total belanja semua pegawai.",
-            'Pegawai PPNPN/kontrak yang tidak membayar simpanan tetap mendapat jasa pembelian, tetapi tidak mendapat base SHU dan jasa simpanan.',
+            'Pegawai PPNPN/kontrak tidak mendapat base SHU, tetapi tetap mendapat jasa pembelian (dan jasa simpanan bila membayar simpanan).',
             $period->portion_loans > 0 ? "Jasa pinjaman dihitung dari angsuran pinjaman yang dibayar selama tahun {$period->year}." : null,
             count($period->excluded_customer_ids ?? []) > 0 ? count($period->excluded_customer_ids).' nama dikecualikan dan tidak mendapat SHU.' : null,
             'Pembeli umum/non-pegawai tidak mendapat SHU.',
