@@ -25,7 +25,6 @@ class MemberContributionController extends Controller
     {
         $years = $this->years();
         $year = (int) $request->query('year', $years[0] ?? now()->year);
-        $search = trim((string) $request->query('search', ''));
         $tab = $request->query('tab') === 'history' ? 'history' : 'recap';
         $customerId = $request->integer('customer_id') ?: null;
 
@@ -33,20 +32,52 @@ class MemberContributionController extends Controller
         $history = null;
 
         if ($tab === 'recap') {
-            $query = $this->recapQuery($year)
-                ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w->where('name', 'like', "%{$search}%")->orWhere('nip', 'like', "%{$search}%")))
-                ->when(! $request->boolean('all'), fn ($q) => $q->whereHas('contributions', fn ($c) => $c->where('period_year', $year)));
-            $recap = $query->orderBy('name')->paginate($this->perPage(25))->withQueryString();
+            $recap = $this->recapQuery($year)
+                ->when(! $request->boolean('all'), fn ($q) => $q->whereHas('contributions', fn ($c) => $c->where('period_year', $year)))
+                ->orderBy('name')
+                ->get();
         } else {
-            $history = MemberContribution::query()
-                ->with(['customer:id,name,nip', 'creator:id,name'])
+            // Satu baris per pegawai per jenis, kolom bulan Jan–Des; daftar catatan per bulan untuk dilihat/dihapus.
+            $entries = MemberContribution::query()
+                ->with('creator:id,name')
                 ->where('period_year', $year)
-                ->when($customerId, fn ($q) => $q->where('customer_id', $customerId))
-                ->when($search !== '', fn ($q) => $q->whereHas('customer', fn ($c) => $c->where('name', 'like', "%{$search}%")->orWhere('nip', 'like', "%{$search}%")))
-                ->orderByDesc('period_month')
-                ->orderBy('customer_id')
-                ->paginate($this->perPage(25))
-                ->withQueryString();
+                ->orderBy('period_month')
+                ->orderBy('id')
+                ->get(['id', 'customer_id', 'type', 'period_month', 'amount', 'source', 'source_name', 'notes', 'created_by']);
+            $people = Customer::whereIn('id', $entries->pluck('customer_id')->unique())
+                ->get(['id', 'name', 'nip', 'employee_type', 'employment_status'])
+                ->keyBy('id');
+
+            $history = $entries->groupBy(fn ($e) => $e->customer_id.'|'.$e->type)->map(function ($group) use ($people) {
+                $first = $group->first();
+                $person = $people->get($first->customer_id);
+                $months = array_fill(1, 12, 0);
+                $byMonth = [];
+                foreach ($group as $entry) {
+                    $months[$entry->period_month] += $entry->amount;
+                    $byMonth[$entry->period_month][] = [
+                        'id' => $entry->id,
+                        'amount' => $entry->amount,
+                        'source' => $entry->source,
+                        'source_name' => $entry->source_name,
+                        'notes' => $entry->notes,
+                        'creator' => $entry->creator?->name,
+                    ];
+                }
+
+                return [
+                    'key' => $first->customer_id.'|'.$first->type,
+                    'customer_id' => $first->customer_id,
+                    'name' => $person?->name,
+                    'nip' => $person?->nip,
+                    'employee_type' => $person?->employee_type,
+                    'employment_status' => $person?->employment_status,
+                    'type' => $first->type,
+                    'months' => $months,
+                    'total' => array_sum($months),
+                    'entries' => $byMonth,
+                ];
+            })->values();
         }
 
         $totals = MemberContribution::where('period_year', $year)
@@ -58,7 +89,7 @@ class MemberContributionController extends Controller
             'tab' => $tab,
             'year' => $year,
             'years' => $years ?: [now()->year],
-            'filters' => ['search' => $search, 'customer_id' => $customerId, 'all' => $request->boolean('all')],
+            'filters' => ['customer_id' => $customerId, 'all' => $request->boolean('all')],
             'recap' => $recap,
             'history' => $history,
             'totals' => $totals,

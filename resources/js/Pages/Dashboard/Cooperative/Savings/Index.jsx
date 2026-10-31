@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import Pagination from "@/Components/Dashboard/Pagination";
+import SortableTable from "@/Components/Cooperative/SortableTable";
 import Modal from "@/Components/Modal";
 import { IconCalendarPlus, IconDownload, IconPigMoney, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { useAuthorization } from "@/Utils/authorization";
@@ -12,7 +12,8 @@ const SOURCE_LABELS = { manual: "Manual", potong_gaji: "Potong gaji", tunai: "Tu
 export default function Index({ tab, year, years, filters, recap, history, totals, payers, typeLabels, employees }) {
     useFlashToasts();
     const { can } = useAuthorization();
-    const [search, setSearch] = useState(filters.search || "");
+    const [merged, setMerged] = useState(false);
+    const [detail, setDetail] = useState(null);
     const [modal, setModal] = useState(null);
     const [errors, setErrors] = useState({});
     const now = new Date();
@@ -21,6 +22,99 @@ export default function Index({ tab, year, years, filters, recap, history, total
 
     const go = (changes) => router.get(route("savings.index"), { tab, year, ...filters, ...changes }, { preserveState: true, replace: true });
     const savingsTotal = ["pokok", "wajib", "sukarela"].reduce((s, t) => s + Number(totals[t] || 0), 0);
+    const num = (v) => (v ? Math.round(v).toLocaleString("id-ID") : "");
+    const typeOptions = Object.entries(typeLabels).map(([value, label]) => ({ value, label }));
+
+    // Riwayat: baris per nama per jenis, atau digabung (pokok+wajib+sukarela) per nama.
+    const historyRows = useMemo(() => {
+        if (!history) return [];
+        if (!merged) return history;
+        const byPerson = {};
+        history.filter((r) => r.type !== "angsuran").forEach((r) => {
+            const p = (byPerson[r.customer_id] ??= { ...r, key: `${r.customer_id}|simpanan`, type: "simpanan", months: {}, total: 0, entries: {} });
+            for (let m = 1; m <= 12; m++) {
+                p.months[m] = (p.months[m] || 0) + Number(r.months[m] || 0);
+                (r.entries[m] || []).forEach((e) => (p.entries[m] ??= []).push({ ...e, type: r.type }));
+            }
+            p.total += r.total;
+        });
+        return Object.values(byPerson);
+    }, [history, merged]);
+
+    const monthColumns = MONTHS.map((label, i) => ({
+        key: `m${i + 1}`,
+        label,
+        align: "right",
+        filter: "number",
+        className: "min-w-[5.5rem] px-2",
+        value: (r) => Number(r.months[i + 1] || 0),
+        render: (r) =>
+            r.months[i + 1] ? (
+                <button type="button" onClick={() => setDetail({ row: r, month: i + 1 })} className={`hover:underline ${r.months[i + 1] < 0 ? "text-danger-600" : ""}`} title="Lihat / hapus catatan">
+                    {num(r.months[i + 1])}
+                </button>
+            ) : (
+                <span className="text-slate-300 dark:text-slate-700">–</span>
+            ),
+    }));
+
+    const historyColumns = [
+        {
+            key: "name",
+            label: "Nama",
+            filter: "text",
+            className: "sticky left-0 z-10 bg-white dark:bg-slate-900",
+            value: (r) => `${r.name || ""} ${r.nip || ""}`.trim(),
+            render: (r) => (
+                <>
+                    <div className="font-medium text-slate-900 dark:text-white">{r.name}</div>
+                    <div className="font-mono text-xs text-slate-500">{r.nip || r.employee_type}</div>
+                </>
+            ),
+        },
+        merged
+            ? { key: "type", label: "Jenis", value: () => "Simpanan" }
+            : { key: "type", label: "Jenis", filter: "select", options: typeOptions, value: (r) => r.type, render: (r) => typeLabels[r.type] },
+        ...monthColumns,
+        { key: "total", label: "Total", align: "right", filter: "number", value: (r) => r.total, render: (r) => <span className="font-semibold">{num(r.total)}</span> },
+    ];
+
+    const sumFooter = (columns, amountKeys) => (rows) => (
+        <tr>
+            {columns.map((c, i) => (
+                <td key={c.key} className={`${td} ${c.align === "right" ? "text-right" : ""} ${c.className || ""}`}>
+                    {i === 0 ? "Total" : amountKeys.includes(c.key) ? num(rows.reduce((s, r) => s + Number(c.value(r) || 0), 0)) : ""}
+                </td>
+            ))}
+        </tr>
+    );
+
+    const statusOptions = useMemo(
+        () => [...new Set((recap || []).map((r) => r.employment_status).filter(Boolean))].sort().map((v) => ({ value: v, label: v })),
+        [recap]
+    );
+    const recapColumns = [
+        {
+            key: "name",
+            label: "Nama",
+            filter: "text",
+            value: (r) => `${r.name} ${r.nip || ""}`.trim(),
+            render: (r) => (
+                <>
+                    <button onClick={() => go({ tab: "history", customer_id: r.id })} className="text-left font-medium text-primary-600 hover:underline">{r.name}</button>
+                    <div className="font-mono text-xs text-slate-500">{r.nip || "tanpa NIP"}</div>
+                </>
+            ),
+        },
+        { key: "employee_type", label: "Jenis", filter: "select", options: ["PNS", "PPPK", "PPNPN", "LAINNYA"].map((v) => ({ value: v, label: v })), value: (r) => r.employee_type, render: (r) => <Badge>{r.employee_type}</Badge> },
+        { key: "employment_status", label: "Status", filter: "select", options: statusOptions, value: (r) => r.employment_status || "" },
+        { key: "pokok", label: "Pokok", align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0), render: (r) => num(r.pokok_total) },
+        { key: "wajib", label: "Wajib", align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num(r.wajib_total) },
+        { key: "sukarela", label: "Sukarela", align: "right", filter: "number", value: (r) => Number(r.sukarela_total || 0), render: (r) => num(r.sukarela_total) },
+        { key: "angsuran", label: "Angsuran", align: "right", filter: "number", value: (r) => Number(r.angsuran_total || 0), render: (r) => num(r.angsuran_total) },
+        { key: "balance", label: `Saldo s.d. ${year}`, align: "right", filter: "number", value: (r) => Number(r.savings_balance || 0), render: (r) => <span className="font-semibold">{num(r.savings_balance)}</span> },
+    ];
+    const initialHistoryFilters = filters.customer_id ? { name: employees.find((e) => e.id === filters.customer_id)?.name || "" } : {};
 
     const submit = (url, data) => (e) => {
         e.preventDefault();
@@ -51,7 +145,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
             <div className="mb-4 flex flex-wrap items-center gap-2">
                 <span className="text-sm text-slate-500">Tahun:</span>
                 {years.map((y) => (
-                    <button key={y} onClick={() => go({ year: y, page: 1 })} className={`rounded-lg px-3 py-1 text-sm ${y === year ? "bg-primary-500 text-white" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>{y}</button>
+                    <button key={y} onClick={() => go({ year: y })} className={`rounded-lg px-3 py-1 text-sm ${y === year ? "bg-primary-500 text-white" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>{y}</button>
                 ))}
             </div>
 
@@ -67,99 +161,84 @@ export default function Index({ tab, year, years, filters, recap, history, total
             <Panel
                 title={
                     <div className="flex gap-1">
-                        {[["recap", "Rekap per anggota"], ["history", "Riwayat"]].map(([key, label]) => (
-                            <button key={key} onClick={() => go({ tab: key, page: 1 })} className={`rounded-lg px-3 py-1 text-sm ${tab === key ? "bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300" : "text-slate-500"}`}>{label}</button>
+                        {[["recap", "Rekap per anggota"], ["history", "Riwayat per bulan"]].map(([key, label]) => (
+                            <button key={key} onClick={() => go({ tab: key, customer_id: "" })} className={`rounded-lg px-3 py-1 text-sm ${tab === key ? "bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300" : "text-slate-500"}`}>{label}</button>
                         ))}
                     </div>
                 }
                 actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        {tab === "recap" && (
-                            <label className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
-                                <input type="checkbox" checked={filters.all} onChange={(e) => go({ all: e.target.checked ? 1 : 0, page: 1 })} /> Tampilkan yang tidak membayar
-                            </label>
-                        )}
-                        <form onSubmit={(e) => { e.preventDefault(); go({ search, page: 1 }); }}>
-                            <input className={inputBase + " w-56"} placeholder="Cari nama / NIP..." value={search} onChange={(e) => setSearch(e.target.value)} />
-                        </form>
-                    </div>
+                    tab === "recap" ? (
+                        <label className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
+                            <input type="checkbox" checked={filters.all} onChange={(e) => go({ all: e.target.checked ? 1 : 0 })} /> Tampilkan yang tidak membayar
+                        </label>
+                    ) : (
+                        <label className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
+                            <input type="checkbox" checked={merged} onChange={(e) => setMerged(e.target.checked)} /> Gabungkan pokok + wajib + sukarela per nama
+                        </label>
+                    )
                 }
             >
-                <div className="overflow-x-auto">
-                    {tab === "recap" ? (
-                        <table className="w-full">
-                            <thead className="bg-slate-50 dark:bg-slate-950">
-                                <tr>
-                                    <th className={th}>Nama</th>
-                                    <th className={th}>Jenis / Status</th>
-                                    <th className={th + " text-right"}>Pokok</th>
-                                    <th className={th + " text-right"}>Wajib</th>
-                                    <th className={th + " text-right"}>Sukarela</th>
-                                    <th className={th + " text-right"}>Angsuran</th>
-                                    <th className={th + " text-right"}>Saldo simpanan s.d. {year}</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {recap.data.map((r) => (
-                                    <tr key={r.id}>
-                                        <td className={td}>
-                                            <button onClick={() => go({ tab: "history", customer_id: r.id, search: "", page: 1 })} className="text-left font-medium text-primary-600 hover:underline">{r.name}</button>
-                                            <div className="font-mono text-xs text-slate-500">{r.nip || "tanpa NIP"}</div>
-                                        </td>
-                                        <td className={td}><Badge>{r.employee_type}</Badge> <span className="text-xs text-slate-500">{r.employment_status}</span></td>
-                                        <td className={td + " text-right"}>{rupiah(r.pokok_total)}</td>
-                                        <td className={td + " text-right"}>{rupiah(r.wajib_total)}</td>
-                                        <td className={td + " text-right"}>{rupiah(r.sukarela_total)}</td>
-                                        <td className={td + " text-right"}>{rupiah(r.angsuran_total)}</td>
-                                        <td className={td + " text-right font-semibold"}>{rupiah(r.savings_balance)}</td>
-                                    </tr>
-                                ))}
-                                {recap.data.length === 0 && <tr><td colSpan={7} className="p-10 text-center text-slate-500">Belum ada simpanan di tahun {year}.</td></tr>}
-                            </tbody>
-                        </table>
-                    ) : (
-                        <table className="w-full">
-                            <thead className="bg-slate-50 dark:bg-slate-950">
-                                <tr>
-                                    <th className={th}>Periode</th>
-                                    <th className={th}>Nama</th>
-                                    <th className={th}>Jenis</th>
-                                    <th className={th + " text-right"}>Jumlah</th>
-                                    <th className={th}>Sumber</th>
-                                    <th className={th}>Catatan</th>
-                                    <th className={th}></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {filters.customer_id && (
-                                    <tr><td colSpan={7} className="bg-primary-50 px-4 py-2 text-sm dark:bg-primary-900/20">
-                                        Filter: {employees.find((e) => e.id === filters.customer_id)?.name} — <button className="text-primary-600 hover:underline" onClick={() => go({ customer_id: "", page: 1 })}>hapus filter</button>
-                                    </td></tr>
-                                )}
-                                {history.data.map((h) => (
-                                    <tr key={h.id}>
-                                        <td className={td}>{MONTHS[h.period_month - 1]} {h.period_year}</td>
-                                        <td className={td}>{h.customer?.name}</td>
-                                        <td className={td}>{typeLabels[h.type]}</td>
-                                        <td className={td + ` text-right font-medium ${h.amount < 0 ? "text-danger-600" : ""}`}>{rupiah(h.amount)}</td>
-                                        <td className={td}><Badge color={h.source === "import" ? "blue" : "gray"}>{SOURCE_LABELS[h.source] || h.source}</Badge></td>
-                                        <td className={td + " text-xs text-slate-500"}>{h.notes}{h.creator && ` · ${h.creator.name}`}</td>
-                                        <td className={td}>
-                                            {can("savings-delete") && (
-                                                <button onClick={() => confirm("Hapus catatan ini?") && router.delete(route("savings.destroy", h.id), { preserveScroll: true })} className="rounded-lg p-2 text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-900/20">
-                                                    <IconTrash size={16} />
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {history.data.length === 0 && <tr><td colSpan={7} className="p-10 text-center text-slate-500">Tidak ada catatan.</td></tr>}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
+                <p className="px-4 pt-3 text-xs text-slate-500">Klik judul kolom untuk mengurutkan. Kotak di bawah judul untuk menyaring — kolom angka menerima &gt;0, 0, &gt;=100000, 50000-100000, atau "kosong".{tab === "history" && " Klik angka bulan untuk melihat atau menghapus catatannya."}</p>
+                {tab === "recap" ? (
+                    <SortableTable
+                        key={`recap-${year}-${filters.all}`}
+                        rows={recap}
+                        rowKey={(r) => r.id}
+                        columns={recapColumns}
+                        initialSort={{ key: "name", dir: "asc" }}
+                        emptyText={`Belum ada simpanan di tahun ${year}.`}
+                        footer={sumFooter(recapColumns, ["pokok", "wajib", "sukarela", "angsuran", "balance"])}
+                    />
+                ) : (
+                    <SortableTable
+                        key={`history-${year}-${merged}-${filters.customer_id || ""}`}
+                        rows={historyRows}
+                        rowKey={(r) => r.key}
+                        columns={historyColumns}
+                        initialSort={{ key: "name", dir: "asc" }}
+                        initialFilters={initialHistoryFilters}
+                        emptyText={`Tidak ada catatan di tahun ${year}.`}
+                        footer={sumFooter(historyColumns, [...monthColumns.map((c) => c.key), "total"])}
+                    />
+                )}
             </Panel>
-            <div className="mt-4"><Pagination links={(tab === "recap" ? recap : history).links} /></div>
+
+            <Modal show={detail !== null} onClose={() => setDetail(null)}>
+                {detail && (
+                    <div className="space-y-4 p-6">
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                            {detail.row.name} — {MONTHS[detail.month - 1]} {year}
+                        </h2>
+                        <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                            {(detail.row.entries[detail.month] || []).map((e) => (
+                                <div key={e.id} className="flex items-center gap-3 p-3 text-sm">
+                                    <div className="flex-1">
+                                        <div className="font-medium text-slate-900 dark:text-white">{typeLabels[e.type || detail.row.type]} · {rupiah(e.amount)}</div>
+                                        <div className="text-xs text-slate-500">
+                                            <Badge color={e.source === "import" ? "blue" : "gray"}>{SOURCE_LABELS[e.source] || e.source}</Badge>
+                                            {e.source_name && ` nama di file: ${e.source_name}`}
+                                            {e.notes && ` · ${e.notes}`}
+                                            {e.creator && ` · ${e.creator}`}
+                                        </div>
+                                    </div>
+                                    {can("savings-delete") && (
+                                        <button
+                                            onClick={() => confirm("Hapus catatan ini?") && router.delete(route("savings.destroy", e.id), { preserveScroll: true, onSuccess: () => setDetail(null) })}
+                                            className="rounded-lg p-2 text-danger-500 hover:bg-danger-50 dark:hover:bg-danger-900/20"
+                                            title="Hapus"
+                                        >
+                                            <IconTrash size={16} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex justify-end">
+                            <button type="button" onClick={() => setDetail(null)} className={btn.secondary}>Tutup</button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             <Modal show={modal === "entry"} onClose={() => setModal(null)}>
                 <form onSubmit={submit(route("savings.store"), entry)} className="space-y-4 p-6">
