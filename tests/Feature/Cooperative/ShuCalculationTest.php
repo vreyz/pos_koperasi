@@ -146,7 +146,7 @@ class ShuCalculationTest extends TestCase
             'total_shu' => 1000000, 'base_per_person' => 120000, 'base_mode' => 'monthly',
             'portion_savings' => 100, 'portion_purchases' => 0, 'rounding' => 'ceil', 'rounding_unit' => 500,
         ]);
-        $period->adjustments()->create(['customer_id' => $pengurus->id, 'amount' => 300000, 'note' => 'jasa pengurus']);
+        $period->adjustments()->create(['customer_id' => $pengurus->id, 'amount' => 300000, 'note' => 'SHU pengurus koperasi']);
         $period->adjustments()->create(['customer_id' => $b->id, 'base_override' => 100000]);
 
         app(ShuCalculator::class)->calculate($period->fresh());

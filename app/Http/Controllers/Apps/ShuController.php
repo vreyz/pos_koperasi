@@ -271,7 +271,7 @@ class ShuController extends Controller
         ])->all();
 
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Status', 'Iuran Koperasi', 'Porsi Iuran (%)', 'Belanja Toko', 'Porsi Belanja (%)', 'Pendapatan Pembiayaan Dana', 'Porsi Dana (%)', 'Pendapatan Pembiayaan Barang', 'Porsi Barang (%)', 'Bulan Bayar', 'SHU Dasar', 'Jasa Pengurus', 'SHU Iuran', 'SHU Belanja', 'SHU Pembiayaan Dana', 'SHU Pembiayaan Barang', 'Koreksi', 'Catatan Koreksi', 'Total SHU', 'Total Dibulatkan'],
+            ['NIP', 'Nama', 'Jenis', 'Status', 'Iuran Koperasi', 'Porsi Iuran (%)', 'Belanja Toko', 'Porsi Belanja (%)', 'Pendapatan Pembiayaan Dana', 'Porsi Dana (%)', 'Pendapatan Pembiayaan Barang', 'Porsi Barang (%)', 'Bulan Bayar', 'SHU Dasar', 'SHU Pengurus Koperasi', 'SHU Iuran', 'SHU Belanja', 'SHU Pembiayaan Dana', 'SHU Pembiayaan Barang', 'Koreksi', 'Catatan Koreksi', 'Total SHU', 'Total Dibulatkan'],
             $rows,
             ['A' => '@'],
         ), "shu-{$shu->year}.xlsx");
@@ -318,9 +318,9 @@ class ShuController extends Controller
                 .($period->base_requires_savings ? " untuk anggota yang membayar Iuran Koperasi (pokok/wajib/sukarela) di tahun {$y}." : ' untuk semua pegawai aktif yang ikut (iuran, belanja, atau pembiayaan).')
                 .($period->base_for_ppnpn ? ' PPNPN juga mendapat SHU dasar.' : ' PPNPN tidak mendapat SHU dasar.'),
             $period->base_requires_savings ? 'Pegawai yang berbelanja tetapi tidak membayar iuran tetap mendapat bagian Belanja Toko, tanpa SHU dasar.' : null,
-            $boardCount > 0 && $period->board_amount > 0 ? "Jasa pengurus {$rupiah($period->board_amount)} per orang per tahun (sebanding bulan bertugas) untuk {$boardCount} pengurus, dipotong dari SHU lebih dulu." : null,
+            $boardCount > 0 && $period->board_amount > 0 ? "SHU Pengurus Koperasi {$rupiah($period->board_amount)} per orang per tahun (sebanding bulan bertugas) untuk {$boardCount} pengurus, dipotong dari SHU lebih dulu." : null,
             $adjustments > 0 ? "{$adjustments} koreksi manual (SHU dasar pengganti / tambahan nominal) diterapkan dan dipotong dari SHU lebih dulu." : null,
-            'Sisa SHU (setelah SHU dasar, jasa pengurus, dan koreksi) dibagi: '.$period->portion_savings.'% Iuran Koperasi, '.$period->portion_purchases.'% Belanja Toko, '.$period->portion_financing_dana.'% Pembiayaan Dana, '.$period->portion_financing_barang.'% Pembiayaan Barang (total 100%).',
+            'Sisa SHU (setelah SHU dasar, SHU pengurus koperasi, dan koreksi) dibagi: '.$period->portion_savings.'% Iuran Koperasi, '.$period->portion_purchases.'% Belanja Toko, '.$period->portion_financing_dana.'% Pembiayaan Dana, '.$period->portion_financing_barang.'% Pembiayaan Barang (total 100%).',
             "Bagian Iuran Koperasi dibagi sebanding jumlah {$types} ".($period->savings_period === 'all_time' ? "yang terkumpul sejak awal s.d. {$y}" : "yang dibayar selama tahun {$y}").' dibanding total semua anggota.',
             'Bagian Belanja Toko dibagi sebanding total belanja '.($period->sales_source === 'excel' ? '(impor Excel)' : 'di POS (dikurangi retur)')." selama tahun {$y} dibanding total belanja semua pegawai aktif.",
             "Bagian Pembiayaan Dana dibagi sebanding biaya formulir dari pembiayaan yang dicairkan di tahun {$y}.",

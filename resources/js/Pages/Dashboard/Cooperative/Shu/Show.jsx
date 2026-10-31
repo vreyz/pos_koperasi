@@ -66,7 +66,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
         money("base_amount", "SHU dasar", null, {
             render: (a) => <>{rupiah(a.base_amount)}{period.base_mode === "monthly" && <div className="text-xs text-slate-500">{a.months_paid} bln</div>}{adjustmentByCustomer[a.customer_id]?.base_override != null && <div className="text-xs text-warning-700">manual</div>}</>,
         }),
-        ...(stats.board_total > 0 ? [money("board_amount", "Jasa pengurus")] : []),
+        ...(stats.board_total > 0 ? [money("board_amount", "SHU Pengurus Koperasi")] : []),
         money("shu_savings", "SHU iuran"),
         money("shu_purchases", "SHU belanja"),
         ...(period.portion_financing_dana > 0 ? [money("shu_financing_dana", "SHU dana")] : []),
@@ -121,29 +121,6 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     <MoneyInput value={form.base_per_person} onChange={(v) => setForm({ ...form, base_per_person: v })} />
                                 </Field>
                             </div>
-                            <div>
-                                <p className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-300">
-                                    Porsi sisa SHU<Tip text="Sisa = SHU yang dibagi − SHU dasar − jasa pengurus − koreksi manual. Sisa ini dibagi ke 4 bagian sesuai persentase; total harus 100%." /> ({rupiah(Math.max(remainder, 0))}) — total{" "}
-                                    <span className={Math.abs(portionTotal - 100) > 0.001 ? "text-danger-600" : "text-success-700"}>{portionTotal}%</span>
-                                    {Math.abs(portionTotal - 100) > 0.001 && <span className="text-danger-600"> (harus 100%)</span>}
-                                    <span className="text-slate-500"> · jasa usaha (belanja + pembiayaan) {businessTotal}%</span>
-                                </p>
-                                <div className="grid gap-4 sm:grid-cols-4">
-                                    <Field label="Iuran Koperasi" error={errors.portion_savings} hint="pokok + wajib + sukarela" tip="Bagian ini dibagi sebanding jumlah iuran (simpanan pokok + wajib + sukarela) tiap anggota dibanding total iuran semua anggota.">
-                                        <PercentInput value={form.portion_savings} onChange={(v) => setForm({ ...form, portion_savings: v })} />
-                                    </Field>
-                                    <Field label="Belanja Toko" error={errors.portion_purchases} hint="total belanja" tip="Bagian ini dibagi sebanding total belanja tiap pegawai di toko koperasi (POS atau impor Excel) dibanding total belanja semua pegawai.">
-                                        <PercentInput value={form.portion_purchases} onChange={(v) => setForm({ ...form, portion_purchases: v })} />
-                                    </Field>
-                                    <Field label="Pembiayaan Dana" error={errors.portion_financing_dana} hint="biaya formulir" tip="Bagian ini dibagi sebanding biaya formulir yang dibayar tiap pegawai untuk pembiayaan dana yang dicairkan di tahun buku ini. Cicilan pokoknya tidak dihitung.">
-                                        <PercentInput value={form.portion_financing_dana} onChange={(v) => setForm({ ...form, portion_financing_dana: v })} />
-                                    </Field>
-                                    <Field label="Pembiayaan Barang" error={errors.portion_financing_barang} hint="bagi hasil + biaya lain" tip="Bagian ini dibagi sebanding bagi hasil (dari cicilan yang dibayar di tahun buku) + biaya lain saat pencairan, per pegawai. Cicilan pokoknya tidak dihitung.">
-                                        <PercentInput value={form.portion_financing_barang} onChange={(v) => setForm({ ...form, portion_financing_barang: v })} />
-                                    </Field>
-                                </div>
-                                {remainder < 0 && <p className="mt-1 text-sm text-danger-600">SHU dasar + jasa pengurus + koreksi melebihi SHU yang dibagi.</p>}
-                            </div>
                             <div className="grid gap-4 sm:grid-cols-3">
                                 <Field label="Siapa dapat SHU dasar" error={errors.base_requires_savings} tip="Hanya pembayar iuran: anggota yang membayar pokok/wajib/sukarela di tahun buku. Semua pegawai aktif yang ikut: termasuk yang hanya belanja atau ikut pembiayaan tanpa iuran." hint={form.base_requires_savings ? "Belanja tanpa iuran tetap dapat bagian Belanja Toko, tanpa SHU dasar." : "Siapa pun yang ikut (iuran/belanja/pembiayaan) dapat SHU dasar."}>
                                     <select className={inputClass} value={form.base_requires_savings ? "1" : "0"} onChange={(e) => setForm({ ...form, base_requires_savings: e.target.value === "1" })}>
@@ -163,6 +140,48 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                         <option value="monthly">Proporsional bulan membayar (÷12)</option>
                                     </select>
                                 </Field>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                                <div className="mb-2 flex flex-wrap items-end gap-3">
+                                    <Field label="SHU Pengurus Koperasi per orang per tahun" error={errors.board_amount} tip="Tambahan SHU untuk pengurus koperasi. Nilai per orang untuk 12 bulan; pengurus yang bertugas kurang dari 12 bulan mendapat sebanding bulan bertugas. Dipotong dari SHU yang dibagi sebelum sisa dibagi. Contoh 2023: Rp 300.000 per 6 bulan = Rp 600.000 per tahun.">
+                                        <MoneyInput className="w-56" value={form.board_amount} onChange={(v) => setForm({ ...form, board_amount: v })} />
+                                    </Field>
+                                    <span className="pb-2 text-sm text-slate-500">Total SHU pengurus koperasi: {rupiah(boardTotal)}</span>
+                                </div>
+                                <div className="space-y-2">
+                                    {(form.board_members || []).map((m, i) => (
+                                        <div key={i} className="flex flex-wrap items-center gap-2">
+                                            <SearchSelect className="min-w-[16rem] flex-1" options={empOptions} value={m.customer_id} onChange={(v) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? { ...x, customer_id: Number(v) } : x)) })} placeholder="Cari pengurus…" />
+                                            <input type="number" min="1" max="12" className={inputBase + " w-20 text-right"} value={m.months} onChange={(e) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? { ...x, months: Number(e.target.value) } : x)) })} title="Bulan bertugas" />
+                                            <span className="text-xs text-slate-500">bulan → {rupiah(Math.round((Number(form.board_amount || 0) * Math.min(12, Number(m.months || 0))) / 12))}</span>
+                                            {editable && <button type="button" onClick={() => setForm({ ...form, board_members: form.board_members.filter((_, j) => j !== i) })} className="text-danger-600"><IconX size={16} /></button>}
+                                        </div>
+                                    ))}
+                                    {editable && <button type="button" onClick={() => setForm({ ...form, board_members: [...(form.board_members || []), { customer_id: "", months: 12 }] })} className="text-sm text-primary-600 hover:underline">+ Tambah pengurus</button>}
+                                </div>
+                            </div>
+                            <div>
+                                <p className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    Porsi sisa SHU<Tip text="Sisa = SHU yang dibagi − SHU dasar − SHU pengurus koperasi − koreksi manual. Sisa ini dibagi ke 4 bagian sesuai persentase; total harus 100%." /> ({rupiah(Math.max(remainder, 0))}) — total{" "}
+                                    <span className={Math.abs(portionTotal - 100) > 0.001 ? "text-danger-600" : "text-success-700"}>{portionTotal}%</span>
+                                    {Math.abs(portionTotal - 100) > 0.001 && <span className="text-danger-600"> (harus 100%)</span>}
+                                    <span className="text-slate-500"> · jasa usaha (belanja + pembiayaan) {businessTotal}%</span>
+                                </p>
+                                <div className="grid gap-4 sm:grid-cols-4">
+                                    <Field label="Iuran Koperasi" error={errors.portion_savings} hint="pokok + wajib + sukarela" tip="Bagian ini dibagi sebanding jumlah iuran (simpanan pokok + wajib + sukarela) tiap anggota dibanding total iuran semua anggota.">
+                                        <PercentInput value={form.portion_savings} onChange={(v) => setForm({ ...form, portion_savings: v })} />
+                                    </Field>
+                                    <Field label="Belanja Toko" error={errors.portion_purchases} hint="total belanja" tip="Bagian ini dibagi sebanding total belanja tiap pegawai di toko koperasi (POS atau impor Excel) dibanding total belanja semua pegawai.">
+                                        <PercentInput value={form.portion_purchases} onChange={(v) => setForm({ ...form, portion_purchases: v })} />
+                                    </Field>
+                                    <Field label="Pembiayaan Dana" error={errors.portion_financing_dana} hint="biaya formulir" tip="Bagian ini dibagi sebanding biaya formulir yang dibayar tiap pegawai untuk pembiayaan dana yang dicairkan di tahun buku ini. Cicilan pokoknya tidak dihitung.">
+                                        <PercentInput value={form.portion_financing_dana} onChange={(v) => setForm({ ...form, portion_financing_dana: v })} />
+                                    </Field>
+                                    <Field label="Pembiayaan Barang" error={errors.portion_financing_barang} hint="bagi hasil + biaya lain" tip="Bagian ini dibagi sebanding bagi hasil (dari cicilan yang dibayar di tahun buku) + biaya lain saat pencairan, per pegawai. Cicilan pokoknya tidak dihitung.">
+                                        <PercentInput value={form.portion_financing_barang} onChange={(v) => setForm({ ...form, portion_financing_barang: v })} />
+                                    </Field>
+                                </div>
+                                {remainder < 0 && <p className="mt-1 text-sm text-danger-600">SHU dasar + SHU pengurus koperasi + koreksi melebihi SHU yang dibagi.</p>}
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field label="Iuran yang dihitung" error={errors.savings_types} tip="Jenis iuran yang dijumlahkan untuk bagian Iuran Koperasi. Normalnya ketiganya dicentang.">
@@ -200,25 +219,6 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     </div>
                                 </Field>
                             </div>
-                            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                                <div className="mb-2 flex flex-wrap items-end gap-3">
-                                    <Field label="Jasa pengurus per orang per tahun" error={errors.board_amount} tip="Tambahan SHU untuk pengurus koperasi. Nilai per orang untuk 12 bulan; pengurus yang bertugas kurang dari 12 bulan mendapat sebanding bulan bertugas. Dipotong dari SHU yang dibagi sebelum sisa dibagi. Contoh 2023: Rp 300.000 per 6 bulan = Rp 600.000 per tahun.">
-                                        <MoneyInput className="w-56" value={form.board_amount} onChange={(v) => setForm({ ...form, board_amount: v })} />
-                                    </Field>
-                                    <span className="pb-2 text-sm text-slate-500">Total jasa pengurus: {rupiah(boardTotal)}</span>
-                                </div>
-                                <div className="space-y-2">
-                                    {(form.board_members || []).map((m, i) => (
-                                        <div key={i} className="flex flex-wrap items-center gap-2">
-                                            <SearchSelect className="min-w-[16rem] flex-1" options={empOptions} value={m.customer_id} onChange={(v) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? { ...x, customer_id: Number(v) } : x)) })} placeholder="Cari pengurus…" />
-                                            <input type="number" min="1" max="12" className={inputBase + " w-20 text-right"} value={m.months} onChange={(e) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? { ...x, months: Number(e.target.value) } : x)) })} title="Bulan bertugas" />
-                                            <span className="text-xs text-slate-500">bulan → {rupiah(Math.round((Number(form.board_amount || 0) * Math.min(12, Number(m.months || 0))) / 12))}</span>
-                                            {editable && <button type="button" onClick={() => setForm({ ...form, board_members: form.board_members.filter((_, j) => j !== i) })} className="text-danger-600"><IconX size={16} /></button>}
-                                        </div>
-                                    ))}
-                                    {editable && <button type="button" onClick={() => setForm({ ...form, board_members: [...(form.board_members || []), { customer_id: "", months: 12 }] })} className="text-sm text-primary-600 hover:underline">+ Tambah pengurus</button>}
-                                </div>
-                            </div>
                             {buyersWithoutDues.length > 0 && (
                                 <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm dark:border-warning-900/40 dark:bg-warning-900/10">
                                     <p className="mb-2 font-medium text-warning-800 dark:text-warning-300">
@@ -242,7 +242,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     </div>
                                 </div>
                             )}
-                            <Field label="Dikecualikan dari SHU" error={errors.excluded_customer_ids} tip="Pegawai di daftar ini tidak mendapat SHU sama sekali (mis. akun kantor, pengurus yang sudah mendapat jasa pengurus, atau keputusan rapat).">
+                            <Field label="Dikecualikan dari SHU" error={errors.excluded_customer_ids} tip="Pegawai di daftar ini tidak mendapat SHU sama sekali (mis. akun kantor, pengurus yang sudah mendapat SHU pengurus koperasi, atau keputusan rapat).">
                                 <div className="mb-2 flex flex-wrap gap-2">
                                     {form.excluded_customer_ids.map((id) => (
                                         <span key={id} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">
@@ -378,12 +378,12 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                             <Field label="SHU dasar pengganti" hint="Kosong = ikut aturan. Isi 0 untuk meniadakan SHU dasar." tip="Mengganti SHU dasar orang ini saja, misalnya karena keputusan rapat.">
                                 <MoneyInput value={adjust.base_override} onChange={(v) => setAdjust({ ...adjust, base_override: v })} />
                             </Field>
-                            <Field label="Tambahan / pengurangan" hint="mis. jasa pengurus 300000, atau -50000">
+                            <Field label="Tambahan / pengurangan" hint="mis. SHU pengurus koperasi 300000, atau -50000">
                                 <MoneyInput value={adjust.amount} onChange={(v) => setAdjust({ ...adjust, amount: v })} />
                             </Field>
                         </div>
                         <Field label="Catatan">
-                            <input className={inputClass} value={adjust.note} onChange={(e) => setAdjust({ ...adjust, note: e.target.value })} placeholder="mis. jasa pengurus 2025" />
+                            <input className={inputClass} value={adjust.note} onChange={(e) => setAdjust({ ...adjust, note: e.target.value })} placeholder="mis. SHU pengurus koperasi 2025" />
                         </Field>
                         <div className="flex justify-end gap-2">
                             <button type="button" onClick={() => setAdjust(null)} className={btn.secondary}>Batal</button>
