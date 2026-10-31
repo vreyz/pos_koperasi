@@ -57,7 +57,6 @@ use App\Http\Controllers\SetupController;
 use App\Http\Controllers\TourController;
 use App\Http\Controllers\UserController;
 use App\Models\Setting;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -66,12 +65,8 @@ Route::get('/', function () {
         return redirect()->route('setup.index');
     }
 
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => config('security.auth.public_registration'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    // Koperasi: tidak ada halaman depan publik, langsung ke login (atau dashboard bila sudah masuk).
+    return redirect()->route(auth()->check() ? 'dashboard' : 'login');
 });
 
 // First-install setup wizard (locked out once app_setup_completed = true)

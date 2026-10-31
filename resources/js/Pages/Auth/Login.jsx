@@ -1,19 +1,56 @@
-import { useEffect } from "react";
-import { Head, Link, useForm } from "@inertiajs/react";
+import { useEffect, useState } from "react";
+import { Head, Link, useForm, usePage } from "@inertiajs/react";
 import { useTranslation } from "react-i18next";
 import AuthBotGuardFields from "@/Components/AuthBotGuardFields";
 import {
-    IconShoppingCart,
     IconMail,
     IconLock,
     IconEye,
     IconEyeOff,
     IconLoader2,
+    IconArrowRight,
+    IconPigMoney,
+    IconShoppingBag,
+    IconChartPie,
+    IconMapPin,
 } from "@tabler/icons-react";
-import { useState } from "react";
+
+// Motif kawung (batik) sebagai pola latar, digambar inline agar tidak perlu file gambar.
+const KAWUNG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23d4a843' stroke-width='1.2'%3E%3Cellipse cx='28' cy='14' rx='7' ry='12'/%3E%3Cellipse cx='28' cy='42' rx='7' ry='12'/%3E%3Cellipse cx='14' cy='28' rx='12' ry='7'/%3E%3Cellipse cx='42' cy='28' rx='12' ry='7'/%3E%3Ccircle cx='28' cy='28' r='2'/%3E%3C/g%3E%3C/svg%3E")`;
+
+const PILLAR_ICONS = [IconPigMoney, IconShoppingBag, IconChartPie];
+
+function initials(name) {
+    const words = name
+        .replace(/^koperasi\s+/i, "")
+        .split(/\s+/)
+        .filter(Boolean);
+    return (words[0]?.[0] ?? "K") + (words[1]?.[0] ?? "");
+}
+
+function Emblem({ store, size = "lg" }) {
+    const box = size === "lg" ? "w-16 h-16 text-xl" : "w-11 h-11 text-sm";
+    if (store.logo) {
+        return (
+            <img
+                src={store.logo}
+                alt=""
+                className={`${box} rounded-full object-cover ring-2 ring-[#d4a843] bg-white`}
+            />
+        );
+    }
+    return (
+        <div
+            className={`${box} rounded-full ring-2 ring-[#d4a843] ring-offset-4 ring-offset-[#0b1f3a] bg-[#d4a843] text-[#0b1f3a] font-extrabold tracking-tight flex items-center justify-center uppercase`}
+        >
+            {initials(store.name)}
+        </div>
+    );
+}
 
 export default function Login({ status, canResetPassword, canRegister, botGuard }) {
     const { t } = useTranslation();
+    const store = usePage().props.storeProfile ?? { name: "Koperasi" };
     const honeypotField = botGuard?.honeypot_field || "company_website";
     const tokenField = botGuard?.token_field || "bot_guard_token";
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -24,6 +61,7 @@ export default function Login({ status, canResetPassword, canRegister, botGuard 
         [tokenField]: botGuard?.token || "",
     });
     const [showPassword, setShowPassword] = useState(false);
+    const pillars = t("auth.login.features", { returnObjects: true });
 
     useEffect(() => {
         return () => reset("password");
@@ -34,221 +72,232 @@ export default function Login({ status, canResetPassword, canRegister, botGuard 
         post(route("login"));
     };
 
+    const inputClass = (hasError) =>
+        `w-full h-12 pl-11 pr-4 rounded-lg border bg-slate-50 dark:bg-slate-800/60 text-slate-900 dark:text-white placeholder-slate-400 transition-colors focus:outline-none focus:ring-0 ${
+            hasError
+                ? "border-danger-500"
+                : "border-slate-200 dark:border-slate-700 focus:border-[#0b1f3a] dark:focus:border-[#d4a843] focus:bg-white dark:focus:bg-slate-800"
+        }`;
+
     return (
         <>
             <Head title={t("auth.login.title")} />
 
-            <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950">
-                {/* Left - Form */}
-                <div className="flex-1 flex items-center justify-center p-8">
-                    <div className="w-full max-w-md">
-                        {/* Logo */}
-                        <div className="mb-8">
-                            <Link
-                                href="/"
-                                className="inline-flex items-center gap-3 mb-6"
-                            >
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
-                                    <IconShoppingCart
-                                        size={24}
-                                        className="text-white"
-                                    />
-                                </div>
-                                <span className="text-2xl font-bold text-slate-900 dark:text-white">
-                                    {t("auth.login.appName")}
-                                </span>
-                            </Link>
-                            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-                                {t("auth.login.subtitle")}
-                            </h1>
-                            <p className="mt-2 text-slate-600 dark:text-slate-400">
-                                {t("auth.login.description")}
-                            </p>
+            <div className="relative min-h-screen bg-[#0b1f3a] font-['Plus_Jakarta_Sans',sans-serif] overflow-hidden">
+                <div
+                    className="absolute inset-0 opacity-[0.07] pointer-events-none"
+                    style={{ backgroundImage: KAWUNG }}
+                />
+                <div className="absolute -top-40 -left-40 w-[32rem] h-[32rem] rounded-full bg-[#d4a843]/10 blur-3xl pointer-events-none" />
+
+                <div className="relative min-h-screen grid content-start lg:content-normal lg:grid-cols-[1.1fr_1fr]">
+                    {/* Identitas koperasi */}
+                    <section className="flex flex-col justify-between px-6 pt-10 pb-6 sm:px-12 lg:px-16 lg:py-14 text-white">
+                        <div className="flex items-center gap-4">
+                            <Emblem store={store} size="sm" />
+                            <div className="leading-tight">
+                                <p className="text-[11px] uppercase tracking-[0.25em] text-[#d4a843]">
+                                    {t("auth.login.kicker")}
+                                </p>
+                                <p className="font-bold text-lg">{store.name}</p>
+                            </div>
                         </div>
 
-                        {/* Status Message */}
-                        {status && (
-                            <div className="mb-6 p-4 rounded-xl bg-success-50 dark:bg-success-950/50 text-success-700 dark:text-success-400 text-sm">
-                                {status}
-                            </div>
+                        <div className="hidden lg:block max-w-xl py-12">
+                            <div className="w-12 h-1 bg-[#d4a843] mb-8" />
+                            <h2 className="text-4xl xl:text-5xl font-extrabold leading-[1.1] tracking-tight">
+                                {t("auth.login.heroTitle")}
+                            </h2>
+                            <p className="mt-6 text-lg text-slate-300 leading-relaxed">
+                                {t("auth.login.heroDescription")}
+                            </p>
+                            <ul className="mt-10 grid grid-cols-3 gap-4">
+                                {pillars.map((label, i) => {
+                                    const Icon = PILLAR_ICONS[i % PILLAR_ICONS.length];
+                                    return (
+                                        <li
+                                            key={label}
+                                            className="border-t border-white/15 pt-4"
+                                        >
+                                            <Icon
+                                                size={24}
+                                                stroke={1.6}
+                                                className="text-[#d4a843]"
+                                            />
+                                            <p className="mt-3 text-sm font-semibold text-slate-100">
+                                                {label}
+                                            </p>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </div>
+
+                        {store.address && (
+                            <p className="hidden lg:flex items-start gap-2 text-xs text-slate-400 max-w-md">
+                                <IconMapPin size={16} className="shrink-0 mt-px" />
+                                {store.address}
+                            </p>
                         )}
+                    </section>
 
-                        {/* Form */}
-                        <form onSubmit={submit} className="space-y-5">
-                            <AuthBotGuardFields
-                                botGuard={botGuard}
-                                data={data}
-                                setData={setData}
-                            />
-                            {errors.human && (
-                                <div className="rounded-xl bg-danger-50 px-4 py-3 text-sm text-danger-600 dark:bg-danger-950/40 dark:text-danger-300">
-                                    {errors.human}
-                                </div>
-                            )}
-                            {/* Email */}
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    {t("auth.login.email")}
-                                </label>
-                                <div className="relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                                        <IconMail size={20} />
+                    {/* Form masuk */}
+                    <section className="flex items-start lg:items-center justify-center px-4 pb-10 sm:px-8 lg:py-14">
+                        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl shadow-black/30 overflow-hidden">
+                            <div className="h-1.5 bg-gradient-to-r from-[#d4a843] via-[#f0d68a] to-[#d4a843]" />
+                            <div className="p-7 sm:p-10">
+                                <h1 className="text-2xl font-extrabold text-[#0b1f3a] dark:text-white">
+                                    {t("auth.login.subtitle")}
+                                </h1>
+                                <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                                    {t("auth.login.description")}
+                                </p>
+
+                                {status && (
+                                    <div className="mt-6 p-3 rounded-lg bg-success-50 dark:bg-success-950/50 text-success-700 dark:text-success-400 text-sm">
+                                        {status}
                                     </div>
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        value={data.email}
-                                        onChange={(e) =>
-                                            setData("email", e.target.value)
-                                        }
-                                        placeholder={t("auth.login.emailPlaceholder")}
-                                        className={`w-full h-12 pl-12 pr-4 rounded-xl border-2 ${
-                                            errors.email
-                                                ? "border-danger-500 focus:border-danger-500"
-                                                : "border-slate-200 dark:border-slate-700 focus:border-primary-500"
-                                        } bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-4 focus:ring-primary-500/20 transition-all`}
-                                    />
-                                </div>
-                                {errors.email && (
-                                    <p className="mt-1.5 text-sm text-danger-500">
-                                        {errors.email}
-                                    </p>
                                 )}
-                            </div>
 
-                            {/* Password */}
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    {t("auth.login.password")}
-                                </label>
-                                <div className="relative">
-                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
-                                        <IconLock size={20} />
-                                    </div>
-                                    <input
-                                        type={
-                                            showPassword ? "text" : "password"
-                                        }
-                                        name="password"
-                                        value={data.password}
-                                        onChange={(e) =>
-                                            setData("password", e.target.value)
-                                        }
-                                        placeholder={t("auth.login.passwordPlaceholder")}
-                                        className={`w-full h-12 pl-12 pr-12 rounded-xl border-2 ${
-                                            errors.password
-                                                ? "border-danger-500 focus:border-danger-500"
-                                                : "border-slate-200 dark:border-slate-700 focus:border-primary-500"
-                                        } bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-4 focus:ring-primary-500/20 transition-all`}
+                                <form onSubmit={submit} className="mt-8 space-y-5">
+                                    <AuthBotGuardFields
+                                        botGuard={botGuard}
+                                        data={data}
+                                        setData={setData}
                                     />
+                                    {errors.human && (
+                                        <div className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-600 dark:bg-danger-950/40 dark:text-danger-300">
+                                            {errors.human}
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                                            {t("auth.login.email")}
+                                        </label>
+                                        <div className="relative">
+                                            <IconMail
+                                                size={18}
+                                                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                                            />
+                                            <input
+                                                type="email"
+                                                name="email"
+                                                autoComplete="username"
+                                                value={data.email}
+                                                onChange={(e) =>
+                                                    setData("email", e.target.value)
+                                                }
+                                                placeholder={t("auth.login.emailPlaceholder")}
+                                                className={inputClass(errors.email)}
+                                            />
+                                        </div>
+                                        {errors.email && (
+                                            <p className="mt-1.5 text-sm text-danger-500">
+                                                {errors.email}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                                {t("auth.login.password")}
+                                            </label>
+                                            {canResetPassword && (
+                                                <Link
+                                                    href={route("password.request")}
+                                                    className="text-xs font-semibold text-[#0b1f3a] dark:text-[#d4a843] hover:underline"
+                                                >
+                                                    {t("auth.login.forgotPassword")}
+                                                </Link>
+                                            )}
+                                        </div>
+                                        <div className="relative">
+                                            <IconLock
+                                                size={18}
+                                                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                                            />
+                                            <input
+                                                type={showPassword ? "text" : "password"}
+                                                name="password"
+                                                autoComplete="current-password"
+                                                value={data.password}
+                                                onChange={(e) =>
+                                                    setData("password", e.target.value)
+                                                }
+                                                placeholder={t("auth.login.passwordPlaceholder")}
+                                                className={`${inputClass(errors.password)} pr-12`}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                                            >
+                                                {showPassword ? (
+                                                    <IconEyeOff size={18} />
+                                                ) : (
+                                                    <IconEye size={18} />
+                                                )}
+                                            </button>
+                                        </div>
+                                        {errors.password && (
+                                            <p className="mt-1.5 text-sm text-danger-500">
+                                                {errors.password}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={data.remember}
+                                            onChange={(e) =>
+                                                setData("remember", e.target.checked)
+                                            }
+                                            className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-[#0b1f3a] focus:ring-[#d4a843]"
+                                        />
+                                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                                            {t("auth.login.remember")}
+                                        </span>
+                                    </label>
+
                                     <button
-                                        type="button"
-                                        onClick={() =>
-                                            setShowPassword(!showPassword)
-                                        }
-                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        type="submit"
+                                        disabled={processing}
+                                        className="group w-full h-12 rounded-lg bg-[#0b1f3a] dark:bg-[#d4a843] text-white dark:text-[#0b1f3a] font-bold hover:bg-[#13305a] dark:hover:bg-[#e0b955] focus:outline-none focus:ring-4 focus:ring-[#d4a843]/40 disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
                                     >
-                                        {showPassword ? (
-                                            <IconEyeOff size={20} />
+                                        {processing ? (
+                                            <>
+                                                <IconLoader2 size={20} className="animate-spin" />
+                                                {t("common.labels.processing")}
+                                            </>
                                         ) : (
-                                            <IconEye size={20} />
+                                            <>
+                                                {t("auth.login.submit")}
+                                                <IconArrowRight
+                                                    size={18}
+                                                    className="transition-transform group-hover:translate-x-0.5"
+                                                />
+                                            </>
                                         )}
                                     </button>
-                                </div>
-                                {errors.password && (
-                                    <p className="mt-1.5 text-sm text-danger-500">
-                                        {errors.password}
-                                    </p>
-                                )}
+
+                                    {canRegister && (
+                                        <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+                                            {t("auth.login.noAccount")}{" "}
+                                            <Link
+                                                href="/register"
+                                                className="font-semibold text-[#0b1f3a] dark:text-[#d4a843] hover:underline"
+                                            >
+                                                {t("auth.login.registerLink")}
+                                            </Link>
+                                        </p>
+                                    )}
+                                </form>
                             </div>
-
-                            {/* Remember & Forgot */}
-                            <div className="flex items-center justify-between">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={data.remember}
-                                        onChange={(e) =>
-                                            setData(
-                                                "remember",
-                                                e.target.checked
-                                            )
-                                        }
-                                        className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-primary-500 focus:ring-primary-500"
-                                    />
-                                    <span className="text-sm text-slate-600 dark:text-slate-400">
-                                        {t("auth.login.remember")}
-                                    </span>
-                                </label>
-
-                                {canResetPassword && (
-                                    <Link
-                                        href={route("password.request")}
-                                        className="text-sm text-primary-500 hover:text-primary-600 font-medium"
-                                    >
-                                        {t("auth.login.forgotPassword")}
-                                    </Link>
-                                )}
-                            </div>
-
-                            {/* Submit */}
-                            <button
-                                type="submit"
-                                disabled={processing}
-                                className="w-full h-12 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold hover:from-primary-600 hover:to-primary-700 focus:ring-4 focus:ring-primary-500/30 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                            >
-                                {processing ? (
-                                    <>
-                                        <IconLoader2
-                                            size={20}
-                                            className="animate-spin"
-                                        />
-                                        {t("common.labels.processing")}
-                                    </>
-                                ) : (
-                                    t("auth.login.submit")
-                                )}
-                            </button>
-
-                            {/* Register Link */}
-                            {canRegister && (
-                                <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-                                    {t("auth.login.noAccount")}{" "}
-                                    <Link
-                                        href="/register"
-                                        className="text-primary-500 hover:text-primary-600 font-semibold"
-                                    >
-                                        {t("auth.login.registerLink")}
-                                    </Link>
-                                </p>
-                            )}
-                        </form>
-                    </div>
-                </div>
-
-                {/* Right - Image/Decoration */}
-                <div className="hidden lg:flex flex-1 bg-gradient-to-br from-primary-500 to-primary-700 items-center justify-center p-12">
-                    <div className="max-w-md text-center text-white">
-                        <div className="w-24 h-24 rounded-2xl bg-white/20 flex items-center justify-center mx-auto mb-8">
-                            <IconShoppingCart size={48} />
                         </div>
-                        <h2 className="text-3xl font-bold mb-4">
-                            {t("auth.login.heroTitle")}
-                        </h2>
-                        <p className="text-lg opacity-90">
-                            {t("auth.login.heroDescription")}
-                        </p>
-                        <div className="mt-8 flex flex-wrap justify-center gap-3">
-                            {t("auth.login.features", { returnObjects: true }).map((feature, i) => (
-                                <span
-                                    key={i}
-                                    className="px-4 py-2 bg-white/20 rounded-full text-sm font-medium"
-                                >
-                                    {feature}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
+                    </section>
                 </div>
             </div>
         </>

@@ -194,8 +194,9 @@
     "auth": {
         "login": {
             "title": "Sign In",
-            "subtitle": "Welcome Back",
-            "description": "Sign in to access your dashboard",
+            "subtitle": "Sign in to your account",
+            "description": "For cooperative board members and staff only.",
+            "kicker": "Employee Cooperative",
             "appName": "POS Application",
             "email": "Email",
             "emailPlaceholder": "name@email.com",
@@ -208,9 +209,9 @@
             "noAccount": "Don't have an account?",
             "registerNow": "Register Now",
             "registerLink": "Register Now",
-            "heroTitle": "Manage Your Business with Ease",
-            "heroDescription": "A modern Point of Sale system that helps you manage transactions, inventory, and financial reports efficiently.",
-            "features": ["Fast Transactions", "Real-time Reports", "Multi User"]
+            "heroTitle": "Member savings, purchases, and SHU in one ledger.",
+            "heroDescription": "Every deposit and every checkout is recorded under the member's name, so the year-end SHU is ready to calculate.",
+            "features": ["Member savings", "Cashier & stock", "SHU calculation"]
         },
         "register": {
             "title": "Register",

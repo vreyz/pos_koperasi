@@ -46,13 +46,11 @@ class SetupWizardTest extends TestCase
         $this->get('/')->assertRedirect(route('setup.index'));
     }
 
-    public function test_root_renders_welcome_after_install(): void
+    public function test_root_redirects_to_login_after_install(): void
     {
         Setting::set('app_setup_completed', true);
 
-        $this->get('/')
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page->component('Welcome'));
+        $this->get('/')->assertRedirect(route('login'));
     }
 
     public function test_setup_page_is_accessible_before_install(): void
