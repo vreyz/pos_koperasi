@@ -50,6 +50,25 @@ class SpreadsheetReader
     }
 
     /**
+     * Semua sheet yang lolos $accept (mis. "Master" dan "Master (backup)").
+     *
+     * @return array<string, array<int, array<int, mixed>>> nama sheet => baris
+     */
+    public function readAll(string $path, callable $accept): array
+    {
+        $reader = IOFactory::createReaderForFile($path);
+        $sheets = [];
+        foreach (method_exists($reader, 'listWorksheetNames') ? $reader->listWorksheetNames($path) : [null] as $name) {
+            $rows = $this->readSheet($path, $name);
+            if ($accept($rows)) {
+                $sheets[(string) $name] = $rows;
+            }
+        }
+
+        return $sheets;
+    }
+
+    /**
      * @return array<int, array<int, mixed>>
      */
     private function readSheet(string $path, ?string $sheet): array
@@ -58,30 +77,33 @@ class SpreadsheetReader
         if ($sheet !== null && method_exists($reader, 'setLoadSheetsOnly')) {
             $reader->setLoadSheetsOnly([$sheet]);
         }
+        // Sel kosong berformat tidak dimuat (tanpa ini sheet besar bisa makan belasan menit).
+        $reader->setReadEmptyCells(false);
         $spreadsheet = $reader->load($path);
         $worksheet = $spreadsheet->getActiveSheet();
 
+        // Hanya sel yang benar-benar ada: sheet berformat sampai jutaan baris kosong tetap cepat.
         $rows = [];
-        foreach ($worksheet->getRowIterator() as $row) {
-            $values = [];
-            $cells = $row->getCellIterator();
-            $cells->setIterateOnlyExistingCells(true);
-            foreach ($cells as $cell) {
-                $value = $cell->getDataType() === DataType::TYPE_FORMULA
-                    ? $cell->getOldCalculatedValue()
-                    : $cell->getValue();
-                if ($value instanceof RichText) {
-                    $value = $value->getPlainText();
-                }
-                if (is_numeric($value) && ExcelDate::isDateTime($cell)) {
-                    $value = ExcelDate::excelToDateTimeObject((float) $value);
-                }
-                $values[Coordinate::columnIndexFromString($cell->getColumn()) - 1] = $value;
+        foreach ($worksheet->getCoordinates(false) as $coordinate) {
+            $cell = $worksheet->getCell($coordinate);
+            $isFormula = $cell->getDataType() === DataType::TYPE_FORMULA;
+            $value = $isFormula ? $cell->getOldCalculatedValue() : $cell->getValue();
+            if ($value === null || $value === '') {
+                continue;
             }
-            if ($values !== []) {
-                $max = max(array_keys($values));
-                $rows[$row->getRowIndex()] = array_replace(array_fill(0, $max + 1, null), $values);
+            if ($value instanceof RichText) {
+                $value = $value->getPlainText();
             }
+            // Cek format tanggal hanya untuk sel biasa: pada sel rumus isDateTime menghitung ulang rumusnya (sangat lambat).
+            if (! $isFormula && is_numeric($value) && ExcelDate::isDateTime($cell)) {
+                $value = ExcelDate::excelToDateTimeObject((float) $value);
+            }
+            [$column, $row] = Coordinate::coordinateFromString($coordinate);
+            $rows[(int) $row][Coordinate::columnIndexFromString($column) - 1] = $value;
+        }
+        ksort($rows);
+        foreach ($rows as $index => $values) {
+            $rows[$index] = array_replace(array_fill(0, max(array_keys($values)) + 1, null), $values);
         }
 
         $spreadsheet->disconnectWorksheets();

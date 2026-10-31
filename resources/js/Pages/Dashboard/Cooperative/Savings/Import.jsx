@@ -3,12 +3,14 @@ import { Head, Link, router, useForm } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { IconArrowLeft, IconDownload, IconFileSpreadsheet, IconUpload } from "@tabler/icons-react";
 import { Badge, PageHeader, Panel, Stat, btn, inputBase, inputClass, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
+import { MoneyInput, PercentInput, SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
 
 export default function Import({ preview, employees }) {
     useFlashToasts();
     const upload = useForm({ file: null });
     const [onlyUnmatched, setOnlyUnmatched] = useState(true);
     const [saving, setSaving] = useState(false);
+    const empOptions = useMemo(() => employeeOptions(employees), [employees]);
     const [mapping, setMapping] = useState(() =>
         Object.fromEntries((preview?.names || []).map((n) => [n.key, n.customer_id ? String(n.customer_id) : ""]))
     );
@@ -108,11 +110,7 @@ export default function Import({ preview, employees }) {
                                             ))}
                                         </td>
                                         <td className={td}>
-                                            <select className={inputBase + " w-72"} value={mapping[n.key] || ""} onChange={(e) => setMapping({ ...mapping, [n.key]: e.target.value })}>
-                                                <option value="">— lewati —</option>
-                                                <option value="new">+ Buat pegawai baru dengan nama ini</option>
-                                                {employees.map((e) => <option key={e.id} value={e.id}>{e.name}{e.nip ? ` (${e.nip})` : ""}</option>)}
-                                            </select>
+                                            <SearchSelect className="w-72" options={empOptions} extra={[{ value: "", label: "— lewati —" }, { value: "new", label: "+ Buat pegawai baru dengan nama ini" }]} value={mapping[n.key] || ""} onChange={(v) => setMapping({ ...mapping, [n.key]: String(v) })} />
                                         </td>
                                     </tr>
                                 ))}

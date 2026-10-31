@@ -78,6 +78,11 @@ class Customer extends Model
         return $this->hasMany(CustomerAlias::class);
     }
 
+    public function financings()
+    {
+        return $this->hasMany(Financing::class);
+    }
+
     public function contributions()
     {
         return $this->hasMany(MemberContribution::class);

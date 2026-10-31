@@ -53,10 +53,15 @@ class ShuController extends Controller
             'base_requires_savings' => $previous->base_requires_savings ?? true,
             'base_for_ppnpn' => $previous->base_for_ppnpn ?? true,
             'base_mode' => $previous->base_mode ?? 'full',
+            'board_amount' => $previous->board_amount ?? 0,
+            'board_members' => $previous->board_members ?? [],
             'rounding_unit' => $previous->rounding_unit ?? 1000,
-            'portion_savings' => $previous->portion_savings ?? 70,
-            'portion_purchases' => $previous->portion_purchases ?? 30,
-            'portion_loans' => $previous->portion_loans ?? 0,
+            // Bawaan: simpanan 40%, jasa usaha 60% (belanja 40 + pembiayaan dana 10 + barang 10).
+            'portion_savings' => $previous->portion_savings ?? 40,
+            'portion_purchases' => $previous->portion_purchases ?? 40,
+            'portion_loans' => 0,
+            'portion_financing_dana' => $previous->portion_financing_dana ?? 10,
+            'portion_financing_barang' => $previous->portion_financing_barang ?? 10,
             'savings_types' => $previous->savings_types ?? MemberContribution::SAVINGS_TYPES,
             'savings_period' => $previous->savings_period ?? 'year',
             'sales_source' => $previous->sales_source ?? 'pos',
@@ -75,7 +80,8 @@ class ShuController extends Controller
             ->get();
 
         $unmatched = $shu->sales_source === 'excel'
-            ? ExternalSale::where('year', $shu->year)->whereNull('customer_id')
+            ? ExternalSale::where('year', $shu->year)
+                ->where(fn ($q) => $q->whereNull('customer_id')->orWhereHas('customer', fn ($c) => $c->whereNull('employee_type')))
                 ->selectRaw('buyer_name, SUM(amount) as total, COUNT(*) as days')
                 ->groupBy('buyer_name')->orderByDesc('total')->get()
             : collect();
@@ -92,7 +98,8 @@ class ShuController extends Controller
             'allocations' => $allocations,
             'adjustments' => $shu->adjustments()->with('customer:id,name,nip,employee_type')->get(),
             'rules' => $this->rules($shu),
-            'stats' => $summary + [
+            'buyersWithoutDues' => $this->namesFor($summary['buyers_without_dues']),
+            'stats' => collect($summary)->except('buyers_without_dues')->all() + [
                 'excel_rows' => (clone $excelSales)->count(),
                 'excel_total' => (int) (clone $excelSales)->sum('amount'),
                 'distributed' => (float) $allocations->sum('total'),
@@ -116,9 +123,14 @@ class ShuController extends Controller
             'base_requires_savings' => ['required', 'boolean'],
             'base_for_ppnpn' => ['required', 'boolean'],
             'base_mode' => ['required', Rule::in(['full', 'monthly'])],
+            'board_amount' => ['nullable', 'integer', 'min:0'],
+            'board_members' => ['nullable', 'array'],
+            'board_members.*.customer_id' => ['required', 'integer', 'exists:customers,id'],
+            'board_members.*.months' => ['required', 'integer', 'min:1', 'max:12'],
             'portion_savings' => ['required', 'numeric', 'min:0', 'max:100'],
             'portion_purchases' => ['required', 'numeric', 'min:0', 'max:100'],
-            'portion_loans' => ['required', 'numeric', 'min:0', 'max:100'],
+            'portion_financing_dana' => ['required', 'numeric', 'min:0', 'max:100'],
+            'portion_financing_barang' => ['required', 'numeric', 'min:0', 'max:100'],
             'savings_types' => ['required', 'array', 'min:1'],
             'savings_types.*' => [Rule::in(MemberContribution::SAVINGS_TYPES)],
             'savings_period' => ['required', Rule::in(['year', 'all_time'])],
@@ -129,9 +141,12 @@ class ShuController extends Controller
             'excluded_customer_ids.*' => ['integer', 'exists:customers,id'],
         ]);
 
-        if (abs($data['portion_savings'] + $data['portion_purchases'] + $data['portion_loans'] - 100) > 0.001) {
-            return back()->withErrors(['portion_savings' => 'Total porsi simpanan + pembelian + pinjaman harus 100%.']);
+        if (abs($data['portion_savings'] + $data['portion_purchases'] + $data['portion_financing_dana'] + $data['portion_financing_barang'] - 100) > 0.001) {
+            return back()->withErrors(['portion_savings' => 'Total porsi simpanan + belanja + pembiayaan dana + pembiayaan barang harus 100%.']);
         }
+        $data['portion_loans'] = 0;
+        $data['board_amount'] = (int) ($data['board_amount'] ?? 0);
+        $data['board_members'] = array_values($data['board_members'] ?? []);
 
         $data['excluded_customer_ids'] = array_values(array_unique(array_map('intval', $data['excluded_customer_ids'] ?? [])));
         $shu->update($data);
@@ -204,6 +219,7 @@ class ShuController extends Controller
 
     public function importSales(Request $request, ShuPeriod $shu)
     {
+        set_time_limit(600); // file Excel besar (mis. rekap potongan 2020–2026)
         $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:20480']]);
 
         try {
@@ -237,13 +253,17 @@ class ShuController extends Controller
             round($a->savings_share * 100, 4),
             $a->purchase_amount,
             round($a->purchase_share * 100, 4),
-            $a->loan_amount,
-            round($a->loan_share * 100, 4),
+            $a->financing_dana_amount,
+            round($a->financing_dana_share * 100, 4),
+            $a->financing_barang_amount,
+            round($a->financing_barang_share * 100, 4),
             $a->months_paid,
             $a->base_amount,
+            $a->board_amount,
             round($a->shu_savings),
             round($a->shu_purchases),
-            round($a->shu_loans),
+            round($a->shu_financing_dana),
+            round($a->shu_financing_barang),
             $a->adjustment_amount,
             $a->adjustment_note,
             round($a->total),
@@ -251,10 +271,21 @@ class ShuController extends Controller
         ])->all();
 
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Status', 'Simpanan', 'Porsi Simpanan (%)', 'Pembelian', 'Porsi Pembelian (%)', 'Angsuran Pinjaman', 'Porsi Pinjaman (%)', 'Bulan Bayar', 'Base SHU', 'SHU Simpanan', 'SHU Pembelian', 'SHU Pinjaman', 'Koreksi', 'Catatan Koreksi', 'Total SHU', 'Total Dibulatkan'],
+            ['NIP', 'Nama', 'Jenis', 'Status', 'Iuran Koperasi', 'Porsi Iuran (%)', 'Belanja Toko', 'Porsi Belanja (%)', 'Pendapatan Pembiayaan Dana', 'Porsi Dana (%)', 'Pendapatan Pembiayaan Barang', 'Porsi Barang (%)', 'Bulan Bayar', 'SHU Dasar', 'Jasa Pengurus', 'SHU Iuran', 'SHU Belanja', 'SHU Pembiayaan Dana', 'SHU Pembiayaan Barang', 'Koreksi', 'Catatan Koreksi', 'Total SHU', 'Total Dibulatkan'],
             $rows,
             ['A' => '@'],
         ), "shu-{$shu->year}.xlsx");
+    }
+
+    /**
+     * @param  array<int, array{customer_id: int, amount: int}>  $rows
+     */
+    private function namesFor(array $rows): array
+    {
+        $people = Customer::whereIn('id', array_column($rows, 'customer_id'))->get(['id', 'name', 'nip', 'employee_type', 'employment_status'])->keyBy('id');
+
+        return collect($rows)->map(fn ($r) => $r + ['name' => $people[$r['customer_id']]->name ?? '-', 'nip' => $people[$r['customer_id']]->nip ?? null, 'employee_type' => $people[$r['customer_id']]->employee_type ?? null])
+            ->sortByDesc('amount')->values()->all();
     }
 
     /**
@@ -277,19 +308,23 @@ class ShuController extends Controller
         $y = $period->year;
         $adjustments = $period->adjustments()->count();
 
+        $boardCount = count($period->board_members ?? []);
+
         return array_values(array_filter([
             "SHU ini untuk tahun buku {$y} dan dibagikan pada tahun ".($y + 1).'.',
             "Yang ikut hanya pegawai yang aktif di tahun {$y} (masa aktif di Data Pegawai mencakup {$y}). Non-pegawai tidak mendapat SHU walaupun berbelanja.",
-            "Penerima harus punya simpanan/iuran, pembelian, atau angsuran pinjaman di tahun {$y}. Pegawai mutasi/pensiun di tahun {$y} tetap berhak.",
-            'Base SHU '.$rupiah($period->base_per_person).($period->base_mode === 'monthly' ? ' × (jumlah bulan membayar ÷ 12)' : ' per orang')
-                .($period->base_requires_savings ? " untuk pegawai yang membayar simpanan di tahun {$y}." : ' untuk semua pegawai aktif yang ikut (simpanan, pembelian, atau pinjaman).')
-                .($period->base_for_ppnpn ? ' PPNPN juga mendapat base.' : ' PPNPN tidak mendapat base.'),
-            $period->base_requires_savings ? 'Pegawai yang berbelanja tetapi tidak membayar iuran tetap mendapat jasa pembelian, tanpa base SHU.' : null,
-            $adjustments > 0 ? "{$adjustments} koreksi manual (base pengganti / tambahan nominal) diterapkan dan dipotong dari SHU lebih dulu." : null,
-            'Sisa SHU dibagi: '.$period->portion_savings.'% jasa simpanan, '.$period->portion_purchases.'% jasa pembelian'.($period->portion_loans > 0 ? ', '.$period->portion_loans.'% jasa pinjaman' : '').'.',
-            "Jasa simpanan dihitung dari {$types} ".($period->savings_period === 'all_time' ? "yang terkumpul sejak awal s.d. {$y}" : "yang dibayar selama tahun {$y}").', proporsional terhadap total semua anggota.',
-            'Jasa pembelian dihitung dari total belanja '.($period->sales_source === 'excel' ? 'yang diimport dari Excel' : 'di POS (dikurangi retur)')." selama tahun {$y}, proporsional terhadap total belanja semua pegawai aktif.",
-            $period->portion_loans > 0 ? "Jasa pinjaman dihitung dari angsuran pinjaman yang dibayar selama tahun {$y}." : null,
+            "Penerima harus punya Iuran Koperasi, Belanja Toko, atau Pembiayaan Dana/Barang di tahun {$y}. Pegawai mutasi/pensiun di tahun {$y} tetap berhak.",
+            'SHU dasar '.$rupiah($period->base_per_person).($period->base_mode === 'monthly' ? ' × (jumlah bulan membayar iuran ÷ 12)' : ' per orang')
+                .($period->base_requires_savings ? " untuk anggota yang membayar Iuran Koperasi (pokok/wajib/sukarela) di tahun {$y}." : ' untuk semua pegawai aktif yang ikut (iuran, belanja, atau pembiayaan).')
+                .($period->base_for_ppnpn ? ' PPNPN juga mendapat SHU dasar.' : ' PPNPN tidak mendapat SHU dasar.'),
+            $period->base_requires_savings ? 'Pegawai yang berbelanja tetapi tidak membayar iuran tetap mendapat bagian Belanja Toko, tanpa SHU dasar.' : null,
+            $boardCount > 0 && $period->board_amount > 0 ? "Jasa pengurus {$rupiah($period->board_amount)} per orang per tahun (sebanding bulan bertugas) untuk {$boardCount} pengurus, dipotong dari SHU lebih dulu." : null,
+            $adjustments > 0 ? "{$adjustments} koreksi manual (SHU dasar pengganti / tambahan nominal) diterapkan dan dipotong dari SHU lebih dulu." : null,
+            'Sisa SHU (setelah SHU dasar, jasa pengurus, dan koreksi) dibagi: '.$period->portion_savings.'% Iuran Koperasi, '.$period->portion_purchases.'% Belanja Toko, '.$period->portion_financing_dana.'% Pembiayaan Dana, '.$period->portion_financing_barang.'% Pembiayaan Barang (total 100%).',
+            "Bagian Iuran Koperasi dibagi sebanding jumlah {$types} ".($period->savings_period === 'all_time' ? "yang terkumpul sejak awal s.d. {$y}" : "yang dibayar selama tahun {$y}").' dibanding total semua anggota.',
+            'Bagian Belanja Toko dibagi sebanding total belanja '.($period->sales_source === 'excel' ? '(impor Excel)' : 'di POS (dikurangi retur)')." selama tahun {$y} dibanding total belanja semua pegawai aktif.",
+            "Bagian Pembiayaan Dana dibagi sebanding biaya formulir dari pembiayaan yang dicairkan di tahun {$y}.",
+            "Bagian Pembiayaan Barang dibagi sebanding bagi hasil (dari cicilan yang dibayar di tahun {$y}) + biaya lain (pencairan di tahun {$y}). Cicilan/angsuran pokoknya tidak dihitung.",
             count($period->excluded_customer_ids ?? []) > 0 ? count($period->excluded_customer_ids).' nama dikecualikan dan tidak mendapat SHU.' : null,
             "Nilai SHU per orang {$roundingText}.",
         ]));

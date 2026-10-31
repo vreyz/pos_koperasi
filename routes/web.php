@@ -14,10 +14,12 @@ use App\Http\Controllers\Apps\DineAreaController;
 use App\Http\Controllers\Apps\DineTableController;
 use App\Http\Controllers\Apps\DiscountApprovalController;
 use App\Http\Controllers\Apps\EmployeeController;
+use App\Http\Controllers\Apps\FinancingController;
 use App\Http\Controllers\Apps\GoodsReceivingController;
 use App\Http\Controllers\Apps\ImportExportController;
 use App\Http\Controllers\Apps\MemberContributionController;
 use App\Http\Controllers\Apps\MemberController;
+use App\Http\Controllers\Apps\MenuSettingController;
 use App\Http\Controllers\Apps\NameLinkController;
 use App\Http\Controllers\Apps\OutletController;
 use App\Http\Controllers\Apps\PayableController;
@@ -209,6 +211,29 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::post('savings/generate', [MemberContributionController::class, 'generate'])->middleware('permission:savings-create')->name('savings.generate');
     Route::delete('savings/{contribution}', [MemberContributionController::class, 'destroy'])->middleware('permission:savings-delete')->name('savings.destroy');
 
+    // Pembiayaan Dana & Barang
+    Route::get('financing-reconcile', [FinancingController::class, 'reconcile'])->middleware('permission:financing-access')->name('financing.reconcile');
+    Route::post('financing-reconcile/mark', [FinancingController::class, 'markFromPayroll'])->middleware('permission:financing-disburse')->name('financing.reconcile.mark');
+    Route::get('financing-import', [FinancingController::class, 'import'])->middleware('permission:financing-import')->name('financing.import');
+    Route::post('financing-import/preview', [FinancingController::class, 'previewImport'])->middleware('permission:financing-import')->name('financing.import.preview');
+    Route::post('financing-import/commit', [FinancingController::class, 'commitImport'])->middleware('permission:financing-import')->name('financing.import.commit');
+    Route::put('financing-settings', [FinancingController::class, 'updateSettings'])->middleware('permission:financing-approve')->name('financing.settings');
+    Route::post('financing-installments/{installment}/toggle', [FinancingController::class, 'toggleInstallment'])->middleware('permission:financing-disburse')->name('financing.installments.toggle');
+    Route::get('financing/item/{financing}', [FinancingController::class, 'show'])->middleware('permission:financing-access')->name('financing.show');
+    Route::get('financing/item/{financing}/edit', [FinancingController::class, 'edit'])->middleware('permission:financing-create')->name('financing.edit');
+    Route::put('financing/item/{financing}', [FinancingController::class, 'update'])->middleware('permission:financing-create')->name('financing.update');
+    Route::delete('financing/item/{financing}', [FinancingController::class, 'destroy'])->middleware('permission:financing-create')->name('financing.destroy');
+    Route::post('financing/item/{financing}/step/{step}', [FinancingController::class, 'advance'])->middleware('permission:financing-access')->name('financing.advance');
+    Route::post('financing/item/{financing}/reject', [FinancingController::class, 'reject'])->middleware('permission:financing-access')->name('financing.reject');
+    Route::post('financing/item/{financing}/disburse', [FinancingController::class, 'disburse'])->middleware('permission:financing-disburse')->name('financing.disburse');
+    Route::post('financing/item/{financing}/payoff', [FinancingController::class, 'payOff'])->middleware('permission:financing-disburse')->name('financing.payoff');
+    Route::post('financing/item/{financing}/bad-debt', [FinancingController::class, 'toggleBadDebt'])->middleware('permission:financing-approve')->name('financing.bad-debt');
+    Route::get('financing/item/{financing}/print/{doc}', [FinancingController::class, 'print'])->middleware('permission:financing-access')->name('financing.print');
+    Route::get('financing/{type}/blank-form', [FinancingController::class, 'blankForm'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.blank-form');
+    Route::get('financing/{type}', [FinancingController::class, 'index'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.index');
+    Route::get('financing/{type}/create', [FinancingController::class, 'create'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.create');
+    Route::post('financing/{type}', [FinancingController::class, 'store'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.store');
+
     Route::get('shu', [ShuController::class, 'index'])->middleware('permission:shu-access')->name('shu.index');
     Route::post('shu', [ShuController::class, 'store'])->middleware('permission:shu-manage')->name('shu.store');
     Route::get('shu/{shu}', [ShuController::class, 'show'])->middleware('permission:shu-access')->name('shu.show');
@@ -369,6 +394,8 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     // settings target penjualan
     Route::get('/settings/target', [SettingController::class, 'target'])->middleware('permission:dashboard-access')->name('settings.target');
     Route::post('/settings/target', [SettingController::class, 'updateTarget'])->middleware('permission:dashboard-access')->name('settings.target.update');
+    Route::get('/settings/menus', [MenuSettingController::class, 'edit'])->middleware('permission:menu-settings')->name('settings.menus');
+    Route::put('/settings/menus', [MenuSettingController::class, 'update'])->middleware('permission:menu-settings')->name('settings.menus.update');
     Route::get('/settings/store', [SettingController::class, 'storeProfile'])->middleware('permission:dashboard-access')->name('settings.store');
     Route::post('/settings/store', [SettingController::class, 'updateStoreProfile'])->middleware('permission:dashboard-access')->name('settings.store.update');
     Route::get('/settings/printer', [SettingController::class, 'printer'])->middleware('permission:dashboard-access')->name('settings.printer');

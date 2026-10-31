@@ -80,12 +80,14 @@ class ExternalSalesImportService
         });
 
         $sales = ExternalSale::where('year', $year);
+        $unmatched = (int) (clone $sales)->where(fn ($q) => $q->whereNull('customer_id')->orWhereHas('customer', fn ($c) => $c->whereNull('employee_type')))->distinct('buyer_name')->count('buyer_name');
+        app(MemberSync::class)->syncBuyers();
 
         return [
             'rows' => $rowCount,
             'total' => (int) (clone $sales)->sum('amount'),
             'matched' => (int) (clone $sales)->whereNotNull('customer_id')->distinct('customer_id')->count('customer_id'),
-            'unmatched_names' => (int) (clone $sales)->whereNull('customer_id')->distinct('buyer_name')->count('buyer_name'),
+            'unmatched_names' => $unmatched,
         ];
     }
 

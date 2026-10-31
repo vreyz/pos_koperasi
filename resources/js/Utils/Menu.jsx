@@ -45,13 +45,25 @@ IconRulerMeasure,
     IconPigMoney,
     IconCoins,
     IconLink,
+    IconCash,
+    IconShoppingBag,
+    IconLayoutSidebar,
 } from "@tabler/icons-react";
 import hasAnyPermission from "./Permission";
 import React from "react";
 
-export default function Menu() {
+export const menuPath = (href) => {
+    try {
+        return new URL(href, window.location.origin).pathname;
+    } catch {
+        return href;
+    }
+};
+
+export default function Menu({ includeHidden = false } = {}) {
     const { t } = useTranslation();
-    const { url } = usePage();
+    const { url, props } = usePage();
+    const hidden = includeHidden ? [] : props.hiddenMenus || [];
 
     // define menu navigations
     const menuNavigation = [
@@ -123,6 +135,20 @@ export default function Menu() {
                     active: url.startsWith("/dashboard/savings"),
                     icon: <IconPigMoney size={20} strokeWidth={1.5} />,
                     permissions: hasAnyPermission(["savings-access"]),
+                },
+                {
+                    title: t("sidebar.items.financingDana"),
+                    href: route("financing.index", "dana"),
+                    active: url.startsWith("/dashboard/financing/dana") || url.startsWith("/dashboard/financing-"),
+                    icon: <IconCash size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["financing-access"]),
+                },
+                {
+                    title: t("sidebar.items.financingBarang"),
+                    href: route("financing.index", "barang"),
+                    active: url.startsWith("/dashboard/financing/barang"),
+                    icon: <IconShoppingBag size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["financing-access"]),
                 },
                 {
                     title: t("sidebar.items.shu"),
@@ -406,6 +432,13 @@ export default function Menu() {
             title: t("sidebar.sections.settings"),
             details: [
                 {
+                    title: t("sidebar.items.menuSettings"),
+                    href: route("settings.menus"),
+                    active: url === "/dashboard/settings/menus",
+                    icon: <IconLayoutSidebar size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["menu-settings"]),
+                },
+                {
                     title: t("sidebar.items.paymentGateway"),
                     href: route("settings.payments.edit"),
                     active: url === "/dashboard/settings/payments",
@@ -479,5 +512,17 @@ export default function Menu() {
         },
     ];
 
-    return menuNavigation;
+    if (hidden.length === 0) {
+        return menuNavigation;
+    }
+
+    // Menu yang disembunyikan lewat Pengaturan → Tampilan Menu.
+    return menuNavigation
+        .map((section) => ({
+            ...section,
+            details: section.details
+                .map((d) => (d.subdetails ? { ...d, subdetails: d.subdetails.filter((s) => !hidden.includes(menuPath(s.href))) } : d))
+                .filter((d) => (d.subdetails ? d.subdetails.length > 0 : !hidden.includes(menuPath(d.href)))),
+        }))
+        .filter((section) => section.details.length > 0);
 }

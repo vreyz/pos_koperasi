@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Controllers\Apps\MenuSettingController;
 use App\Models\CashierShift;
 use App\Models\DineOrder;
 use App\Models\Outlet;
@@ -261,6 +262,7 @@ class HandleInertiaRequests extends Middleware
                 'outlets' => $availableOutlets->map(fn (Outlet $outlet) => $outlet->only(['id', 'code', 'name']))->values(),
                 'outletLocked' => (bool) $activeShift,
             ],
+            'hiddenMenus' => fn () => $request->user() ? MenuSettingController::hidden() : [],
             'locale' => [
                 'current' => app()->getLocale(),
                 'available' => ['id', 'en'],

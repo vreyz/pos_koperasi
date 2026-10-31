@@ -8,6 +8,7 @@ use App\Models\CustomerAlias;
 use App\Models\ExternalSale;
 use App\Models\MemberContribution;
 use App\Models\ShuPeriod;
+use App\Services\Cooperative\MemberSync;
 use App\Services\Cooperative\NameMatcher;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -60,8 +61,14 @@ class NameLinkController extends Controller
             'total' => null,
         ]));
 
+        // Pembeli yang terhubung ke customer biasa (bukan pegawai) dianggap belum cocok ke pegawai.
+        $nonEmployees = Customer::whereIn('id', $rows->pluck('customer_id')->filter()->unique())->whereNull('employee_type')->pluck('name', 'id');
         $matcher = null;
-        $rows = $rows->map(function (array $row) use (&$matcher, $shuTotals) {
+        $rows = $rows->map(function (array $row) use (&$matcher, $shuTotals, $nonEmployees) {
+            $row['buyer_customer'] = $row['customer_id'] ? ($nonEmployees[$row['customer_id']] ?? null) : null;
+            if ($row['buyer_customer'] !== null) {
+                $row['customer_id'] = null;
+            }
             if (! $row['customer_id']) {
                 $matcher ??= new NameMatcher;
                 $row['suggestions'] = $matcher->suggestions($row['name']);
@@ -109,10 +116,11 @@ class NameLinkController extends Controller
             'name' => ['required', 'string', 'max:255'],
         ]);
 
+        CustomerAlias::where('alias', NameMatcher::normalize($data['name']))->delete();
         if ($data['source'] === 'sales') {
             ExternalSale::where('buyer_name', $data['name'])->update(['customer_id' => null]);
+            app(MemberSync::class)->syncBuyers(); // kembali jadi pembeli umum
         }
-        CustomerAlias::where('alias', NameMatcher::normalize($data['name']))->delete();
 
         return back()->with('success', "Hubungan \"{$data['name']}\" diputus. Hitung ulang SHU agar hasilnya ikut berubah.");
     }

@@ -67,6 +67,15 @@ class PermissionSeeder extends Seeder
         $create('shu-access');
         $create('shu-manage');
         $create('shu-finalize');
+        // pembiayaan dana & barang: diperiksa (divisi pembiayaan) → direview (kepala unit usaha) → disetujui (ketua) → dicairkan (bendahara)
+        $create('financing-access');
+        $create('financing-create');
+        $create('financing-check');
+        $create('financing-review');
+        $create('financing-approve');
+        $create('financing-disburse');
+        $create('financing-import');
+        $create('menu-settings');
 
         // permission customers
         $create('customers-access');

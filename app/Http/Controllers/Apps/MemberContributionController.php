@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\MemberContribution;
 use App\Services\Cooperative\ContributionImportService;
 use App\Services\Cooperative\ImportFileStore;
+use App\Services\Cooperative\MemberSync;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -133,6 +134,8 @@ class MemberContributionController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        app(MemberSync::class)->syncMembers();
+
         return back()->with('success', 'Data simpanan disimpan.');
     }
 
@@ -185,11 +188,14 @@ class MemberContributionController extends Controller
             MemberContribution::insert($chunk);
         }
 
+        app(MemberSync::class)->syncMembers();
+
         return back()->with('success', count($rows).' potongan '.MemberContribution::TYPE_LABELS[$data['type']].' dibuat.');
     }
 
     public function import(Request $request)
     {
+        set_time_limit(600); // file Excel besar (mis. rekap potongan 2020–2026)
         $token = $request->query('token');
         $path = $this->files->path('savings', $token);
         if ($token && ! $path) {
@@ -223,6 +229,7 @@ class MemberContributionController extends Controller
 
     public function commitImport(Request $request)
     {
+        set_time_limit(600); // file Excel besar (mis. rekap potongan 2020–2026)
         $validated = $request->validate([
             'token' => ['required', 'uuid'],
             'mapping' => ['array'],

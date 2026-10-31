@@ -32,15 +32,29 @@ class ContributionImportService
      */
     public function parse(string $path): array
     {
-        $rows = $this->reader->read($path, ['master', 'simpanan'], function (array $rows) {
-            return $this->headerMap($rows) !== null;
-        })['rows'];
-
-        $map = $this->headerMap($rows);
-        if ($map === null) {
+        $sheets = $this->reader->readAll($path, fn (array $rows) => $this->headerMap($rows) !== null);
+        if ($sheets === []) {
             throw new RuntimeException('Kolom Nama, Tahun, Bulan, dan minimal satu kolom simpanan (Pokok/Wajib/Sukarela) tidak ditemukan.');
         }
 
+        // Beberapa sheet berformat sama (mis. "Master" s.d. 2025 dan "Master (backup)" s.d. 2026): pakai yang datanya paling baru.
+        $best = null;
+        foreach ($sheets as $rows) {
+            $parsed = $this->parseRows($rows, $this->headerMap($rows));
+            $latest = $parsed === [] ? 0 : max(array_map(fn ($r) => $r['year'] * 100 + $r['month'], $parsed));
+            if ($best === null || [$latest, count($parsed)] > [$best[0], count($best[1])]) {
+                $best = [$latest, $parsed];
+            }
+        }
+
+        return $best[1];
+    }
+
+    /**
+     * @return array<int, array{nip: ?string, name: string, year: int, month: int, amounts: array<string, int>}>
+     */
+    private function parseRows(array $rows, array $map): array
+    {
         $parsed = [];
         foreach ($rows as $row) {
             $name = trim((string) ($row[$map['name']] ?? ''));
@@ -184,6 +198,7 @@ class ContributionImportService
             }
             $summary['saved'] = count($insert);
         });
+        app(MemberSync::class)->syncMembers();
 
         return $summary;
     }

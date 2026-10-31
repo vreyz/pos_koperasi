@@ -61,6 +61,7 @@ class RoleSeeder extends Seeder
         $this->createRoleWithPermissions('employees-access', '%employees%');
         $this->createRoleWithPermissions('savings-access', '%savings%');
         $this->createRoleWithPermissions('shu-access', '%shu-%');
+        $this->createRoleWithPermissions('financing-access', '%financing-%');
 
         $this->createRoleWithPermissions('dine-tables-access', '%dine-tables%');
         $this->createRoleWithPermissions('dine-orders-access', '%dine-orders%');
