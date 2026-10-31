@@ -79,6 +79,32 @@ class ContributionImportTest extends TestCase
         $this->assertSame(1950000, (int) $budi->contributions()->sum('amount'));
     }
 
+    public function test_history_tab_is_one_row_per_name_and_type_with_month_columns(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('savings-access');
+        $a = Customer::create(['name' => 'A', 'employee_type' => 'PNS', 'employment_status' => 'AKTIF', 'no_telp' => 0, 'address' => '']);
+        foreach ([[1, 100000], [2, 100000], [2, 50000]] as [$month, $amount]) {
+            MemberContribution::create(['customer_id' => $a->id, 'type' => 'wajib', 'period_year' => 2025, 'period_month' => $month, 'amount' => $amount]);
+        }
+        MemberContribution::create(['customer_id' => $a->id, 'type' => 'sukarela', 'period_year' => 2025, 'period_month' => 3, 'amount' => 20000]);
+
+        $this->actingAs($user)->get(route('savings.index', ['year' => 2025, 'tab' => 'history']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('history', 2)
+                ->where('history.0.key', $a->id.'|wajib')
+                ->where('history.0.months.1', 100000)
+                ->where('history.0.months.2', 150000)
+                ->where('history.0.total', 250000)
+                ->has('history.0.entries.2', 2)
+                ->where('history.1.months.3', 20000));
+
+        $this->actingAs($user)->get(route('savings.index', ['year' => 2025]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('recap', 1)->where('recap.0.wajib_total', 250000));
+    }
+
     public function test_manual_withdrawal_cannot_exceed_balance_and_generate_skips_existing(): void
     {
         $user = User::factory()->create();

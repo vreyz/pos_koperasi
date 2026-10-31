@@ -31,21 +31,22 @@ export default function Sidebar({ sidebarOpen }) {
             {/* Logo */}
             <div className="flex items-center justify-center h-16 border-b border-slate-100 dark:border-slate-800">
                 {sidebarOpen ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full min-w-0 items-center gap-2 px-4">
                         {storeLogo ? (
                             <img
                                 src={storeLogo}
                                 alt={storeName}
-                                className="w-10 h-10  object-cover"
+                                className="w-10 h-10 shrink-0 object-cover"
                             />
                         ) : (
-                            <div className="w-10 h-10  bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+                            <div className="w-10 h-10 shrink-0 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
                                 <span className="text-white font-bold text-sm">
                                     {storeInitial}
                                 </span>
                             </div>
                         )}
-                        <span className="text-xl font-bold text-slate-800 dark:text-white truncate">
+                        {/* Nama panjang (mis. "Koperasi Kaban Jawara") turun ke 2 baris, tidak terpotong. */}
+                        <span title={storeName} className={`min-w-0 font-bold leading-tight text-slate-800 dark:text-white line-clamp-2 break-words ${storeName.length > 14 ? "text-base" : "text-xl"}`}>
                             {storeName}
                         </span>
                     </div>
