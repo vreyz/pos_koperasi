@@ -34,6 +34,7 @@ class MemberContribution extends Model
         'period_month',
         'amount',
         'source',
+        'source_name',
         'notes',
         'created_by',
     ];

@@ -148,10 +148,11 @@ class EmployeeController extends Controller
     public function template()
     {
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status', 'Alias'],
+            ['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status', 'Alias', 'Aktif Sejak', 'Aktif Sampai'],
             [
-                ['199001012015031001', 'Contoh Pegawai PNS', 'PNS', 'Penata Muda', 'III.a', 'Pelaksana', 'BAGIAN UMUM', 'AKTIF', 'CONTOH; CONTOH P'],
-                ['', 'Contoh Pegawai Kontrak', 'PPNPN', '', '', 'Pramubakti', 'BAGIAN UMUM', 'AKTIF', 'KONTRAK PPNPN'],
+                ['199001012015031001', 'Contoh Pegawai PNS', 'PNS', 'Penata Muda', 'III.a', 'Pelaksana', 'BAGIAN UMUM', 'AKTIF', 'CONTOH; CONTOH P', '', ''],
+                ['', 'Contoh Pegawai Mutasi', 'PNS', '', '', '', 'BAGIAN UMUM', 'MUTASI', '', '', '31/03/2025'],
+                ['', 'Contoh Pegawai Kontrak', 'PPNPN', '', '', 'Pramubakti', 'BAGIAN UMUM', 'AKTIF', 'KONTRAK PPNPN', '', ''],
             ],
             ['A' => '@'],
         ), 'template-pegawai.xlsx');
@@ -162,9 +163,11 @@ class EmployeeController extends Controller
         $rows = Customer::employees()->with('aliases')->orderBy('name')->get()->map(fn (Customer $c) => [
             $c->nip, $c->name, $c->employee_type, $c->rank, $c->grade, $c->position, $c->work_unit, $c->employment_status,
             $c->aliases->pluck('alias')->implode('; '),
+            $c->active_from?->format('d/m/Y'),
+            $c->active_until?->format('d/m/Y'),
         ])->all();
 
-        return Excel::download(new ArrayExport(['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status', 'Alias'], $rows, ['A' => '@']), 'pegawai.xlsx');
+        return Excel::download(new ArrayExport(['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status', 'Alias', 'Aktif Sejak', 'Aktif Sampai'], $rows, ['A' => '@', 'J' => '@', 'K' => '@']), 'pegawai.xlsx');
     }
 
     private function validated(Request $request, ?Customer $employee = null): array
@@ -180,6 +183,8 @@ class EmployeeController extends Controller
             'position' => ['nullable', 'string', 'max:255'],
             'work_unit' => ['nullable', 'string', 'max:255'],
             'employment_status' => ['nullable', 'string', 'max:30'],
+            'active_from' => ['nullable', 'date'],
+            'active_until' => ['nullable', 'date', 'after_or_equal:active_from'],
             'aliases' => ['nullable', 'string', 'max:2000'],
         ]);
         $data['employment_status'] = isset($data['employment_status']) ? strtoupper(trim($data['employment_status'])) : 'AKTIF';

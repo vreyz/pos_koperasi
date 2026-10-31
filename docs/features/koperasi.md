@@ -50,16 +50,30 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
   petakan nama yang belum cocok → tersimpan sebagai alias.
 - Hitung → hasil per orang → Export Excel → Kunci (final) / buka kunci.
 
-## Aturan SHU
+## Aturan SHU (semua bisa diatur per tahun buku)
 
-1. **Base SHU** untuk setiap pegawai selain PPNPN yang membayar simpanan (pokok/wajib/sukarela) pada tahun Y.
-   Pegawai mutasi/pensiun di tahun Y tetap dapat. Yang berhenti membayar sebelum Y tidak dapat.
-2. Sisa = total SHU − (base × jumlah pembayar), dibagi sesuai porsi.
-3. Jasa simpanan ∝ simpanan anggota yang membayar di Y.
-4. Jasa pembelian ∝ belanja pegawai di Y. POS: `payment_status` `paid`/`unpaid` dikurangi retur `completed`.
-   PPNPN tidak pernah dapat base, tetapi tetap dapat jasa pembelian (dan jasa simpanan bila membayar).
-5. Jasa pinjaman ∝ angsuran pinjaman yang dibayar di Y.
-6. Pengecualian dan customer non-pegawai (UMUM, dll.) tidak mendapat SHU.
+1. **Hanya pegawai aktif di tahun Y** yang ikut: masa aktif (`active_from`–`active_until` di Data Pegawai,
+   kosong = aktif) mencakup tahun Y. Non-pegawai tidak dapat walau belanja. Pengecualian tidak dapat apa pun.
+2. Penerima harus punya simpanan/iuran, pembelian, atau angsuran pinjaman di Y.
+3. **Base SHU** (nominal bisa diganti):
+   - *Siapa*: hanya pembayar simpanan (default) **atau** semua pegawai aktif yang ikut.
+   - *PPNPN dapat base?* default **ya**, bisa dimatikan.
+   - *Besaran*: penuh per orang **atau** proporsional bulan membayar (base × bulan ÷ 12).
+   - Pegawai yang belanja tapi tidak iuran: dapat jasa pembelian, tanpa base (bila base hanya untuk pembayar).
+4. **Koreksi manual per orang** (base pengganti, tambahan/pengurangan nominal, mis. jasa pengurus) disimpan
+   terpisah, tetap berlaku saat dihitung ulang, dan dipotong dari SHU lebih dulu.
+5. Sisa = total − base − koreksi, dibagi ke jasa simpanan / pembelian / pinjaman sesuai porsi (%), proporsional.
+   - Simpanan: jenis (pokok/wajib/sukarela) dan periode (tahun Y / sejak awal) bisa dipilih.
+   - Pembelian: POS (`paid`/`unpaid`, dikurangi retur `completed`) atau import Excel.
+   - Pinjaman: angsuran yang dibayar di Y.
+6. Pembulatan: terdekat / ke atas / ke bawah / tidak, dengan kelipatan Rp 100–10.000.
+
+## Pencocokan Nama (`name-links.*`)
+
+Satu daftar untuk semua nama: nama pembeli di penjualan Excel, nama di file simpanan (`member_contributions.source_name`),
+dan alias. Kolom SHU menampilkan hasil SHU tahun terpilih per pegawai. Menghubungkan/memindahkan nama langsung
+memindahkan baris datanya dan menyimpan alias untuk import berikutnya. Nama penjualan dan alias bisa diputus;
+nama simpanan hanya bisa dipindahkan ke pegawai lain.
 
 ## Permission
 

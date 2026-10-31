@@ -13,18 +13,15 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Perhitungan SHU tahun buku Y (dibagikan di Y+1).
+ * Perhitungan SHU tahun buku Y (dibagikan di Y+1). Semua aturan bisa diatur per periode.
  *
- *  - Base SHU: nominal sama untuk setiap pegawai non-PPNPN yang membayar
- *    simpanan (pokok/wajib/sukarela) di tahun Y. Pegawai mutasi/pensiun di tahun Y
- *    tetap dapat karena masih membayar; yang berhenti sebelum Y tidak.
- *  - Sisa (total SHU - total base) dibagi ke pos jasa simpanan, jasa pembelian,
- *    dan jasa pinjaman sesuai porsi (%).
- *  - Jasa simpanan: proporsional terhadap simpanan anggota yang membayar di Y.
- *  - Jasa pembelian: proporsional terhadap belanja pegawai di Y (termasuk PPNPN
- *    yang tidak membayar simpanan — mereka dapat jasa pembelian tanpa base).
- *  - Jasa pinjaman: proporsional terhadap angsuran pinjaman yang dibayar di Y.
- *  - Nama di daftar pengecualian tidak mendapat bagian apa pun.
+ *  - Hanya pegawai yang aktif di tahun Y (masa aktif mencakup Y) yang ikut. Non-pegawai
+ *    tidak dapat walau belanja. Pengecualian tidak dapat apa pun.
+ *  - Base SHU: untuk pembayar simpanan di Y (atau semua pegawai aktif yang ikut bila
+ *    `base_requires_savings` dimatikan). PPNPN ikut bila `base_for_ppnpn`. Mode `monthly`
+ *    memberi base × (bulan membayar / 12).
+ *  - Koreksi manual per orang (base pengganti, tambahan nominal) dipotong dari SHU dulu.
+ *  - Sisa dibagi ke jasa simpanan / pembelian / pinjaman sesuai porsi, proporsional.
  */
 class ShuCalculator
 {
@@ -43,19 +40,14 @@ class ShuCalculator
             throw new RuntimeException('Total porsi simpanan + pembelian + pinjaman harus 100%.');
         }
 
-        $year = $period->year;
-        $excluded = array_map('intval', $period->excluded_customer_ids ?? []);
-        $savingsTypes = array_values(array_intersect($period->savings_types ?: MemberContribution::SAVINGS_TYPES, MemberContribution::SAVINGS_TYPES));
+        $data = $this->collect($period);
+        $adjustments = $period->adjustments()->get()->keyBy('customer_id');
+        $bases = $this->bases($period, $data, $adjustments);
+        $adjustmentTotal = (int) $adjustments->sum('amount');
 
-        $payers = $this->payersInYear($year, $excluded);
-        $savings = $this->savingsBasis($year, $savingsTypes, $period->savings_period, $this->contributionTotals($year, MemberContribution::SAVINGS_TYPES, $excluded));
-        $purchases = $this->purchases($period, $excluded);
-        $loans = $this->contributionTotals($year, [MemberContribution::TYPE_ANGSURAN], $excluded);
-
-        $baseTotal = $period->base_per_person * count($payers);
-        $remainder = $period->total_shu - $baseTotal;
+        $remainder = $period->total_shu - array_sum($bases) - $adjustmentTotal;
         if ($remainder < 0) {
-            throw new RuntimeException('Total base SHU ('.number_format($baseTotal, 0, ',', '.').') melebihi SHU yang dibagi.');
+            throw new RuntimeException('Total base SHU ('.$this->rupiah(array_sum($bases)).') + koreksi manual ('.$this->rupiah($adjustmentTotal).') melebihi SHU yang dibagi.');
         }
 
         $pools = [
@@ -63,24 +55,30 @@ class ShuCalculator
             'purchases' => $remainder * $period->portion_purchases / 100,
             'loans' => $remainder * $period->portion_loans / 100,
         ];
-        $sums = ['savings' => array_sum($savings), 'purchases' => array_sum($purchases), 'loans' => array_sum($loans)];
+        $sums = ['savings' => array_sum($data['savings']), 'purchases' => array_sum($data['purchases']), 'loans' => array_sum($data['loans'])];
 
-        $ids = array_unique(array_merge(array_keys($payers), array_keys($savings), array_keys($purchases), array_keys($loans)));
+        $ids = array_unique(array_merge(array_keys($bases), array_keys($data['savings']), array_keys($data['purchases']), array_keys($data['loans']), $adjustments->keys()->all()));
         $now = now();
         $rows = [];
         $distributed = 0.0;
 
         foreach ($ids as $customerId) {
+            $amounts = [
+                'savings' => $data['savings'][$customerId] ?? 0,
+                'purchases' => $data['purchases'][$customerId] ?? 0,
+                'loans' => $data['loans'][$customerId] ?? 0,
+            ];
             $shares = [];
-            $amounts = ['savings' => $savings[$customerId] ?? 0, 'purchases' => $purchases[$customerId] ?? 0, 'loans' => $loans[$customerId] ?? 0];
             foreach ($amounts as $key => $amount) {
                 $shares[$key] = $sums[$key] > 0 ? $amount / $sums[$key] : 0;
             }
-            $base = isset($payers[$customerId]) ? $period->base_per_person : 0;
+            $base = $bases[$customerId] ?? 0;
+            $adjustment = $adjustments->get($customerId);
+            $extra = (int) ($adjustment->amount ?? 0);
             $shuSavings = $shares['savings'] * $pools['savings'];
             $shuPurchases = $shares['purchases'] * $pools['purchases'];
             $shuLoans = $shares['loans'] * $pools['loans'];
-            $total = $base + $shuSavings + $shuPurchases + $shuLoans;
+            $total = $base + $shuSavings + $shuPurchases + $shuLoans + $extra;
             if ($total <= 0) {
                 continue;
             }
@@ -92,6 +90,7 @@ class ShuCalculator
                 'savings_amount' => $amounts['savings'],
                 'purchase_amount' => $amounts['purchases'],
                 'loan_amount' => $amounts['loans'],
+                'months_paid' => $data['months'][$customerId] ?? 0,
                 'savings_share' => $shares['savings'],
                 'purchase_share' => $shares['purchases'],
                 'loan_share' => $shares['loans'],
@@ -99,8 +98,10 @@ class ShuCalculator
                 'shu_savings' => round($shuSavings, 2),
                 'shu_purchases' => round($shuPurchases, 2),
                 'shu_loans' => round($shuLoans, 2),
+                'adjustment_amount' => $extra,
+                'adjustment_note' => $adjustment?->note,
                 'total' => round($total, 2),
-                'total_rounded' => $this->round($total, $period->rounding),
+                'total_rounded' => $this->round($total, $period->rounding, $period->rounding_unit ?: 1000),
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -114,75 +115,126 @@ class ShuCalculator
             $period->update(['calculated_at' => $now]);
         });
 
-        return ['recipients' => count($rows), 'base_recipients' => count($payers), 'distributed' => $distributed];
+        return ['recipients' => count($rows), 'base_recipients' => count(array_filter($bases)), 'distributed' => $distributed];
     }
 
-    public function round(float $value, string $mode): int
+    public function round(float $value, string $mode, int $unit = 1000): int
     {
+        $unit = max(1, $unit);
+
         return match ($mode) {
-            'ceil' => (int) (ceil($value / 1000) * 1000),
-            'floor' => (int) (floor($value / 1000) * 1000),
+            'ceil' => (int) (ceil($value / $unit) * $unit),
+            'floor' => (int) (floor($value / $unit) * $unit),
             'none' => (int) round($value),
-            default => (int) (round($value / 1000) * 1000),
+            default => (int) (round($value / $unit) * $unit),
         };
     }
 
     /**
-     * Orang yang membayar simpanan (pokok/wajib/sukarela) di tahun Y → berhak base SHU.
+     * Ringkasan sebelum dihitung: siapa saja yang ikut dan berapa base-nya.
      *
-     * @return array<int, true>
+     * @return array{active: int, payers: int, base_recipients: int, base_total: int, purchase_total: int, purchase_buyers: int, adjustment_total: int}
      */
-    public function payersInYear(int $year, array $excluded = []): array
+    public function summary(ShuPeriod $period): array
     {
-        return MemberContribution::query()
+        $data = $this->collect($period);
+        $adjustments = $period->adjustments()->get()->keyBy('customer_id');
+        $bases = $this->bases($period, $data, $adjustments);
+
+        return [
+            'active' => count($data['active']),
+            'payers' => count($data['months']),
+            'base_recipients' => count(array_filter($bases)),
+            'base_total' => array_sum($bases),
+            'purchase_total' => array_sum($data['purchases']),
+            'purchase_buyers' => count($data['purchases']),
+            'adjustment_total' => (int) $adjustments->sum('amount'),
+        ];
+    }
+
+    /**
+     * @return array{active: array<int, ?string>, months: array<int, int>, savings: array<int, int>, purchases: array<int, int>, loans: array<int, int>}
+     */
+    private function collect(ShuPeriod $period): array
+    {
+        $year = $period->year;
+        $excluded = array_map('intval', $period->excluded_customer_ids ?? []);
+        $active = Customer::employees()
+            ->activeInYear($year)
+            ->when($excluded !== [], fn ($q) => $q->whereNotIn('id', $excluded))
+            ->pluck('employee_type', 'id')
+            ->all();
+        $ids = array_keys($active);
+        $savingsTypes = array_values(array_intersect($period->savings_types ?: MemberContribution::SAVINGS_TYPES, MemberContribution::SAVINGS_TYPES));
+
+        $months = $ids === [] ? [] : MemberContribution::query()
             ->where('period_year', $year)
             ->whereIn('type', MemberContribution::SAVINGS_TYPES)
             ->where('amount', '>', 0)
-            ->whereHas('customer', fn ($q) => $q->where(fn ($t) => $t->whereNull('employee_type')->orWhere('employee_type', '!=', 'PPNPN')))
-            ->when($excluded !== [], fn ($q) => $q->whereNotIn('customer_id', $excluded))
-            ->distinct()
-            ->pluck('customer_id')
-            ->mapWithKeys(fn ($id) => [(int) $id => true])
+            ->whereIn('customer_id', $ids)
+            ->groupBy('customer_id')
+            ->selectRaw('customer_id, COUNT(DISTINCT period_month) as months')
+            ->pluck('months', 'customer_id')
+            ->map(fn ($v) => (int) $v)
             ->all();
+
+        $savings = ($months === [] || $savingsTypes === []) ? [] : MemberContribution::query()
+            ->whereIn('type', $savingsTypes)
+            ->whereIn('customer_id', array_keys($months))
+            ->when($period->savings_period === 'all_time', fn ($q) => $q->where('period_year', '<=', $year), fn ($q) => $q->where('period_year', $year))
+            ->groupBy('customer_id')
+            ->selectRaw('customer_id, SUM(amount) as total')
+            ->pluck('total', 'customer_id')
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($v) => $v > 0)
+            ->all();
+
+        $loans = $ids === [] ? [] : MemberContribution::query()
+            ->where('period_year', $year)
+            ->where('type', MemberContribution::TYPE_ANGSURAN)
+            ->whereIn('customer_id', $ids)
+            ->groupBy('customer_id')
+            ->selectRaw('customer_id, SUM(amount) as total')
+            ->pluck('total', 'customer_id')
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($v) => $v > 0)
+            ->all();
+
+        $purchases = array_intersect_key($this->purchases($period, $excluded), $active);
+
+        return compact('active', 'months', 'savings', 'purchases', 'loans');
     }
 
     /**
-     * @param  array<int, true>  $payers
-     * @return array<int, int>
+     * @return array<int, int> customer_id => base SHU
      */
-    private function savingsBasis(int $year, array $types, string $periodMode, array $payers): array
+    private function bases(ShuPeriod $period, array $data, $adjustments): array
     {
-        if ($payers === [] || $types === []) {
-            return [];
+        $bases = [];
+        $participants = $period->base_requires_savings
+            ? array_keys($data['months'])
+            : array_unique(array_merge(array_keys($data['months']), array_keys($data['purchases']), array_keys($data['loans'])));
+
+        foreach ($participants as $customerId) {
+            if (! $period->base_for_ppnpn && ($data['active'][$customerId] ?? null) === 'PPNPN') {
+                continue;
+            }
+            $bases[$customerId] = $period->base_mode === 'monthly'
+                ? (int) round($period->base_per_person * min($data['months'][$customerId] ?? 0, 12) / 12)
+                : $period->base_per_person;
+        }
+        foreach ($adjustments as $customerId => $adjustment) {
+            if ($adjustment->base_override !== null) {
+                $bases[$customerId] = (int) $adjustment->base_override;
+            }
         }
 
-        return MemberContribution::query()
-            ->whereIn('type', $types)
-            ->whereIn('customer_id', array_keys($payers))
-            ->when($periodMode === 'all_time', fn ($q) => $q->where('period_year', '<=', $year), fn ($q) => $q->where('period_year', $year))
-            ->groupBy('customer_id')
-            ->selectRaw('customer_id, SUM(amount) as total')
-            ->pluck('total', 'customer_id')
-            ->map(fn ($v) => (int) $v)
-            ->filter(fn ($v) => $v > 0)
-            ->all();
+        return array_filter($bases, fn ($v) => $v > 0);
     }
 
-    /**
-     * @return array<int, int>
-     */
-    private function contributionTotals(int $year, array $types, array $excluded): array
+    private function rupiah(int $value): string
     {
-        return MemberContribution::query()
-            ->where('period_year', $year)
-            ->whereIn('type', $types)
-            ->when($excluded !== [], fn ($q) => $q->whereNotIn('customer_id', $excluded))
-            ->groupBy('customer_id')
-            ->selectRaw('customer_id, SUM(amount) as total')
-            ->pluck('total', 'customer_id')
-            ->map(fn ($v) => (int) $v)
-            ->filter(fn ($v) => $v > 0)
-            ->all();
+        return 'Rp '.number_format($value, 0, ',', '.');
     }
 
     /**

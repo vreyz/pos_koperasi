@@ -15,8 +15,9 @@ HP / laptop ─HTTPS─▶ Worker kabanjawara.anzero.workers.dev ─Workers VPC�
 
 ## 1. Kebutuhan di Windows (sekali)
 
-- [Laragon Full](https://laragon.org/) — sudah berisi PHP, MySQL, Git, Composer, Node. Pastikan PHP **8.3+**
-  dan aktifkan *Menu → Tools → Path → Add Laragon to Path*.
+- [Laragon Full](https://laragon.org/) — sudah berisi PHP, MySQL, Git, Composer, Node. Pasang di **`D:\laragon`**
+  supaya database MySQL tersimpan di drive D (`D:\laragon\data\mysql`). Pastikan PHP **8.3+** dan aktifkan
+  *Menu → Tools → Path → Add Laragon to Path*.
 - Akun Cloudflare (yang sama dengan `atlas.anzero.workers.dev`).
 
 ## 2. Pasang aplikasi (sekali, otomatis)
@@ -24,10 +25,11 @@ HP / laptop ─HTTPS─▶ Worker kabanjawara.anzero.workers.dev ─Workers VPC�
 Nyalakan Laragon (**Start All**), buka **Terminal Laragon**, lalu tempel:
 
 ```bash
-git clone https://github.com/vreyz/pos_koperasi.git C:\laragon\www\pos_koperasi
+git clone https://github.com/vreyz/pos_koperasi.git "D:\OneDrive\09ProjectProgramming\21. POS_Koperasi\pos_koperasi"
 ```
 
-Lalu klik dua kali `C:\laragon\www\pos_koperasi\deploy\windows\install.bat`. Installer akan:
+Aplikasi masuk ke subfolder `pos_koperasi`, jadi file Excel Anda yang sudah ada di folder `21. POS_Koperasi`
+tidak tersentuh. Lalu klik dua kali `...\21. POS_Koperasi\pos_koperasi\deploy\windows\install.bat`. Installer akan:
 
 - mengecek PHP 8.3+, MySQL, Composer, Node, Git;
 - mengisi `.env` (alamat online, zona waktu, bahasa, database `pos_koperasi`);
@@ -38,9 +40,19 @@ Lalu klik dua kali `C:\laragon\www\pos_koperasi\deploy\windows\install.bat`. Ins
 Aman dijalankan ulang: `.env` dan database yang sudah ada tidak dihapus (database lama dibackup dulu).
 Di Laragon aktifkan juga *Preferences → Run Laragon when Windows starts* dan *Start All automatically*.
 
-> Folder di dalam OneDrive (`D:\OneDrive\...`) **tidak disarankan** untuk aplikasi: OneDrive ikut
-> menyinkronkan ribuan file `vendor/` dan `node_modules/` dan bisa mengunci file. Simpan aplikasi di
-> `C:\laragon\www\pos_koperasi`; OneDrive cukup untuk menyimpan salinan folder `backups/`.
+**Letak data:**
+
+| Apa | Di mana |
+|-----|---------|
+| Kode aplikasi | `D:\OneDrive\09ProjectProgramming\21. POS_Koperasi\pos_koperasi` |
+| Database (live) | `D:\laragon\data\mysql` — di drive D, **di luar** OneDrive |
+| Backup database harian | `...\pos_koperasi\backups\` — di dalam OneDrive, otomatis ikut tersimpan ke cloud |
+| Excel asli | `...\pos_koperasi\data-private\` atau tetap di `21. POS_Koperasi` |
+
+> Jangan memindahkan folder data MySQL (`D:\laragon\data`) ke dalam OneDrive: OneDrive menyinkronkan file
+> database yang sedang dipakai dan bisa merusaknya. Cukup backup `.sql` (yang aman) yang ada di OneDrive.
+> Klik kanan folder `pos_koperasi` → **Always keep on this device**, supaya OneDrive tidak mengosongkan file
+> aplikasi ("Free up space").
 
 ## 3. Menjalankan
 

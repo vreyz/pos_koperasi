@@ -149,6 +149,23 @@ class EmployeeImportTest extends TestCase
         $this->assertDatabaseMissing('customers', ['name' => 'Pegawai NIP Salah']);
     }
 
+    public function test_active_period_columns_are_parsed_and_compared(): void
+    {
+        $existing = $this->employee(['name' => 'Budi Santoso', 'nip' => '197003151991031001']);
+        $path = $this->xlsx([
+            ['NIP', 'Nama', 'Status', 'Aktif Sejak', 'Aktif Sampai'],
+            ['197003151991031001', 'Budi Santoso', 'MUTASI', '', '31/03/2025'],
+        ]);
+        $service = app(EmployeeImportService::class);
+        $row = array_values($service->classify($service->parse($path)))[0];
+
+        $this->assertSame('changed', $row['status']);
+        $this->assertSame(['old' => null, 'new' => '2025-03-31'], $row['diff']['active_until']);
+        $service->commit($service->classify($service->parse($path)), []);
+        $this->assertSame('2025-03-31', $existing->fresh()->active_until->format('Y-m-d'));
+        $this->assertSame('same', array_values($service->classify($service->parse($path)))[0]['status']);
+    }
+
     public function test_nip_validation(): void
     {
         $this->assertNull(Nip::problem('197003151991031001'));

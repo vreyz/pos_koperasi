@@ -25,6 +25,8 @@ class Customer extends Model
         'position',
         'work_unit',
         'employment_status',
+        'active_from',
+        'active_until',
         'no_telp',
         'address',
         'is_loyalty_member',
@@ -52,11 +54,23 @@ class Customer extends Model
         'loyalty_transaction_count' => 'integer',
         'loyalty_member_since' => 'datetime',
         'last_purchase_at' => 'datetime',
+        'active_from' => 'date:Y-m-d',
+        'active_until' => 'date:Y-m-d',
     ];
 
     public function scopeEmployees($query)
     {
         return $query->whereNotNull('employee_type');
+    }
+
+    /**
+     * Pegawai yang masa aktifnya mencakup sebagian tahun $year (tanggal kosong = aktif).
+     */
+    public function scopeActiveInYear($query, int $year)
+    {
+        return $query
+            ->where(fn ($q) => $q->whereNull('active_from')->orWhere('active_from', '<=', "{$year}-12-31"))
+            ->where(fn ($q) => $q->whereNull('active_until')->orWhere('active_until', '>=', "{$year}-01-01"));
     }
 
     public function aliases()
