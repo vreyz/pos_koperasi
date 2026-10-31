@@ -1,40 +1,39 @@
 # Menyambungkan aplikasi lokal ke https://kabanjawara.anzero.workers.dev.
-# Butuh 2 kode dari dashboard Cloudflare (lihat docs/deploy-lokal-cloudflare-tunnel.md langkah 4):
-#   1. token tunnel (Zero Trust > Networks > Tunnels > Create a tunnel)
-#   2. Service ID VPC (Workers VPC > VPC Services > Create, host 127.0.0.1, port 8000)
-# Jalankan lewat setup-cloudflare.bat (klik dua kali, izinkan Administrator).
+# Instalasi ini memakai tunnel 'kabanjawara-pos' yang dijalankan oleh ..\.local-pos\start.ps1
+# (token di .local-pos\tunnel.token) dan Worker 'kabanjawara' dari folder ..\cloudflare.
+# Jalankan lewat setup-cloudflare.bat bila token tunnel perlu diganti.
 
 $ErrorActionPreference = "Stop"
-Set-Location (Join-Path $PSScriptRoot "..\..")
+$Dir = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$Root = Split-Path -Parent $Dir
+$Runtime = Join-Path $Root ".local-pos"
+$tokenFile = Join-Path $Runtime "tunnel.token"
 
 function Step($text) { Write-Host "`n== $text ==" -ForegroundColor Cyan }
 
-Step "1/4 Pasang cloudflared"
-if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
-    winget install --id Cloudflare.cloudflared -e --accept-source-agreements --accept-package-agreements
-    $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
-}
-
-Step "2/4 Sambungkan tunnel (berjalan otomatis sebagai Windows Service)"
-$token = Read-Host "Tempel token tunnel (teks panjang setelah 'service install')"
-$token = ($token -replace '^.*service install\s+', '').Trim()
-cloudflared service install $token
-if ($LASTEXITCODE -ne 0) { Write-Host "Bila tunnel sudah pernah dipasang, abaikan pesan di atas." -ForegroundColor Yellow }
-
-Step "3/4 Isi Service ID ke Worker"
-$serviceId = (Read-Host "Tempel Service ID VPC").Trim()
-# Disimpan di file lokal (di-gitignore) agar update.bat tidak bentrok dengan file asli.
-$worker = Join-Path $PWD.Path "deploy\cloudflare-worker"
-$config = (Get-Content (Join-Path $worker "wrangler.jsonc") -Raw) -replace '"service_id":\s*"[^"]*"', "`"service_id`": `"$serviceId`""
-[System.IO.File]::WriteAllText((Join-Path $worker "wrangler.local.jsonc"), $config)
-
-Step "4/4 Login Cloudflare di browser & pasang Worker"
-Set-Location "deploy\cloudflare-worker"
-npx --yes wrangler login
-npx --yes wrangler deploy --config wrangler.local.jsonc
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Deploy Worker gagal. Kirim pesan error di atas ke developer." -ForegroundColor Red
+Step "1/3 Token tunnel"
+if (Test-Path $tokenFile) {
+    Write-Host "Token tunnel sudah ada di $tokenFile."
+    $answer = Read-Host "Ganti token? (y/N)"
 } else {
-    Write-Host "`nSelesai. Buka https://kabanjawara.anzero.workers.dev (aplikasi di PC harus sedang berjalan)." -ForegroundColor Green
+    $answer = "y"
 }
+if ($answer -match '^[yY]') {
+    Write-Host "Ambil token di dashboard Cloudflare: Zero Trust > Networks > Tunnels > kabanjawara-pos > Configure."
+    $token = Read-Host "Tempel token tunnel (teks panjang setelah 'service install')"
+    $token = ($token -replace '^.*service install\s+', '').Trim()
+    [System.IO.File]::WriteAllText($tokenFile, $token)
+    Write-Host "Token disimpan."
+}
+
+Step "2/3 Nyalakan ulang tunnel"
+& (Join-Path $Runtime "stop.ps1")
+& (Join-Path $Runtime "start.ps1") -NoBrowser
+
+Step "3/3 Worker"
+Write-Host "Worker 'kabanjawara' sudah terpasang. Bila perlu dipasang ulang:"
+Write-Host "  cd `"$Root\cloudflare`""
+Write-Host "  npx wrangler login"
+Write-Host "  npx wrangler deploy --config wrangler.json"
+Write-Host "`nCek: buka https://kabanjawara.anzero.workers.dev (PC dan internet harus menyala)." -ForegroundColor Green
 Read-Host "Tekan Enter untuk menutup"

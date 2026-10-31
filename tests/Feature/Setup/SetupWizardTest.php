@@ -46,13 +46,11 @@ class SetupWizardTest extends TestCase
         $this->get('/')->assertRedirect(route('setup.index'));
     }
 
-    public function test_root_renders_welcome_after_install(): void
+    public function test_root_redirects_to_login_after_install(): void
     {
         Setting::set('app_setup_completed', true);
 
-        $this->get('/')
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page->component('Welcome'));
+        $this->get('/')->assertRedirect(route('login'));
     }
 
     public function test_setup_page_is_accessible_before_install(): void
@@ -162,6 +160,17 @@ class SetupWizardTest extends TestCase
 
         $this->post(route('setup.store'), $payload)
             ->assertSessionHasErrors(['branches.1.outlet_code']);
+    }
+
+    public function test_setup_rejects_branch_warehouse_code_equal_to_main_warehouse_code(): void
+    {
+        $payload = $this->validPayload(['warehouse_code' => 'kkj-wh']);
+        $payload['warehouse_code'] = 'KKJ-WH';
+
+        $this->post(route('setup.store'), $payload)
+            ->assertSessionHasErrors(['warehouse_code']);
+
+        $this->assertDatabaseMissing('users', ['email' => $payload['user_email']]);
     }
 
     public function test_setup_requires_unique_email_and_warehouse_code(): void

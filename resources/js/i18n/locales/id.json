@@ -194,8 +194,9 @@
     "auth": {
         "login": {
             "title": "Masuk",
-            "subtitle": "Selamat Datang Kembali",
-            "description": "Masuk untuk mengakses dashboard Anda",
+            "subtitle": "Masuk ke akun Anda",
+            "description": "Khusus pengurus dan petugas koperasi.",
+            "kicker": "Koperasi Pegawai",
             "appName": "Aplikasi Kasir",
             "email": "Email",
             "emailPlaceholder": "nama@email.com",
@@ -208,9 +209,9 @@
             "noAccount": "Belum punya akun?",
             "registerNow": "Daftar Sekarang",
             "registerLink": "Daftar Sekarang",
-            "heroTitle": "Kelola Bisnis Anda dengan Mudah",
-            "heroDescription": "Sistem Point of Sale modern yang membantu Anda mengelola transaksi, inventori, dan laporan keuangan dengan efisien.",
-            "features": ["Transaksi Cepat", "Laporan Real-time", "Multi User"]
+            "heroTitle": "Simpanan, belanja, dan SHU anggota dalam satu buku.",
+            "heroDescription": "Setiap setoran dan setiap belanja di kasir tercatat atas nama anggota, sehingga pembagian SHU akhir tahun tinggal dihitung.",
+            "features": ["Simpanan anggota", "Kasir & stok", "Perhitungan SHU"]
         },
         "register": {
             "title": "Daftar",
