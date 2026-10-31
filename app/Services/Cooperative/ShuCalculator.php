@@ -20,7 +20,7 @@ use RuntimeException;
  *  - Base SHU: untuk pembayar simpanan di Y (atau semua pegawai aktif yang ikut bila
  *    `base_requires_savings` dimatikan). PPNPN ikut bila `base_for_ppnpn`. Mode `monthly`
  *    memberi base × (bulan membayar / 12).
- *  - Jasa pengurus (nominal per tahun × bulan bertugas ÷ 12) dan koreksi manual per orang
+ *  - SHU Pengurus Koperasi (nominal per tahun × bulan bertugas ÷ 12) dan koreksi manual per orang
  *    dipotong dari SHU dulu.
  *  - Sisa dibagi ke jasa simpanan / pembelian / pembiayaan dana / pembiayaan barang sesuai porsi.
  *    Jasa pembiayaan diukur dari pendapatan koperasi (biaya formulir, bagi hasil, biaya lain),
@@ -53,7 +53,7 @@ class ShuCalculator
 
         $remainder = $period->total_shu - array_sum($bases) - array_sum($board) - $adjustmentTotal;
         if ($remainder < 0) {
-            throw new RuntimeException('SHU dasar ('.$this->rupiah(array_sum($bases)).') + jasa pengurus ('.$this->rupiah(array_sum($board)).') + koreksi manual ('.$this->rupiah($adjustmentTotal).') melebihi SHU yang dibagi.');
+            throw new RuntimeException('SHU dasar ('.$this->rupiah(array_sum($bases)).') + SHU pengurus koperasi ('.$this->rupiah(array_sum($board)).') + koreksi manual ('.$this->rupiah($adjustmentTotal).') melebihi SHU yang dibagi.');
         }
 
         $components = ['savings' => 'portion_savings', 'purchases' => 'portion_purchases', 'dana' => 'portion_financing_dana', 'barang' => 'portion_financing_barang'];
@@ -239,7 +239,7 @@ class ShuCalculator
     }
 
     /**
-     * @return array<int, int> customer_id => jasa pengurus
+     * @return array<int, int> customer_id => SHU pengurus koperasi
      */
     public function boardBonuses(ShuPeriod $period): array
     {

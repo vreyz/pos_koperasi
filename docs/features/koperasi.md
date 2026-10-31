@@ -60,7 +60,7 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
    - *PPNPN dapat base?* default **ya**, bisa dimatikan.
    - *Besaran*: penuh per orang **atau** proporsional bulan membayar (base × bulan ÷ 12).
    - Pegawai yang belanja tapi tidak iuran: dapat jasa pembelian, tanpa base (bila base hanya untuk pembayar).
-4. **Koreksi manual per orang** (base pengganti, tambahan/pengurangan nominal, mis. jasa pengurus) disimpan
+4. **Koreksi manual per orang** (base pengganti, tambahan/pengurangan nominal, mis. SHU pengurus koperasi) disimpan
    terpisah, tetap berlaku saat dihitung ulang, dan dipotong dari SHU lebih dulu.
 5. Sisa = total − base − koreksi, dibagi ke **4 komponen** dengan porsi (%) yang bisa diubah dan wajib total 100%
    (bawaan periode baru: simpanan 40%, belanja 40%, pembiayaan dana 10%, pembiayaan barang 10%):
