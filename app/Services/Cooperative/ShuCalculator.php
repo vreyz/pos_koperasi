@@ -246,13 +246,31 @@ class ShuCalculator
         $bonuses = [];
         foreach ($period->board_members ?? [] as $member) {
             $id = (int) ($member['customer_id'] ?? 0);
-            $months = max(0, min(12, (int) ($member['months'] ?? 12)));
+            $months = count(self::boardMonths($member));
             if ($id && $period->board_amount > 0 && $months > 0) {
-                $bonuses[$id] = ($bonuses[$id] ?? 0) + (int) round($period->board_amount * $months / 12);
+                $bonuses[$id] = ($bonuses[$id] ?? 0) + $period->board_amount * $months;
             }
         }
 
         return $bonuses;
+    }
+
+    /**
+     * Bulan bertugas pengurus (1-12). Data lama berupa jumlah bulan dianggap Januari s.d. bulan ke-n.
+     *
+     * @return list<int>
+     */
+    public static function boardMonths(array $member): array
+    {
+        $months = $member['months'] ?? [];
+        if (! is_array($months)) {
+            $months = range(1, max(1, min(12, (int) $months)));
+        }
+
+        $months = array_values(array_unique(array_filter(array_map('intval', $months), fn ($m) => $m >= 1 && $m <= 12)));
+        sort($months);
+
+        return $months;
     }
 
     private function rupiah(int $value): string

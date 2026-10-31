@@ -75,6 +75,8 @@ class PermissionSeeder extends Seeder
         $create('financing-approve');
         $create('financing-disburse');
         $create('financing-import');
+        $create('board-access');
+        $create('board-manage');
         $create('menu-settings');
 
         // permission customers

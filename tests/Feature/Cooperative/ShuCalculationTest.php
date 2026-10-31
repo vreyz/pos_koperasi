@@ -175,14 +175,33 @@ class ShuCalculationTest extends TestCase
         $this->pay($ketua, 'wajib', 2025, [1], 100000);
 
         $period = $this->period(['total_shu' => 1300000, 'base_per_person' => 0, 'portion_savings' => 100, 'portion_purchases' => 0,
-            'board_amount' => 600000, 'board_members' => [['customer_id' => $ketua->id, 'months' => 6]]]);
+            'board_amount' => 50000, 'board_members' => [['customer_id' => $ketua->id, 'months' => [7, 8, 9, 10, 11, 12]]]]);
         app(ShuCalculator::class)->calculate($period);
         $alloc = $period->allocations()->get()->keyBy('customer_id');
 
-        $this->assertSame(300000, $alloc[$ketua->id]->board_amount);              // 600rb × 6/12
+        $this->assertSame(300000, $alloc[$ketua->id]->board_amount);              // 50rb × 6 bulan (Jul–Des)
         $this->assertEqualsWithDelta(300000 + 500000, $alloc[$ketua->id]->total, 0.01); // sisa 1jt dibagi rata
         $this->assertEqualsWithDelta(500000, $alloc[$a->id]->total, 0.01);
         $this->assertSame(1, count(app(ShuCalculator::class)->summary($period)['buyers_without_dues']) + 1);
+
+        // Data lama (jumlah bulan berupa angka) tetap terbaca sebagai Jan s.d. bulan ke-n.
+        $this->assertSame([1, 2, 3], ShuCalculator::boardMonths(['months' => 3]));
+    }
+
+    public function test_non_employee_buyers_are_listed_separately(): void
+    {
+        $a = $this->person('A');
+        $umum = Customer::create(['name' => 'Umum', 'no_telp' => 0, 'address' => '']); // pembeli umum (bukan pegawai)
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'A', 'customer_id' => $a->id, 'amount' => 50000]);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'Umum', 'customer_id' => $umum->id, 'amount' => 70000]);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'Tukang Pijat', 'amount' => 20000]);
+        $period = $this->period();
+
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('shu-access');
+        $this->actingAs($admin)->get(route('shu.show', $period))->assertInertia(fn (Assert $page) => $page
+            ->where('nonEmployeeBuyers', [['name' => 'Umum', 'amount' => 70000], ['name' => 'Tukang Pijat', 'amount' => 20000]])
+            ->where('buyersWithoutDues.0.customer_id', $a->id));
     }
 
     public function test_pos_source_and_financing_income_portions_ignore_installments(): void

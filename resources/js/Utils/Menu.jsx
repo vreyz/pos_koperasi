@@ -48,6 +48,7 @@ IconRulerMeasure,
     IconCash,
     IconShoppingBag,
     IconLayoutSidebar,
+    IconUsersGroup,
 } from "@tabler/icons-react";
 import hasAnyPermission from "./Permission";
 import React from "react";
@@ -149,6 +150,13 @@ export default function Menu({ includeHidden = false } = {}) {
                     active: url.startsWith("/dashboard/financing/barang"),
                     icon: <IconShoppingBag size={20} strokeWidth={1.5} />,
                     permissions: hasAnyPermission(["financing-access"]),
+                },
+                {
+                    title: t("sidebar.items.board"),
+                    href: route("board.index"),
+                    active: url.startsWith("/dashboard/board"),
+                    icon: <IconUsersGroup size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["board-access"]),
                 },
                 {
                     title: t("sidebar.items.shu"),
