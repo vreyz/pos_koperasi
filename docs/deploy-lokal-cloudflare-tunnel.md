@@ -19,40 +19,24 @@ HP / laptop ─HTTPS─▶ Worker kabanjawara.anzero.workers.dev ─Workers VPC�
   dan aktifkan *Menu → Tools → Path → Add Laragon to Path*.
 - Akun Cloudflare (yang sama dengan `atlas.anzero.workers.dev`).
 
-## 2. Pasang aplikasi (sekali)
+## 2. Pasang aplikasi (sekali, otomatis)
 
-Buka **Terminal Laragon**:
-
-```bash
-cd C:\laragon\www
-git clone https://github.com/vreyz/pos_koperasi.git
-cd pos_koperasi
-copy .env.example .env
-composer install
-set PUPPETEER_SKIP_DOWNLOAD=true && npm ci
-php artisan key:generate
-```
-
-Buat database `pos_koperasi` (Laragon → Database), lalu edit `.env`:
-
-```dotenv
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://kabanjawara.anzero.workers.dev
-APP_TIMEZONE=Asia/Jakarta
-APP_LOCALE=id
-DB_DATABASE=pos_koperasi
-DB_USERNAME=root
-DB_PASSWORD=
-SESSION_SECURE_COOKIE=true
-SANCTUM_STATEFUL_DOMAINS=kabanjawara.anzero.workers.dev,localhost,127.0.0.1
-```
+Nyalakan Laragon (**Start All**), buka **Terminal Laragon**, lalu tempel:
 
 ```bash
-php artisan migrate --seed
-php artisan storage:link
-npm run build
+git clone https://github.com/vreyz/pos_koperasi.git C:\laragon\www\pos_koperasi
 ```
+
+Lalu klik dua kali `C:\laragon\www\pos_koperasi\deploy\windows\install.bat`. Installer akan:
+
+- mengecek PHP 8.3+, MySQL, Composer, Node, Git;
+- mengisi `.env` (alamat online, zona waktu, bahasa, database `pos_koperasi`);
+- membuat database, memasang paket, membangun tampilan, menjalankan migrasi;
+- membuat folder `data-private\` dan `backups\`;
+- menjalankan aplikasi otomatis setiap login Windows dan backup database tiap hari jam 21:00.
+
+Aman dijalankan ulang: `.env` dan database yang sudah ada tidak dihapus (database lama dibackup dulu).
+Di Laragon aktifkan juga *Preferences → Run Laragon when Windows starts* dan *Start All automatically*.
 
 > Folder di dalam OneDrive (`D:\OneDrive\...`) **tidak disarankan** untuk aplikasi: OneDrive ikut
 > menyinkronkan ribuan file `vendor/` dan `node_modules/` dan bisa mengunci file. Simpan aplikasi di
@@ -70,28 +54,23 @@ Dari HP di WiFi yang sama: `http://<IP-PC>:8000` (tanpa kamera/PWA). Untuk akses
 Alamat `*.workers.dev` tidak bisa langsung dipasang ke tunnel, jadi dipakai **Worker kecil** yang
 meneruskan request ke tunnel (fitur **Workers VPC**). Worker-nya sudah ada di `deploy/cloudflare-worker/`.
 
-**a. Buat tunnel**
+**a. Buat tunnel** (dashboard)
 1. [dash.cloudflare.com](https://dash.cloudflare.com/) → **Zero Trust → Networks → Tunnels → Create a tunnel** → *Cloudflared* → nama `pos-koperasi`.
-2. Pilih **Windows**, salin perintah berisi token, jalankan di **Command Prompt (Run as administrator)**:
-   ```bash
-   cloudflared.exe service install <TOKEN>
-   ```
-   Tunnel jadi Windows Service dan otomatis menyala bersama PC. Lewati langkah *Public hostname*.
+2. Pilih **Windows** dan salin perintah berisi token (cukup disalin, belum perlu dijalankan). Lewati langkah *Public hostname*.
 
-**b. Buat VPC Service**
-1. Dashboard → **Workers VPC → VPC Services → Create**.
+**b. Buat VPC Service** (dashboard)
+1. **Workers VPC → VPC Services → Create**.
 2. Tunnel: `pos-koperasi`; Host: `127.0.0.1`; HTTP port: `8000`.
 3. Salin **Service ID**.
 
-**c. Pasang Worker**
-1. Buka `deploy/cloudflare-worker/wrangler.jsonc`, ganti `GANTI-DENGAN-ID-VPC-SERVICE` dengan Service ID.
-2. Di Terminal Laragon:
-   ```bash
-   cd deploy\cloudflare-worker
-   npx wrangler login
-   npx wrangler deploy
-   ```
-   Nama Worker `kabanjawara` → otomatis tayang di `https://kabanjawara.anzero.workers.dev`.
+**c. Jalankan `deploy\windows\setup-cloudflare.bat`** (klik dua kali, izinkan Administrator)
+- tempel token tunnel dan Service ID saat diminta;
+- browser terbuka untuk login Cloudflare → klik **Allow**;
+- skrip memasang `cloudflared` sebagai Windows Service dan men-deploy Worker `kabanjawara` →
+  tayang di `https://kabanjawara.anzero.workers.dev`.
+
+Service ID disimpan di `deploy/cloudflare-worker/wrangler.local.jsonc` (tidak ikut Git), jadi update
+aplikasi tidak bentrok.
 
 Laravel sudah dikonfigurasi mempercayai header `X-Forwarded-*` dari `127.0.0.1`, sehingga link, aset, dan
 cookie memakai `https://kabanjawara.anzero.workers.dev`.
@@ -112,8 +91,9 @@ dan mode aplikasi (PWA) hanya berfungsi lewat alamat HTTPS ini.
 
 ## 6. Backup
 
-`deploy\windows\backup.bat` menyimpan database ke `backups\pos_koperasi-YYYYMMDD-HHMM.sql`. Jadwalkan
-harian lewat **Task Scheduler** dan salin folder `backups` ke OneDrive/flashdisk.
+`deploy\windows\backup.bat` menyimpan database ke `backups\pos_koperasi-YYYYMMDD-HHMM.sql`. Installer sudah
+menjadwalkannya tiap hari jam 21:00 (Task Scheduler: *POS Koperasi - Backup*). Salin folder `backups` ke
+OneDrive/flashdisk secara berkala.
 
 ## 7. Update aplikasi (tanpa kehilangan data & tambahan koperasi)
 
