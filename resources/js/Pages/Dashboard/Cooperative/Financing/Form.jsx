@@ -5,7 +5,7 @@ import { IconArrowLeft, IconCash } from "@tabler/icons-react";
 import { Field, PageHeader, Panel, Stat, btn, inputClass, rupiah } from "@/Components/Cooperative/ui";
 import { MoneyInput, PercentInput, SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
 
-export default function Form({ type, typeLabel, financing, employees, settings, preselect }) {
+export default function Form({ type, typeLabel, financing, employees, settings, preselect, nextNumber }) {
     const [form, setForm] = useState({
         customer_id: financing?.customer_id || preselect || "",
         number: financing?.number || "",
@@ -71,8 +71,8 @@ export default function Form({ type, typeLabel, financing, employees, settings, 
                             <Field label="Pemohon (pegawai)" error={errors.customer_id}>
                                 <SearchSelect required options={empOptions} value={form.customer_id} onChange={(v) => setForm({ ...form, customer_id: v })} placeholder="Cari nama / NIP…" />
                             </Field>
-                            <Field label="Nomor formulir" error={errors.number} hint={type === "dana" ? "mis. 01/KOP/FPD/2026" : "mis. 01/KOP/FPB/2026"}>
-                                <input className={inputClass} value={form.number} onChange={set("number")} />
+                            <Field label="Nomor formulir" error={errors.number} hint={financing ? null : `Kosongkan untuk nomor otomatis: ${nextNumber}`}>
+                                <input className={inputClass} value={form.number} onChange={set("number")} placeholder={nextNumber || ""} />
                             </Field>
                             <Field label="Tanggal permohonan" error={errors.applied_at}>
                                 <input type="date" className={inputClass} value={form.applied_at} onChange={set("applied_at")} />

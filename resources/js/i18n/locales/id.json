@@ -254,7 +254,7 @@
             "procurement": "Pengadaan",
             "crmPricing": "CRM & Harga",
             "reports": "Laporan",
-            "dineIn": "Dine-In",
+            "dineIn": "Kantin",
             "operations": "Operasional",
             "userManagement": "Manajemen User",
             "settings": "Pengaturan",
@@ -285,9 +285,9 @@
             "customerSegments": "Segment Customer",
             "crmCampaigns": "Campaign CRM",
             "crmReminders": "Reminder CRM",
-            "dineAreas": "Area Dine-In",
-            "dineTables": "Meja Dine-In",
-            "dineOrders": "Pesanan Dine-In",
+            "dineAreas": "Area Kantin",
+            "dineTables": "Meja Kantin",
+            "dineOrders": "Pesanan Kantin",
             "salesReport": "Laporan Penjualan",
             "profitReport": "Laporan Keuntungan",
             "advancedInsights": "Analisis Lanjutan",
@@ -922,7 +922,7 @@
             },
             "widgets": {
                 "title": "Widget Pemantauan",
-                "desc": "Shift kasir aktif, piutang, hutang, dan pesanan dine-in yang perlu perhatian."
+                "desc": "Shift kasir aktif, piutang, hutang, dan pesanan kantin yang perlu perhatian."
             },
             "recent": {
                 "title": "Transaksi Terbaru",

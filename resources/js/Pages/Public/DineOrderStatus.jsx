@@ -48,7 +48,7 @@ export default function DineOrderStatus({ order, table, storeName }) {
             <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-8">
                 <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="bg-gradient-to-r from-primary-500 to-primary-700 px-6 py-5 text-white text-center">
-                        <p className="text-sm opacity-80">PESANAN DINE-IN</p>
+                        <p className="text-sm opacity-80">PESANAN KANTIN</p>
                         <p className="text-lg font-bold mt-1">Meja {table.name}</p>
                         <p className="text-xs opacity-80 mt-1">{storeName}</p>
                     </div>

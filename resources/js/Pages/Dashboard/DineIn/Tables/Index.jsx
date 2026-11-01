@@ -232,13 +232,13 @@ export default function Index({ tables, areas, filters }) {
 
     return (
         <>
-            <Head title="Meja Dine-In" />
+            <Head title="Meja Kantin" />
 
             <div className="mb-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="min-w-0">
                         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                            Meja Dine-In
+                            Meja Kantin
                         </h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             {tables.length} meja ditampilkan
@@ -328,7 +328,7 @@ export default function Index({ tables, areas, filters }) {
                         {filterArea || filterStatus !== "all" ? "Tidak Ada Meja yang Cocok" : "Belum Ada Meja"}
                     </h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 text-center px-4">
-                        {filterArea || filterStatus !== "all" ? "Coba ubah filter area atau status." : "Tambahkan meja dine-in pertama Anda."}
+                        {filterArea || filterStatus !== "all" ? "Coba ubah filter area atau status." : "Tambahkan meja kantin pertama Anda."}
                     </p>
                     {canCreate && !filterArea && filterStatus === "all" && (
                         <Button
@@ -490,7 +490,7 @@ export default function Index({ tables, areas, filters }) {
                         Belum Ada Meja
                     </h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                        Tambahkan meja dine-in pertama Anda.
+                        Tambahkan meja kantin pertama Anda.
                     </p>
                     {canCreate && (
                         <Button

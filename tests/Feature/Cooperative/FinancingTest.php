@@ -54,6 +54,25 @@ class FinancingTest extends TestCase
             ->assertSessionHasErrors('tenor'); // bawaan & maksimal 12 bulan
     }
 
+    public function test_form_number_is_auto_incremented_per_type_and_year(): void
+    {
+        $budi = $this->person('Budi');
+        $creator = $this->user(['financing-create']);
+        Financing::create(['type' => 'dana', 'customer_id' => $budi->id, 'status' => 'lunas', 'number' => '07/KOP/FPD/2025', 'principal' => 5000000, 'tenor' => 12, 'installment' => 416667]);
+
+        $store = fn (string $type, string $date, array $extra = []) => $this->actingAs($creator)->post(route('financing.store', $type), $extra + [
+            'customer_id' => $budi->id, 'principal' => 5000000, 'tenor' => 12, 'applied_at' => $date, 'item_name' => 'Laptop', 'margin_percent' => 7.5,
+        ])->assertSessionHasNoErrors();
+        $store('dana', '2025-10-05');
+        $store('dana', '2025-11-20');
+        $store('barang', '2025-10-05');
+        $store('dana', '2026-01-02');
+
+        $this->assertSame(['07/KOP/FPD/2025', '08/KOP/FPD/X/2025', '09/KOP/FPD/XI/2025', '01/KOP/FPD/I/2026'],
+            Financing::where('type', 'dana')->orderBy('id')->pluck('number')->all());
+        $this->assertSame('01/KOP/FPB/X/2025', Financing::where('type', 'barang')->value('number'));
+    }
+
     public function test_settings_are_separate_per_type_and_coop_identity_comes_from_profile_and_sk(): void
     {
         $chair = $this->person('Ketua Contoh');
