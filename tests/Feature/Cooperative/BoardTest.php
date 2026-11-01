@@ -88,6 +88,98 @@ class BoardTest extends TestCase
         Storage::disk('local')->assertMissing($decree->file_path);
     }
 
+    public function test_reads_sk_layout_with_divisions_numbered_lists_and_wrapped_labels(): void
+    {
+        foreach (['Lukman Hakim Contoh', 'Andi Pratama Putra', 'Citra Lestari', 'Dodi Saputra', 'Eka Wulandari', 'Fajar Nugroho', 'Gita Permata',
+            'Hadi Santoso', 'Rizki Ananda Putra', 'Indah Sari Dewi', 'Joko Susilo', 'Kurnia Wati'] as $name) {
+            $this->person($name);
+        }
+
+        // Teks seperti hasil baca PDF: kolom "Jabatan : Nama", nama lanjutan bernomor, label terpotong ke baris bawah.
+        $text = implode("\n", [
+            'KEPUTUSAN RAPAT ANGGOTA', 'NOMOR: KEP-02/KOP/2026',
+            'Menimbang : a. bahwa susunan pengurus perlu diperbarui;',
+            'PEMBINA : Lukman Hakim Contoh',
+            'Ketua : Andi Pratama Putra, S.E.',
+            'Kepala Unit Usaha : Benny Contoh Kurniawan',
+            '- Divisi Toko : 1. Citra Lestari',
+            '2. Dodi Saputra',
+            '- Divisi Pembiayaan : Eka Wulandari',
+            'Barang',
+            '- Divisi Pembiayaan Dana : Fajar Nugroho',
+            '- Divisi Pembiayaan : Gita Permata',
+            'Kantor',
+            'AKUNTANSI DAN PELAPORAN : 1. Hadi Santoso',
+            '2. Rizki',
+            '3. Indah Sari Dewi',
+            'IT SUPPORT : 1. Joko Susilo',
+            'Pengawas : 1. Kurnia Wati',
+            'Ditetapkan di : Tangerang Selatan',
+            'pada tanggal : 5 Januari 2026',
+        ]);
+
+        $result = app(BoardService::class)->detect($text);
+        $byName = collect($result['members'])->keyBy('sk_name');
+        $positions = $byName->map(fn ($m) => $m['position'])->all();
+
+        // Jabatan baku: divisi "-" = Anggota Pengurus; bagian lain: orang pertama Kepala Unit Usaha, sisanya Anggota Pengurus.
+        $this->assertSame([
+            'Lukman Hakim Contoh' => 'Pembina',
+            'Andi Pratama Putra' => 'Ketua',
+            'Benny Contoh Kurniawan' => 'Kepala Unit Usaha',
+            'Citra Lestari' => 'Anggota Pengurus',
+            'Dodi Saputra' => 'Anggota Pengurus',
+            'Eka Wulandari' => 'Anggota Pengurus',
+            'Fajar Nugroho' => 'Anggota Pengurus',
+            'Gita Permata' => 'Anggota Pengurus',
+            'Hadi Santoso' => 'Kepala Unit Usaha',
+            'Rizki' => 'Anggota Pengurus',
+            'Indah Sari Dewi' => 'Anggota Pengurus',
+            'Joko Susilo' => 'Kepala Unit Usaha',
+            'Kurnia Wati' => 'Pengawas',
+        ], $positions);
+        // Label asli SK tetap tersedia sebagai keterangan.
+        $this->assertSame('Divisi Pembiayaan Barang', $byName['Eka Wulandari']['sk_position']);
+        $this->assertSame('Akuntansi dan Pelaporan', $byName['Indah Sari Dewi']['sk_position']);
+        $this->assertNull($byName['Benny Contoh Kurniawan']['customer_id'], 'belum ada di Data Pegawai: dipilih manual');
+        $this->assertTrue($byName['Rizki']['check'], 'nama satu kata dicocokkan ke nama mirip, perlu diperiksa');
+        $this->assertSame('Rizki Ananda Putra', $byName['Rizki']['name']);
+        $this->assertFalse($byName['Citra Lestari']['check']);
+        $this->assertSame('KEP-02/KOP/2026', $result['number']);
+        $this->assertSame('2026-01-05', $result['decree_date']);
+
+        // Tanggal SK diambil dari "Ditetapkan di", bukan tanggal lain (Anggaran Dasar 2021, salinan, dst.).
+        $date = fn (array $lines) => app(BoardService::class)->detect(implode("\n", $lines))['decree_date'];
+        $this->assertSame('2026-01-01', $date(['Mengingat : Anggaran Dasar tanggal 12 Maret 2021', 'Ditetapkan di : Tangerang Selatan', 'pada tanggal : Januari 2026', 'Salinan sesuai aslinya 3 April 2021']));
+        $this->assertSame('2026-08-15', $date(['Mengingat : Akta 1 Mei 2021', 'Ditetapkan di Tangerang', 'pada tanggal 15 Agt 2026']));
+        $this->assertSame('2026-01-15', $date(['Mengingat : Akta 1 Mei 2021', 'Ditetapkan di : Tangerang pada tanggal 15-01-2026']));
+        $this->assertSame('2021-05-01', $date(['Akta 1 Mei 2021'])); // tanpa blok penetapan: tanggal terakhir
+
+        // Kolom label rata tengah di PDF: label di satu baris, ": nama" di baris berikutnya, sambungan label setelahnya.
+        $centered = app(BoardService::class)->detect(implode("\n", [
+            'Ketua : Andi Pratama Putra',
+            '- Divisi Pembiayaan', ': Eka Wulandari', 'Barang',
+            '- Divisi Pembiayaan', 'Kantor', ': Gita Permata',
+            '- Divisi Toko : 1. Citra Lestari',
+        ]));
+        $this->assertSame(['Andi Pratama Putra' => 'Ketua', 'Eka Wulandari' => 'Divisi Pembiayaan Barang', 'Gita Permata' => 'Divisi Pembiayaan Kantor', 'Citra Lestari' => 'Divisi Toko'],
+            collect($centered['members'])->pluck('sk_position', 'sk_name')->all());
+
+        // Format Word bertabel: nama ke-2 di paragraf berikutnya dalam sel yang sama tetap ikut jabatannya.
+        $cell = fn (array $paras) => '<w:tc>'.implode('', array_map(fn ($p) => '<w:p><w:r><w:t>'.$p.'</w:t></w:r></w:p>', $paras)).'</w:tc>';
+        $row = fn (string $label, array $names) => '<w:tr>'.$cell([$label]).$cell([':']).$cell($names).'</w:tr>';
+        $xml = '<w:document><w:body><w:tbl>'.$row('Divisi Toko', ['Citra Lestari', 'Dodi Saputra']).$row('IT Support', ['Joko Susilo']).'</w:tbl></w:body></w:document>';
+        $path = tempnam(sys_get_temp_dir(), 'sk').'.docx';
+        $zip = new ZipArchive;
+        $zip->open($path, ZipArchive::CREATE);
+        $zip->addFromString('word/document.xml', $xml);
+        $zip->close();
+        $board = app(BoardService::class);
+        $fromWord = $board->detect($board->text(new UploadedFile($path, 'sk.docx', null, null, true), null));
+        $this->assertSame(['Citra Lestari' => 'Divisi Toko', 'Dodi Saputra' => 'Divisi Toko', 'Joko Susilo' => 'IT Support'],
+            collect($fromWord['members'])->pluck('sk_position', 'name')->all());
+    }
+
     public function test_board_months_follow_sk_periods_and_feed_shu(): void
     {
         $old = $this->person('Ketua Lama');

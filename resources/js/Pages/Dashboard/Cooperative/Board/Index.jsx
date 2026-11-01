@@ -78,17 +78,22 @@ export default function Index({ decrees, currentId, positions, employees }) {
             if (ext === "docx") body.append("file", file);
             else body.append("text", await pdfText(file));
             const { data } = await window.axios.post(route("board.preview"), body);
+            const manual = data.members.filter((m) => !m.customer_id).length;
+            const check = data.members.filter((m) => m.customer_id && m.check).length;
             if (!data.members.length) {
                 setReadInfo({ ok: false, text: "Tidak ada nama pegawai yang terbaca dari SK (mungkin hasil scan). Isi daftar pengurus secara manual." });
             } else {
-                setReadInfo({ ok: true, text: `${data.members.length} nama pengurus terbaca dari SK. Periksa nama & jabatannya sebelum menyimpan.` });
+                setReadInfo({
+                    ok: manual === 0,
+                    text: `${data.members.length} pengurus terbaca dari SK` + (check ? `, ${check} dicocokkan ke nama mirip (periksa)` : "") + (manual ? `, ${manual} belum ketemu di Data Pegawai (pilih manual atau hapus barisnya)` : "") + ".",
+                });
             }
             setForm({
                 ...next,
                 number: next.number || data.number || "",
                 decree_date: next.decree_date || data.decree_date || "",
                 effective_from: next.effective_from || data.decree_date || "",
-                members: data.members.length ? data.members.map((m) => ({ customer_id: m.customer_id, position: m.position || "" })) : next.members,
+                members: data.members.length ? data.members.map((m) => ({ customer_id: m.customer_id || "", position: m.position || "", sk_name: m.sk_name, sk_position: m.sk_position, check: m.check })) : next.members,
             });
         } catch (e) {
             setReadInfo({ ok: false, text: "SK gagal dibaca otomatis. Isi daftar pengurus secara manual." });
@@ -177,8 +182,16 @@ export default function Index({ decrees, currentId, positions, employees }) {
                                 {form.members.map((m, i) => (
                                     <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-2 sm:grid-cols-[12rem_1fr_auto]">
                                         <input list="board-positions" className={inputClass + " col-span-2 sm:col-span-1"} value={m.position} onChange={(e) => setMember(i, { position: e.target.value })} placeholder="Jabatan" />
-                                        <SearchSelect options={empOptions} value={m.customer_id} onChange={(v) => setMember(i, { customer_id: Number(v) })} placeholder="Cari nama / NIP…" required />
+                                        <SearchSelect options={empOptions} value={m.customer_id} onChange={(v) => setMember(i, { customer_id: Number(v), check: false })} placeholder="Cari nama / NIP…" required />
                                         <button type="button" onClick={() => setForm({ ...form, members: form.members.filter((_, j) => j !== i) })} className="text-danger-600" title="Hapus"><IconX size={16} /></button>
+                                        {m.sk_position && m.sk_position !== m.position && (
+                                            <span className="col-span-full -mt-1 text-xs text-slate-500">Di SK: {m.sk_position}</span>
+                                        )}
+                                        {m.sk_name && (!m.customer_id || m.check) && (
+                                            <span className={`col-span-full text-xs ${m.customer_id ? "text-warning-600" : "text-danger-600"}`}>
+                                                Di SK tertulis "{m.sk_name}" — {m.customer_id ? "dicocokkan ke nama mirip, periksa" : "belum ketemu di Data Pegawai, pilih pegawainya atau hapus baris ini"}.
+                                            </span>
+                                        )}
                                         {errors[`members.${i}.customer_id`] && <span className="col-span-full text-xs text-danger-600">{errors[`members.${i}.customer_id`]}</span>}
                                     </div>
                                 ))}
