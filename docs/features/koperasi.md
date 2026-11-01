@@ -104,9 +104,13 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
 
 - Upload SK pengurus (PDF/Word/foto, maks 20 MB). File disimpan di storage privat (`storage/app/private/board-decrees`,
   tidak masuk git) dan hanya bisa dibuka pengguna dengan izin `board-access`.
-- Nama pengurus dibaca otomatis: Word di server (`BoardService::text`), PDF di browser (pdf.js, `?worker`), lalu
-  dicocokkan ke Data Pegawai lewat NIP 18 digit atau nama lengkap (≥ 2 kata). Jabatan ditebak dari baris yang sama
-  atau 2 baris di atasnya. Scan/foto tidak terbaca → diisi manual.
+- Nama pengurus dibaca otomatis: Word di server (`BoardService::text`, baris tabel jadi "Jabatan : Nama"), PDF di
+  browser (pdf.js, `?worker`). Pola SK "Jabatan : Nama" — nama bernomor di baris bawah ikut jabatan itu; label yang
+  terpotong ("Divisi Pembiayaan" / "Barang") disambung. Nama dicocokkan lewat NIP, nama persis/alias, atau nama mirip
+  (ditandai *periksa*); yang tidak ketemu tetap tampil untuk dipilih manual. Tanggal SK diambil dari bagian "Ditetapkan di … pada tanggal …" (tanpa tanggal hari → tanggal 1). Scan/foto tidak terbaca → diisi manual.
+- Jabatan dibakukan: Pembina, Ketua, Wakil Ketua, Sekretaris, Bendahara, Ketua Pengawas, Pengawas, Kepala Unit Usaha,
+  Anggota Pengurus. Divisi bertanda "-" = Anggota Pengurus; bagian lain (Akuntansi dan Pelaporan, IT Support) = orang
+  pertama Kepala Unit Usaha, sisanya Anggota Pengurus. Label asli SK ditampilkan sebagai keterangan.
 - Masa berlaku: `effective_from` s.d. `effective_until`, atau sehari sebelum SK berikutnya mulai. Bulan bertugas =
   SK yang berlaku di **akhir bulan** (`BoardService::membersForYear`).
 - SHU: periode baru langsung terisi pengurus + bulan dari SK; di halaman SHU ada tombol *Ambil dari SK pengurus*.
