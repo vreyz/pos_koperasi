@@ -221,7 +221,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('financing-import', [FinancingController::class, 'import'])->middleware('permission:financing-import')->name('financing.import');
     Route::post('financing-import/preview', [FinancingController::class, 'previewImport'])->middleware('permission:financing-import')->name('financing.import.preview');
     Route::post('financing-import/commit', [FinancingController::class, 'commitImport'])->middleware('permission:financing-import')->name('financing.import.commit');
-    Route::put('financing-settings', [FinancingController::class, 'updateSettings'])->middleware('permission:financing-approve')->name('financing.settings');
+    Route::put('financing-settings/{type}', [FinancingController::class, 'updateSettings'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-approve')->name('financing.settings');
     Route::post('financing-installments/{installment}/toggle', [FinancingController::class, 'toggleInstallment'])->middleware('permission:financing-disburse')->name('financing.installments.toggle');
     Route::get('financing/item/{financing}', [FinancingController::class, 'show'])->middleware('permission:financing-access')->name('financing.show');
     Route::get('financing/item/{financing}/edit', [FinancingController::class, 'edit'])->middleware('permission:financing-create')->name('financing.edit');

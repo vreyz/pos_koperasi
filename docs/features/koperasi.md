@@ -83,10 +83,12 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
 
 ## Pembiayaan Dana & Pembiayaan Barang (`financing.*`)
 
-- **Dana**: pinjaman uang tanpa bagi hasil, tenor 1–10 bulan. Biaya formulir pegawai Rp 250.000 / PPNPN Rp 150.000
-  per Rp 5 jt; plafon pegawai Rp 15 jt, PPNPN Rp 10 jt.
+- **Dana**: pinjaman uang tanpa bagi hasil, jangka waktu bawaan & maksimal 12 bulan. Biaya formulir pegawai Rp 250.000 /
+  PPNPN Rp 150.000 per Rp 5 jt pembiayaan; plafon pegawai Rp 15 jt, PPNPN Rp 10 jt.
 - **Barang**: harga + bagi hasil 7,5% dicicil (bawaan 12 bulan, bisa dilunasi lebih cepat); biaya lain 1,5% dipotong saat cair.
-- Semua angka di atas ada di **Aturan** (tabel `settings`, `FinancingSettings`) dan dipakai di formulir cetak.
+- **Aturan terpisah** per jenis (`FinancingSettings::KEYS`, tombol Aturan di masing-masing menu) dan dipakai di formulir cetak.
+- Identitas koperasi di formulir **tidak diisi ulang**: nama/alamat/kota dari Profil Toko (`store_name`, `store_address`,
+  `store_city`); nama Ketua & Kepala Unit Usaha dari SK Pengurus yang berlaku (`BoardService::currentHolder`).
 - Alur & otorisasi: pengajuan (`financing-create`) → diperiksa Divisi Pembiayaan (`financing-check`) → direview Kepala
   Unit Usaha (`financing-review`) → disetujui Ketua (`financing-approve`) → dicairkan Bendahara (`financing-disburse`,
   membuat jadwal cicilan mulai bulan berikutnya). Bisa ditolak dengan alasan sebelum cair.

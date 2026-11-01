@@ -3,6 +3,7 @@ import { Head } from "@inertiajs/react";
 
 const rupiah = (v) => "Rp " + Math.round(Number(v || 0)).toLocaleString("id-ID");
 const DOTS = "………………………………………";
+const FEE_UNIT = 5000000; // biaya formulir per Rp 5 jt pembiayaan
 
 export function terbilang(n) {
     const w = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
@@ -136,7 +137,7 @@ function DanaForm({ f, settings, ppnpn }) {
                     {ppnpn ? (
                         <>
                             <li>Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;</li>
-                            <li>Biaya untuk peminjaman adalah sebesar {rupiah(fee)}, per pembiayaan {rupiah(settings.financing_fee_unit)}, dibayarkan setelah berkas permohonan disetujui oleh Tim Pembiayaan Koperasi dan sebelum pencairan dana, melalui:
+                            <li>Biaya formulir sebesar {rupiah(fee)} per {rupiah(FEE_UNIT)} pembiayaan, dibayarkan setelah berkas permohonan disetujui oleh Tim Pembiayaan Koperasi dan sebelum pencairan dana, melalui:
                                 <ol className="ml-5 list-[lower-alpha]"><li>transfer bank ke rekening {settings.coop_bank || "...................................."};</li><li>menyampaikan konfirmasi berupa bukti pembayaran melalui {settings.coop_contact_ppnpn || "...................................."}.</li></ol>
                             </li>
                             <li>Fasilitas Pembiayaan Dana dapat diberikan kepada Pemohon setelah melakukan pembayaran biaya sebagaimana dimaksud pada poin 4;</li>
@@ -144,12 +145,11 @@ function DanaForm({ f, settings, ppnpn }) {
                         </>
                     ) : (
                         <>
-                            <li>Setiap 1 (satu) Formulir Permohonan Pembiayaan Dana yang diajukan digunakan untuk melakukan peminjaman dana sebesar {rupiah(settings.financing_fee_unit)};</li>
-                            <li>Biaya untuk pembelian 1 (satu) formulir sebesar {rupiah(fee)}, dapat dibayarkan secara:
+                            <li>Biaya formulir sebesar {rupiah(fee)} per {rupiah(FEE_UNIT)} pembiayaan, dapat dibayarkan secara:
                                 <ol className="ml-5 list-[lower-alpha]"><li>transfer bank ke rekening {settings.coop_bank || "...................................."};</li><li>menyampaikan konfirmasi berupa bukti pembayaran melalui {settings.coop_contact_pegawai || "...................................."}.</li></ol>
                             </li>
                             <li>Fasilitas Pembiayaan Dana diberikan setinggi-tingginya sebesar {rupiah(max)};</li>
-                            <li>Fasilitas Pembiayaan Dana dapat diberikan kepada Pemohon setelah melakukan pembayaran biaya pembelian formulir sebagaimana dimaksud pada poin 4;</li>
+                            <li>Fasilitas Pembiayaan Dana dapat diberikan kepada Pemohon setelah melakukan pembayaran biaya formulir sebagaimana dimaksud pada poin 3;</li>
                             <li>Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;</li>
                         </>
                     )}
@@ -157,8 +157,8 @@ function DanaForm({ f, settings, ppnpn }) {
                     <li>Pembayaran angsuran pengembalian Fasilitas Pembiayaan Dana dilakukan melalui mekanisme autodebet pada rekening pembayaran penghasilan Pemohon{ppnpn ? "; apabila tidak berhasil maka Pemohon diwajibkan untuk melakukan transfer ke rekening yang sudah ditentukan dan berkoordinasi dengan bendahara" : ""};</li>
                     <li>Dalam hal keanggotaan koperasi Pemohon berakhir disebabkan:
                         <ol className="ml-5 list-[lower-alpha]">
-                            <li>Mutasi keluar {settings.coop_office}, sisa angsuran pembayaran wajib dilunasi sebelum Pemohon pindah tugas;</li>
-                            <li>Selain mutasi keluar {settings.coop_office}, sisa angsuran pembayaran wajib dilunasi sebelum Pemohon keluar dari {settings.coop_office};</li>
+                            <li>Mutasi keluar (pindah tugas), sisa angsuran pembayaran wajib dilunasi sebelum Pemohon pindah tugas;</li>
+                            <li>Selain mutasi keluar, sisa angsuran pembayaran wajib dilunasi sebelum Pemohon keluar dari keanggotaan {settings.coop_name || "Koperasi"};</li>
                         </ol>
                     </li>
                     <li>Pelunasan Fasilitas Pembiayaan Dana dapat dilakukan sebelum jangka waktu pembayaran yang disepakati berakhir.</li>
@@ -215,7 +215,7 @@ function BarangForm({ f, settings }) {
                     <li>Pembayaran kembali dilakukan secara angsuran mulai bulan berikutnya selama {settings.financing_tenor_barang} bulan, atau lebih cepat sesuai kesepakatan;</li>
                     <li>Pembayaran angsuran dilakukan melalui mekanisme autodebet pada rekening pembayaran penghasilan Pemohon;</li>
                     <li>Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;</li>
-                    <li>Dalam hal Pemohon mutasi atau keluar dari {settings.coop_office}, sisa angsuran wajib dilunasi sebelum Pemohon pindah tugas/keluar;</li>
+                    <li>Dalam hal Pemohon mutasi atau keluar dari keanggotaan {settings.coop_name || "Koperasi"}, sisa angsuran wajib dilunasi sebelum Pemohon pindah tugas/keluar;</li>
                     <li>Pelunasan dapat dilakukan sebelum jangka waktu pembayaran yang disepakati berakhir.</li>
                 </ol>
                 <Approval f={f} settings={settings} />
@@ -248,7 +248,9 @@ function Disbursement({ f, settings }) {
     );
 }
 
-export default function Print({ doc, type, financing, settings, ppnpn }) {
+export default function Print({ doc, type, financing, settings: rules, coop = {}, ppnpn }) {
+    // Identitas koperasi dari Profil Toko & SK Pengurus (bukan isian terpisah).
+    const settings = { ...rules, coop_name: coop.name, coop_city: coop.city || DOTS, coop_chair: coop.chair, coop_business_head: coop.business_head };
     return (
         <div className="min-h-screen bg-gray-100 py-6 text-black print:bg-white print:py-0">
             <Head title={doc === "pencairan" ? "Bukti Pencairan" : "Formulir Pembiayaan"} />

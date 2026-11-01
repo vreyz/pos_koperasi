@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Cooperative;
 
+use App\Models\BoardDecree;
 use App\Models\Customer;
 use App\Models\Financing;
 use App\Models\MemberContribution;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Cooperative\FinancingService;
+use App\Services\Cooperative\FinancingSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -47,8 +50,32 @@ class FinancingTest extends TestCase
         $creator = $this->user(['financing-create']);
         $this->actingAs($creator)->post(route('financing.store', 'dana'), ['customer_id' => $ppnpn->id, 'principal' => 15000000, 'tenor' => 10])
             ->assertSessionHasErrors('principal');
-        $this->actingAs($creator)->post(route('financing.store', 'dana'), ['customer_id' => $pns->id, 'principal' => 15000000, 'tenor' => 12])
-            ->assertSessionHasErrors('tenor');
+        $this->actingAs($creator)->post(route('financing.store', 'dana'), ['customer_id' => $pns->id, 'principal' => 15000000, 'tenor' => 13])
+            ->assertSessionHasErrors('tenor'); // bawaan & maksimal 12 bulan
+    }
+
+    public function test_settings_are_separate_per_type_and_coop_identity_comes_from_profile_and_sk(): void
+    {
+        $chair = $this->person('Ketua Contoh');
+        $decree = BoardDecree::create(['number' => 'SK-1', 'effective_from' => now()->subYear()->toDateString()]);
+        $decree->members()->create(['customer_id' => $chair->id, 'position' => 'Ketua']);
+        Setting::set('store_name', 'Koperasi Contoh');
+        Setting::set('store_city', 'Kota Contoh');
+        $admin = $this->user(['financing-approve']);
+
+        // Simpan aturan dana: aturan barang tidak ikut berubah, dan field barang ditolak diam-diam.
+        $this->actingAs($admin)->put(route('financing.settings', 'dana'), [
+            'financing_fee_pegawai' => 300000, 'financing_fee_ppnpn' => 150000, 'financing_max_pegawai' => 15000000,
+            'financing_max_ppnpn' => 10000000, 'financing_tenor_dana_max' => 12, 'financing_margin_barang' => 99,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(300000, FinancingSettings::get('financing_fee_pegawai'));
+        $this->assertSame(7.5, FinancingSettings::get('financing_margin_barang'));
+        $this->assertSame(12, FinancingSettings::get('financing_tenor_barang'));
+
+        $this->actingAs($admin)->get(route('financing.blank-form', 'dana'))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('coop.name', 'Koperasi Contoh')->where('coop.city', 'Kota Contoh')->where('coop.chair', 'Ketua Contoh')
+                ->missing('settings.coop_name')->missing('settings.financing_fee_unit'));
     }
 
     public function test_approval_flow_with_permissions_then_disbursement_schedule_and_payoff(): void

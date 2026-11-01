@@ -106,6 +106,18 @@ class BoardService
         return sprintf('%04d-%02d-%02d', $last[3], self::MONTHS[strtoupper($last[2])], $last[1]);
     }
 
+    /** Nama pemegang jabatan (mis. "Ketua") menurut SK yang berlaku hari ini. */
+    public function currentHolder(string $position): ?string
+    {
+        $today = now()->toDateString();
+        $decree = BoardDecree::with('members.customer:id,name')
+            ->whereDate('effective_from', '<=', $today)
+            ->where(fn ($q) => $q->whereNull('effective_until')->orWhereDate('effective_until', '>=', $today))
+            ->orderByDesc('effective_from')->orderByDesc('id')->first();
+
+        return $decree?->members->first(fn ($m) => strcasecmp(trim((string) $m->position), $position) === 0)?->customer?->name;
+    }
+
     /**
      * Pengurus per bulan di tahun $year menurut masa berlaku SK. Satu bulan dihitung untuk SK
      * yang berlaku pada akhir bulan itu; SK berlaku sampai tanggal "berlaku sampai" atau
