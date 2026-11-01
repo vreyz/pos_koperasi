@@ -100,6 +100,17 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
 - **Impor**: daftar dana (PEMBIAYAAN KOPERASI / Data Pembiayaan LK), daftar barang, dan Permohonan Pencairan (biaya formulir,
   rekening) — dikenali otomatis per sheet, tidak dobel saat diimpor ulang.
 
+## Angsuran & Potongan Koperasi (`deductions.*`)
+
+- Rekap potongan gaji per pegawai per tahun/bulan: Simpanan Koperasi (Pinjaman, Wajib, Pokok, Sukarela), Angsuran
+  Koperasi, Potong Gaji Koperasi (`member_contributions` jenis `pinjaman`, `wajib`, `pokok`, `sukarela`, `angsuran`, `pg`).
+  Iuran untuk SHU tetap pokok + wajib + sukarela.
+- Impor bertahap (`DeductionImportService`): unggah → pilih sheet & baris judul (tebakan otomatis, judul bertingkat
+  boleh) → cocokkan kolom → cocokkan nama (NIP/alias/nama persis; yang mirip ≥ 90 diisi otomatis) → pratinjau.
+  Per pegawai × jenis × bulan: **sama** dilewati, **baru** disimpan, **beda** hanya bila dicentang (total bulan itu =
+  nilai file; catatan manual/tunai tetap). Nilai 0/kosong di file tidak menghapus data.
+- Setelah impor, Angsuran Koperasi menandai cicilan pembiayaan pegawai itu lunas (`markPaidFromPayroll`).
+
 ## Pengurus Koperasi (`board.*`)
 
 - Upload SK pengurus (PDF/Word/foto, maks 20 MB). File disimpan di storage privat (`storage/app/private/board-decrees`,
@@ -146,7 +157,7 @@ Pengaturan → Tampilan Menu (`menu-settings`): sembunyikan menu sidebar yang ti
 ## Permission
 
 `employees-access|create|edit|delete|import`, `savings-access|create|delete|import`,
-`shu-access|manage|finalize`, `financing-access|create|check|review|approve|disburse|import`, `board-access|manage`, `menu-settings`. Dibuat oleh `PermissionSeeder` dan oleh migrasi
+`shu-access|manage|finalize`, `financing-access|create|check|review|approve|disburse|import`, `deductions-access|import`, `board-access|manage`, `menu-settings`. Dibuat oleh `PermissionSeeder` dan oleh migrasi
 `2026_10_31_000002_add_cooperative_permissions` (untuk instalasi yang sudah berjalan).
 
 ## File terkait

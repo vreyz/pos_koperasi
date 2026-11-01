@@ -11,6 +11,7 @@ use App\Http\Controllers\Apps\CrmReminderController;
 use App\Http\Controllers\Apps\CustomerController;
 use App\Http\Controllers\Apps\CustomerSegmentController;
 use App\Http\Controllers\Apps\CustomerVoucherController;
+use App\Http\Controllers\Apps\DeductionController;
 use App\Http\Controllers\Apps\DineAreaController;
 use App\Http\Controllers\Apps\DineTableController;
 use App\Http\Controllers\Apps\DiscountApprovalController;
@@ -238,6 +239,13 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('financing/{type}/create', [FinancingController::class, 'create'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.create');
     Route::post('financing/{type}', [FinancingController::class, 'store'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.store');
 
+    Route::get('deductions', [DeductionController::class, 'index'])->middleware('permission:deductions-access')->name('deductions.index');
+    Route::get('deductions/import', [DeductionController::class, 'import'])->middleware('permission:deductions-import')->name('deductions.import');
+    Route::post('deductions/import/upload', [DeductionController::class, 'upload'])->middleware('permission:deductions-import')->name('deductions.import.upload');
+    Route::post('deductions/import/layout', [DeductionController::class, 'layout'])->middleware('permission:deductions-import')->name('deductions.import.layout');
+    Route::post('deductions/import/analyze', [DeductionController::class, 'analyze'])->middleware('permission:deductions-import')->name('deductions.import.analyze');
+    Route::post('deductions/import/preview', [DeductionController::class, 'preview'])->middleware('permission:deductions-import')->name('deductions.import.preview');
+    Route::post('deductions/import/commit', [DeductionController::class, 'commit'])->middleware('permission:deductions-import')->name('deductions.import.commit');
     Route::get('board', [BoardController::class, 'index'])->middleware('permission:board-access')->name('board.index');
     Route::post('board/preview', [BoardController::class, 'preview'])->middleware('permission:board-manage')->name('board.preview');
     Route::post('board', [BoardController::class, 'store'])->middleware('permission:board-manage')->name('board.store');
