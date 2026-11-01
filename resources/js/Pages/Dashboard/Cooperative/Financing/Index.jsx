@@ -30,7 +30,7 @@ const SETTING_FIELDS = {
     ],
 };
 
-export default function Index({ type, typeLabel, financings, statusLabels, summary, settings }) {
+export default function Index({ type, typeLabel, financings, statusLabels, summary, settings, templates = {} }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const [showSettings, setShowSettings] = useState(false);
@@ -131,6 +131,29 @@ export default function Index({ type, typeLabel, financings, statusLabels, summa
                                 )}
                             </Field>
                         ))}
+                        <div className="space-y-2 rounded-xl border border-slate-200 p-3 sm:col-span-2 lg:col-span-3 dark:border-slate-700">
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Template formulir Word (milik koperasi)</p>
+                            <p className="text-xs text-slate-500">Unggah formulir .docx koperasi sekali. Setelah pengajuan disimpan, tombol "Unduh formulir (Word)" mengisi data pegawai ke template ini — kop surat dan syarat & ketentuan tetap seperti file Anda. File disimpan di komputer ini saja.</p>
+                            {Object.entries(templates).map(([key, t]) => (
+                                <div key={key} className="flex flex-wrap items-center gap-2 text-sm">
+                                    <span className="w-64 font-medium">{t.label}</span>
+                                    {t.file ? (
+                                        <>
+                                            <a href={route("financing.templates.download", key)} className="text-primary-600 hover:underline">{t.file}</a>
+                                            <span className="text-xs text-slate-500">({t.uploaded_at})</span>
+                                            <button type="button" className="text-xs text-danger-600 hover:underline" onClick={() => router.delete(route("financing.templates.delete", key), { preserveScroll: true })}>hapus</button>
+                                        </>
+                                    ) : (
+                                        <span className="text-xs text-warning-600">belum diunggah</span>
+                                    )}
+                                    <label className="cursor-pointer text-xs text-primary-600 hover:underline">
+                                        {t.file ? "ganti" : "unggah .docx"}
+                                        <input type="file" accept=".docx" className="hidden" onChange={(e) => e.target.files[0] && router.post(route("financing.templates.upload", key), { file: e.target.files[0] }, { forceFormData: true, preserveScroll: true, onError: (err) => setErrors(err) })} />
+                                    </label>
+                                </div>
+                            ))}
+                            {errors.file && <p className="text-xs text-danger-600">{errors.file}</p>}
+                        </div>
                         <p className="text-xs text-slate-500 sm:col-span-2 lg:col-span-3">
                             Nama, alamat, dan kota koperasi di formulir diambil dari Pengaturan → Profil Toko. Nama Ketua dan Kepala Unit Usaha diambil dari SK di menu Pengurus Koperasi.
                         </p>

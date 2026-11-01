@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import Modal from "@/Components/Modal";
-import { IconAlertTriangle, IconArrowLeft, IconCash, IconCheck, IconCircleCheck, IconCircleDashed, IconPencil, IconPrinter, IconTrash, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconArrowLeft, IconCash, IconCheck, IconCircleCheck, IconCircleDashed, IconFileTypeDocx, IconPencil, IconPrinter, IconTrash, IconX } from "@tabler/icons-react";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, MONTHS, PageHeader, Panel, Stat, btn, inputClass, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 import { MoneyInput, PercentInput } from "@/Components/Cooperative/inputs";
@@ -12,7 +12,7 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("id-ID", { day: "nume
 const fmtMonth = (d) => { const x = new Date(d); return `${MONTHS[x.getMonth()]} ${x.getFullYear()}`; };
 const SOURCE = { manual: "manual", potong_gaji: "potong gaji", pelunasan: "pelunasan", import: "impor Excel" };
 
-export default function Show({ financing: f, typeLabel, statusLabels, steps, outstanding, otherActive, mutationWarning }) {
+export default function Show({ financing: f, typeLabel, statusLabels, steps, outstanding, otherActive, mutationWarning, wordTemplate }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const [modal, setModal] = useState(null);
@@ -47,6 +47,7 @@ export default function Show({ financing: f, typeLabel, statusLabels, steps, out
                 actions={
                     <>
                         <Link href={route("financing.index", f.type)} className={btn.secondary}><IconArrowLeft size={18} /> Kembali</Link>
+                        {wordTemplate && <a href={route("financing.word", f.id)} className={btn.secondary} title="Formulir Word koperasi terisi data pengajuan ini"><IconFileTypeDocx size={18} /> Unduh formulir (Word)</a>}
                         <a href={route("financing.print", [f.id, "formulir"])} target="_blank" className={btn.secondary}><IconPrinter size={18} /> Cetak formulir</a>
                         {f.disbursed_at && <a href={route("financing.print", [f.id, "pencairan"])} target="_blank" className={btn.secondary}><IconPrinter size={18} /> Bukti pencairan</a>}
                         {canEdit && <Link href={route("financing.edit", f.id)} className={btn.secondary}><IconPencil size={18} /> Ubah</Link>}

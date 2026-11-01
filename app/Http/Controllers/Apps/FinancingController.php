@@ -11,6 +11,7 @@ use App\Models\Setting;
 use App\Services\Cooperative\FinancingImportService;
 use App\Services\Cooperative\FinancingService;
 use App\Services\Cooperative\FinancingSettings;
+use App\Services\Cooperative\FinancingWordForm;
 use App\Services\Cooperative\ImportFileStore;
 use App\Services\Cooperative\NameMatcher;
 use Illuminate\Http\Request;
@@ -54,6 +55,7 @@ class FinancingController extends Controller
                 'income_year' => array_sum($this->service->incomeByCustomer($type, (int) now()->year)),
             ],
             'settings' => FinancingSettings::all(),
+            'templates' => array_intersect_key(app(FinancingWordForm::class)->status(), array_flip($type === 'barang' ? ['barang'] : ['dana_pegawai', 'dana_ppnpn'])),
         ]);
     }
 
@@ -113,6 +115,7 @@ class FinancingController extends Controller
                 ->withSum(['installments as outstanding' => fn ($q) => $q->whereNull('paid_at')], 'amount')
                 ->get(['id', 'type', 'principal', 'disbursed_at']),
             'mutationWarning' => $customer->active_until && $financing->status === 'berjalan',
+            'wordTemplate' => app(FinancingWordForm::class)->templatePath(FinancingWordForm::keyFor($financing)) !== null,
         ]);
     }
 
@@ -213,6 +216,46 @@ class FinancingController extends Controller
             'coop' => FinancingSettings::coop(),
             'ppnpn' => $financing->customer->employee_type === 'PPNPN',
         ]);
+    }
+
+    /** Formulir Word koperasi terisi data pengajuan (template diunggah di Aturan). */
+    public function word(Financing $financing, FinancingWordForm $form)
+    {
+        try {
+            $path = $form->fill($financing);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+        $name = preg_replace('/[^A-Za-z0-9 ._-]+/', '-', 'Formulir '.($financing->number ?: $financing->id).' '.$financing->customer->name);
+
+        return response()->download($path, trim($name).'.docx')->deleteFileAfterSend();
+    }
+
+    public function uploadTemplate(Request $request, string $key, FinancingWordForm $form)
+    {
+        $request->validate(['file' => ['required', 'file', 'mimes:docx', 'max:10240']], ['file.mimes' => 'Template harus file Word .docx.']);
+        try {
+            $form->store($key, $request->file('file'));
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['file' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Template '.FinancingWordForm::TEMPLATES[$key].' disimpan.');
+    }
+
+    public function downloadTemplate(string $key, FinancingWordForm $form)
+    {
+        $path = $form->templatePath($key);
+        abort_unless($path, 404);
+
+        return response()->download($path, FinancingWordForm::TEMPLATES[$key].'.docx');
+    }
+
+    public function deleteTemplate(string $key, FinancingWordForm $form)
+    {
+        $form->delete($key);
+
+        return back()->with('success', 'Template dihapus.');
     }
 
     public function blankForm(Request $request, string $type)

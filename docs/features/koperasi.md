@@ -95,6 +95,10 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
 - Cicilan dicentang lunas manual, otomatis dari potongan gaji, atau pelunasan dipercepat. Tanda macet; peringatan
   bila pegawai mutasi (`active_until`) masih punya sisa.
 - Cetak: formulir permohonan (versi pegawai/PPNPN untuk dana, versi barang), formulir kosong, bukti pencairan (dengan terbilang).
+- **Formulir Word koperasi** (`FinancingWordForm`): template .docx (dana pegawai, dana PPNPN, barang) diunggah sekali di
+  Aturan, disimpan di `storage/app/financing-templates` (tidak masuk git). Tombol *Unduh formulir (Word)* di detail
+  pengajuan mengisi titik-titik isian (nomor, nama/NIP, jabatan, bidang, rekening, telepon, keluarga, jumlah ☑/☐,
+  jangka waktu, kota & tanggal, tanda tangan, kolom persetujuan) — kop surat, gaya, dan S&K tetap seperti template.
 - **Cek Angsuran** (`financing.reconcile`): per pegawai per bulan membandingkan jadwal cicilan, status lunas (monitoring),
   dan potongan gaji `angsuran` dari rekap Master → selisih + tombol tandai lunas sesuai potongan.
 - **Impor**: daftar dana (PEMBIAYAAN KOPERASI / Data Pembiayaan LK), daftar barang, dan Permohonan Pencairan (biaya formulir,
