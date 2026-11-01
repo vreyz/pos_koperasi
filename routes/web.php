@@ -233,6 +233,10 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::post('financing/item/{financing}/disburse', [FinancingController::class, 'disburse'])->middleware('permission:financing-disburse')->name('financing.disburse');
     Route::post('financing/item/{financing}/payoff', [FinancingController::class, 'payOff'])->middleware('permission:financing-disburse')->name('financing.payoff');
     Route::post('financing/item/{financing}/bad-debt', [FinancingController::class, 'toggleBadDebt'])->middleware('permission:financing-approve')->name('financing.bad-debt');
+    Route::get('financing/item/{financing}/word', [FinancingController::class, 'word'])->middleware('permission:financing-access')->name('financing.word');
+    Route::post('financing-templates/{key}', [FinancingController::class, 'uploadTemplate'])->whereIn('key', ['dana_pegawai', 'dana_ppnpn', 'barang'])->middleware('permission:financing-approve')->name('financing.templates.upload');
+    Route::get('financing-templates/{key}', [FinancingController::class, 'downloadTemplate'])->whereIn('key', ['dana_pegawai', 'dana_ppnpn', 'barang'])->middleware('permission:financing-access')->name('financing.templates.download');
+    Route::delete('financing-templates/{key}', [FinancingController::class, 'deleteTemplate'])->whereIn('key', ['dana_pegawai', 'dana_ppnpn', 'barang'])->middleware('permission:financing-approve')->name('financing.templates.delete');
     Route::get('financing/item/{financing}/print/{doc}', [FinancingController::class, 'print'])->middleware('permission:financing-access')->name('financing.print');
     Route::get('financing/{type}/blank-form', [FinancingController::class, 'blankForm'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.blank-form');
     Route::get('financing/{type}', [FinancingController::class, 'index'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.index');
