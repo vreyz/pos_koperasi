@@ -71,6 +71,22 @@ class FinancingService
         return $errors;
     }
 
+    /**
+     * Nomor formulir otomatis: nomor_urut/KOP/FPD|FPB/BULAN_ROMAWI/TAHUN (mis. 01/KOP/FPD/X/2025).
+     * Nomor urut per jenis per tahun, melanjutkan nomor terbesar yang sudah ada (termasuk hasil impor).
+     */
+    public function nextNumber(string $type, ?string $date = null): string
+    {
+        $date = $date ? Carbon::parse($date) : now();
+        $code = $type === 'barang' ? 'FPB' : 'FPD';
+        $year = $date->year;
+        $last = Financing::where('type', $type)->where('number', 'like', "%/{$code}/%{$year}")->pluck('number')
+            ->map(fn ($n) => (int) strtok((string) $n, '/'))->max() ?? 0;
+        $roman = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'][$date->month - 1];
+
+        return sprintf('%02d/KOP/%s/%s/%d', $last + 1, $code, $roman, $year);
+    }
+
     public function advance(Financing $financing, string $step, int $userId): void
     {
         $rule = self::STEPS[$step] ?? throw new RuntimeException('Langkah tidak dikenal.');

@@ -70,13 +70,13 @@ export default function Index({ areas }) {
 
     return (
         <>
-            <Head title="Area Dine-In" />
+            <Head title="Area Kantin" />
 
             <div className="mb-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                            Area Dine-In
+                            Area Kantin
                         </h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             {areas.length} area terdaftar
@@ -174,7 +174,7 @@ export default function Index({ areas }) {
                         Belum Ada Area
                     </h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                        Tambahkan area dine-in pertama Anda.
+                        Tambahkan area kantin pertama Anda.
                     </p>
                     {canCreate && (
                         <Button

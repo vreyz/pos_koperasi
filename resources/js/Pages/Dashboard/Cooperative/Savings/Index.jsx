@@ -25,6 +25,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
     const go = (changes) => router.get(route("savings.index"), { tab, year, ...filters, ...changes }, { preserveState: true, replace: true });
     const savingsTotal = ["pokok", "wajib", "sukarela"].reduce((s, t) => s + Number(totals[t] || 0), 0);
     const num = (v) => (v ? Math.round(v).toLocaleString("id-ID") : "");
+    const num0 = (v) => Math.round(Number(v || 0)).toLocaleString("id-ID");
     const typeOptions = Object.entries(typeLabels).map(([value, label]) => ({ value, label }));
 
     // Riwayat: baris per nama per jenis, atau digabung (pokok+wajib+sukarela) per nama.
@@ -110,9 +111,11 @@ export default function Index({ tab, year, years, filters, recap, history, total
         },
         { key: "employee_type", label: "Jenis", filter: "select", options: ["PNS", "PPPK", "PPNPN", "LAINNYA"].map((v) => ({ value: v, label: v })), value: (r) => r.employee_type, render: (r) => <Badge>{r.employee_type}</Badge> },
         { key: "employment_status", label: "Status", filter: "select", options: statusOptions, value: (r) => r.employment_status || "" },
-        { key: "pokok", label: "Pokok", align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0), render: (r) => num(r.pokok_total) },
-        { key: "wajib", label: "Wajib", align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num(r.wajib_total) },
-        { key: "sukarela", label: "Sukarela", align: "right", filter: "number", value: (r) => Number(r.sukarela_total || 0), render: (r) => num(r.sukarela_total) },
+        // Urutan seperti sheet potongan gaji: Wajib, Pokok, Sukarela (nilai tahun yang dipilih; 0 ditampilkan jelas).
+        { key: "wajib", label: `Wajib ${year}`, align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num0(r.wajib_total) },
+        { key: "pokok", label: `Pokok ${year}`, align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0), render: (r) => num0(r.pokok_total) },
+        { key: "sukarela", label: `Sukarela ${year}`, align: "right", filter: "number", value: (r) => Number(r.sukarela_total || 0), render: (r) => num0(r.sukarela_total) },
+        { key: "year_total", label: `Total ${year}`, align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0) + Number(r.wajib_total || 0) + Number(r.sukarela_total || 0), render: (r) => num0(Number(r.pokok_total || 0) + Number(r.wajib_total || 0) + Number(r.sukarela_total || 0)) },
         { key: "balance", label: `Saldo s.d. ${year}`, align: "right", filter: "number", value: (r) => Number(r.savings_balance || 0), render: (r) => <span className="font-semibold">{num(r.savings_balance)}</span> },
     ];
     const initialHistoryFilters = filters.customer_id ? { name: employees.find((e) => e.id === filters.customer_id)?.name || "" } : {};
@@ -188,7 +191,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
                         columns={recapColumns}
                         initialSort={{ key: "name", dir: "asc" }}
                         emptyText={`Belum ada simpanan di tahun ${year}.`}
-                        footer={sumFooter(recapColumns, ["pokok", "wajib", "sukarela", "balance"])}
+                        footer={sumFooter(recapColumns, ["wajib", "pokok", "sukarela", "year_total", "balance"])}
                     />
                 ) : (
                     <SortableTable

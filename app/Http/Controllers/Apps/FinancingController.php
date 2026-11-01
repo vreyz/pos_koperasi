@@ -85,12 +85,14 @@ class FinancingController extends Controller
             'employees' => $this->employees(),
             'settings' => FinancingSettings::all(),
             'preselect' => $request->integer('customer_id') ?: null,
+            'nextNumber' => $this->service->nextNumber($type),
         ]);
     }
 
     public function store(Request $request, string $type)
     {
         [$data, $customer] = $this->validated($request, $type);
+        $data['number'] = ($data['number'] ?? null) ?: $this->service->nextNumber($type, $data['applied_at'] ?? null);
         $financing = Financing::create($data + ['type' => $type, 'status' => 'pengajuan', 'created_by' => $request->user()->id]);
 
         return to_route('financing.show', $financing)->with('success', 'Pengajuan pembiayaan dibuat. Lanjutkan pemeriksaan, review, lalu persetujuan ketua.');
