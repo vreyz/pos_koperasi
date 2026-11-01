@@ -24,11 +24,20 @@ use RuntimeException;
  *    dipotong dari SHU dulu.
  *  - Sisa dibagi ke jasa simpanan / pembelian / pembiayaan dana / pembiayaan barang sesuai porsi.
  *    Jasa pembiayaan diukur dari pendapatan koperasi (biaya formulir, bagi hasil, biaya lain),
- *    bukan dari cicilan/angsuran.
+ *    bukan dari cicilan/angsuran. Bagian SHU pembiayaan (dalam rupiah) paling banyak 50% dari
+ *    pendapatan koperasi dari pembiayaan itu di tahun Y, supaya tidak membagi lebih dari yang didapat.
  */
 class ShuCalculator
 {
     public const PURCHASE_STATUSES = ['paid', 'unpaid'];
+
+    /** Batas bagian SHU pembiayaan dana/barang terhadap pendapatan koperasi dari pembiayaan tersebut. */
+    public const FINANCING_SHU_MAX_SHARE = 0.5;
+
+    private const FINANCING_PORTIONS = [
+        'dana' => ['portion_financing_dana', 'Pembiayaan Dana', 'biaya formulir'],
+        'barang' => ['portion_financing_barang', 'Pembiayaan Barang', 'bagi hasil + biaya lain'],
+    ];
 
     public function __construct(private readonly FinancingService $financings) {}
 
@@ -54,6 +63,9 @@ class ShuCalculator
         $remainder = $period->total_shu - array_sum($bases) - array_sum($board) - $adjustmentTotal;
         if ($remainder < 0) {
             throw new RuntimeException('SHU dasar ('.$this->rupiah(array_sum($bases)).') + SHU pengurus koperasi ('.$this->rupiah(array_sum($board)).') + koreksi manual ('.$this->rupiah($adjustmentTotal).') melebihi SHU yang dibagi.');
+        }
+        if ($capErrors = $this->financingCapErrors($period, $remainder)) {
+            throw new RuntimeException(implode(' ', $capErrors));
         }
 
         $components = ['savings' => 'portion_savings', 'purchases' => 'portion_purchases', 'dana' => 'portion_financing_dana', 'barang' => 'portion_financing_barang'];
@@ -159,11 +171,52 @@ class ShuCalculator
             'purchase_buyers' => count($data['purchases']),
             'financing_dana_total' => array_sum($data['dana']),
             'financing_barang_total' => array_sum($data['barang']),
+            // Pendapatan koperasi dari semua pembiayaan di tahun Y (dasar batas 50% bagian SHU pembiayaan).
+            'financing_dana_income' => $this->financingIncome('dana', $period->year),
+            'financing_barang_income' => $this->financingIncome('barang', $period->year),
+            'financing_max_share' => self::FINANCING_SHU_MAX_SHARE,
             'adjustment_total' => (int) $adjustments->sum('amount'),
             'board_total' => array_sum($this->boardBonuses($period)),
             // Pegawai aktif yang belanja di tahun Y tapi tidak tercatat iuran di tahun Y (bahan pertimbangan pengecualian).
             'buyers_without_dues' => collect($data['purchases'])->diffKeys($payers)->map(fn ($amount, $id) => ['customer_id' => $id, 'amount' => $amount])->values()->all(),
         ];
+    }
+
+    /**
+     * Bagian SHU pembiayaan dana/barang (rupiah) yang melebihi 50% pendapatan koperasi dari pembiayaan itu.
+     * Tanpa $remainder, sisa SHU dihitung dari pengaturan periode (dipakai saat menyimpan pengaturan).
+     *
+     * @return array<string, string> kolom porsi => pesan
+     */
+    public function financingCapErrors(ShuPeriod $period, ?float $remainder = null): array
+    {
+        if ($remainder === null) {
+            $summary = $this->summary($period);
+            $remainder = $period->total_shu - $summary['base_total'] - $summary['board_total'] - $summary['adjustment_total'];
+        }
+        $remainder = max(0.0, $remainder);
+
+        $errors = [];
+        foreach (self::FINANCING_PORTIONS as $type => [$field, $label, $source]) {
+            $pool = $remainder * $period->{$field} / 100;
+            if ($pool <= 0) {
+                continue;
+            }
+            $income = $this->financingIncome($type, $period->year);
+            $cap = $income * self::FINANCING_SHU_MAX_SHARE;
+            if ($pool > $cap + 0.5) {
+                $maxPercent = $remainder > 0 ? floor($cap / $remainder * 10000) / 100 : 0;
+                $errors[$field] = "Bagian SHU {$label} {$period->{$field}}% = {$this->rupiah((int) round($pool))} melebihi 50% pendapatan {$label} {$period->year} "
+                    ."({$source} {$this->rupiah($income)}, maksimal {$this->rupiah((int) floor($cap))}). Isi paling banyak ".str_replace('.', ',', (string) $maxPercent).'%.';
+            }
+        }
+
+        return $errors;
+    }
+
+    private function financingIncome(string $type, int $year): int
+    {
+        return array_sum($this->financings->incomeByCustomer($type, $year));
     }
 
     /**

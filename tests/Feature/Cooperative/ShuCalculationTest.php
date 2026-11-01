@@ -13,6 +13,7 @@ use App\Services\Cooperative\ShuCalculator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+use RuntimeException;
 use Tests\TestCase;
 
 class ShuCalculationTest extends TestCase
@@ -227,7 +228,7 @@ class ShuCalculationTest extends TestCase
         $dana = Financing::create($service->compute(['type' => 'dana', 'principal' => 15000000, 'tenor' => 10], $b) + ['type' => 'dana', 'customer_id' => $b->id, 'status' => 'berjalan', 'disbursed_at' => '2025-02-10', 'first_due_month' => '2025-03-01']);
         $service->buildSchedule($dana, 3);
         $barang = Financing::create($service->compute(['type' => 'barang', 'principal' => 12000000, 'tenor' => 12, 'margin_percent' => 7.5, 'admin_fee' => 0], $a) + ['type' => 'barang', 'customer_id' => $a->id, 'status' => 'berjalan', 'disbursed_at' => '2025-06-10', 'first_due_month' => '2025-07-01']);
-        $service->buildSchedule($barang, 2);  // 2 cicilan × bagi hasil 75.000
+        $service->buildSchedule($barang, 3);  // 3 cicilan × bagi hasil 75.000 → batas 50% = 112.500 ≥ bagian barang 100rb
 
         $period = $this->period(['sales_source' => 'pos', 'total_shu' => 1200000, 'portion_savings' => 50, 'portion_purchases' => 30, 'portion_financing_dana' => 10, 'portion_financing_barang' => 10, 'rounding' => 'ceil']);
         app(ShuCalculator::class)->calculate($period);
@@ -235,11 +236,68 @@ class ShuCalculationTest extends TestCase
 
         $this->assertSame(400000, $alloc[$a->id]->purchase_amount);
         $this->assertSame(750000, $alloc[$b->id]->financing_dana_amount);
-        $this->assertSame(150000, $alloc[$a->id]->financing_barang_amount);
+        $this->assertSame(225000, $alloc[$a->id]->financing_barang_amount);
         // sisa 1jt: simpanan 500rb rata, belanja 300rb A, dana 100rb B, barang 100rb A
         $this->assertEqualsWithDelta(100000 + 250000 + 300000 + 100000, $alloc[$a->id]->total, 0.01);
         $this->assertEqualsWithDelta(100000 + 250000 + 100000, $alloc[$b->id]->total, 0.01);
         $this->assertSame(750000, $alloc[$a->id]->total_rounded);
+    }
+
+    public function test_financing_portion_cannot_exceed_half_of_financing_income(): void
+    {
+        // 3 pegawai pinjam dana 10 jt → biaya formulir 3 × 500rb = 1,5 jt → bagian SHU dana maks 750rb.
+        $service = app(FinancingService::class);
+        foreach (['A', 'B', 'C'] as $name) {
+            $person = $this->person($name);
+            $this->pay($person, 'wajib', 2025, [1], 100000);
+            Financing::create($service->compute(['type' => 'dana', 'principal' => 10000000, 'tenor' => 10], $person)
+                + ['type' => 'dana', 'customer_id' => $person->id, 'status' => 'berjalan', 'disbursed_at' => '2025-03-10', 'first_due_month' => '2025-04-01']);
+        }
+        // Sisa SHU = 10,3 jt − base 300rb = 10 jt.
+        $period = $this->period(['total_shu' => 10300000, 'portion_savings' => 60, 'portion_purchases' => 30, 'portion_financing_dana' => 10]);
+        $calculator = app(ShuCalculator::class);
+
+        $this->assertSame(1500000, $calculator->summary($period)['financing_dana_income']);
+        $errors = $calculator->financingCapErrors($period);
+        $this->assertArrayHasKey('portion_financing_dana', $errors);
+        $this->assertStringContainsString('Isi paling banyak 7,5%', $errors['portion_financing_dana']);
+        $this->assertArrayNotHasKey('portion_financing_barang', $errors);
+        try {
+            $calculator->calculate($period);
+            $this->fail('Bagian SHU dana 1 jt melebihi batas 750rb, seharusnya ditolak.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('melebihi 50% pendapatan Pembiayaan Dana 2025', $e->getMessage());
+        }
+        $this->assertSame(0, $period->allocations()->count());
+
+        // Tepat 50% (7,5% × 10 jt = 750rb) boleh.
+        $period->update(['portion_savings' => 62.5, 'portion_financing_dana' => 7.5]);
+        $this->assertSame([], $calculator->financingCapErrors($period->fresh()));
+        $calculator->calculate($period->fresh());
+        $this->assertEqualsWithDelta(750000, $period->allocations()->sum('shu_financing_dana'), 0.05);
+    }
+
+    public function test_saving_shu_settings_rejects_financing_portion_above_cap(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo(['shu-access', 'shu-manage']);
+        $person = $this->person('A');
+        $this->pay($person, 'wajib', 2025, [1], 100000);
+        Financing::create(app(FinancingService::class)->compute(['type' => 'dana', 'principal' => 10000000, 'tenor' => 10], $person)
+            + ['type' => 'dana', 'customer_id' => $person->id, 'status' => 'berjalan', 'disbursed_at' => '2025-03-10', 'first_due_month' => '2025-04-01']);
+        $period = $this->period();
+        $settings = [
+            'total_shu' => 1100000, 'base_per_person' => 100000, 'base_requires_savings' => true, 'base_for_ppnpn' => true, 'base_mode' => 'full',
+            'portion_savings' => 50, 'portion_purchases' => 30, 'portion_financing_dana' => 20, 'portion_financing_barang' => 0,
+            'savings_types' => ['pokok', 'wajib', 'sukarela'], 'savings_period' => 'year', 'sales_source' => 'excel', 'rounding' => 'round', 'rounding_unit' => 1000,
+        ];
+
+        // Biaya formulir 500rb → batas 250rb. Sisa SHU 1 jt × 20% = 200rb → boleh.
+        $this->actingAs($user)->put(route('shu.update', $period), $settings)->assertSessionHasNoErrors();
+        // 30% = 300rb > 250rb → ditolak, pengaturan lama tetap.
+        $this->actingAs($user)->put(route('shu.update', $period), ['portion_savings' => 40, 'portion_financing_dana' => 30] + $settings)
+            ->assertSessionHasErrors('portion_financing_dana');
+        $this->assertEquals(20, $period->fresh()->portion_financing_dana);
     }
 
     public function test_shu_pages_excel_import_and_name_mapping(): void

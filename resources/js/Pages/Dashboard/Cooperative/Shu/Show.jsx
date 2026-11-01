@@ -51,6 +51,17 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
     const boardTotal = (form.board_members || []).reduce((sum, m) => sum + Number(form.board_amount || 0) * m.months.length, 0);
     const boardPerMonth = MONTH_SHORT.map((_, i) => (form.board_members || []).filter((m) => m.customer_id && m.months.includes(i + 1)).length);
     const remainder = Number(form.total_shu || 0) - stats.base_total - boardTotal - stats.adjustment_total;
+    // Bagian SHU pembiayaan (rupiah) paling banyak 50% pendapatan koperasi dari pembiayaan itu di tahun buku.
+    const financingCap = (portionKey, incomeKey) => {
+        const income = Number(stats[incomeKey] || 0);
+        const cap = income * Number(stats.financing_max_share ?? 0.5);
+        const pool = (Math.max(remainder, 0) * Number(form[portionKey] || 0)) / 100;
+        const maxPercent = remainder > 0 ? Math.floor((cap / remainder) * 10000) / 100 : 0;
+        return { income, cap, pool, maxPercent: maxPercent.toLocaleString("id-ID"), over: pool > cap + 0.5 };
+    };
+    const danaCap = financingCap("portion_financing_dana", "financing_dana_income");
+    const barangCap = financingCap("portion_financing_barang", "financing_barang_income");
+    const capError = (c) => (c.over ? `${rupiah(c.pool)} melebihi 50% pendapatan (${rupiah(c.cap)}). Maks ${c.maxPercent}%.` : null);
     const employeeById = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
     const empOptions = useMemo(() => employeeOptions(employees), [employees]);
     const dirty = SETTING_KEYS.some((k) => JSON.stringify(form[k]) !== JSON.stringify(period[k] ?? empty(k)));
@@ -226,10 +237,10 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     <Field label="Belanja Toko" error={errors.portion_purchases} hint="total belanja" tip="Bagian ini dibagi sebanding total belanja tiap pegawai di toko koperasi (POS atau impor Excel) dibanding total belanja semua pegawai.">
                                         <PercentInput value={form.portion_purchases} onChange={(v) => setForm({ ...form, portion_purchases: v })} />
                                     </Field>
-                                    <Field label="Pembiayaan Dana" error={errors.portion_financing_dana} hint="biaya formulir" tip="Bagian ini dibagi sebanding biaya formulir yang dibayar tiap pegawai untuk pembiayaan dana yang dicairkan di tahun buku ini. Cicilan pokoknya tidak dihitung.">
+                                    <Field label="Pembiayaan Dana" error={errors.portion_financing_dana || capError(danaCap)} hint={`biaya formulir ${rupiah(danaCap.income)} · maks ${danaCap.maxPercent}%`} tip="Bagian ini dibagi sebanding biaya formulir yang dibayar tiap pegawai untuk pembiayaan dana yang dicairkan di tahun buku ini. Cicilan pokoknya tidak dihitung. Dalam rupiah tidak boleh melebihi 50% total biaya formulir yang diterima koperasi di tahun buku ini.">
                                         <PercentInput value={form.portion_financing_dana} onChange={(v) => setForm({ ...form, portion_financing_dana: v })} />
                                     </Field>
-                                    <Field label="Pembiayaan Barang" error={errors.portion_financing_barang} hint="bagi hasil + biaya lain" tip="Bagian ini dibagi sebanding bagi hasil (dari cicilan yang dibayar di tahun buku) + biaya lain saat pencairan, per pegawai. Cicilan pokoknya tidak dihitung.">
+                                    <Field label="Pembiayaan Barang" error={errors.portion_financing_barang || capError(barangCap)} hint={`bagi hasil + biaya lain ${rupiah(barangCap.income)} · maks ${barangCap.maxPercent}%`} tip="Bagian ini dibagi sebanding bagi hasil (dari cicilan yang dibayar di tahun buku) + biaya lain saat pencairan, per pegawai. Cicilan pokoknya tidak dihitung. Dalam rupiah tidak boleh melebihi 50% total bagi hasil + biaya lain yang diterima koperasi di tahun buku ini.">
                                         <PercentInput value={form.portion_financing_barang} onChange={(v) => setForm({ ...form, portion_financing_barang: v })} />
                                     </Field>
                                 </div>
