@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Apps;
 
+use App\Exports\ArrayExport;
 use App\Http\Controllers\Controller;
 use App\Models\BoardDecree;
 use App\Models\Customer;
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
 
 /** Menu Pengurus Koperasi: upload SK, daftar pengurus tersimpan bersama file SK-nya. */
 class BoardController extends Controller
@@ -29,6 +31,19 @@ class BoardController extends Controller
             'positions' => BoardService::POSITIONS,
             'employees' => Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type', 'employment_status']),
         ]);
+    }
+
+    public function export()
+    {
+        $rows = [];
+        foreach (BoardDecree::with('members.customer:id,name,nip')->orderBy('effective_from')->get() as $d) {
+            foreach ($d->members as $m) {
+                $rows[] = [$d->number, $d->decree_date?->format('d/m/Y'), $d->effective_from->format('d/m/Y'), $d->effective_until?->format('d/m/Y') ?? 'sampai SK berikutnya',
+                    $m->position, $m->customer?->nip, $m->customer?->name];
+            }
+        }
+
+        return Excel::download(new ArrayExport(['Nomor SK', 'Tanggal SK', 'Berlaku Mulai', 'Berlaku Sampai', 'Jabatan', 'NIP', 'Nama'], $rows, ['F' => '@']), 'pengurus-koperasi.xlsx');
     }
 
     /** Baca nama pengurus dari SK yang baru dipilih (belum disimpan). */

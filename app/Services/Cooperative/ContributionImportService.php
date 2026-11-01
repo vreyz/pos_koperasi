@@ -11,6 +11,9 @@ use RuntimeException;
  * Import rekap potongan simpanan per bulan (format sheet "Master": Nama Pegawai,
  * Wajib, Pokok, Sukarela, Angsuran Koperasi, Bulan, Tahun; kolom NIP opsional).
  * Import ulang untuk periode yang sama menimpa data import sebelumnya, tidak dobel.
+ *
+ * Format unduhan aplikasi memakai kolom "Total Pokok/Wajib/Sukarela": nilainya adalah total
+ * bulan itu (termasuk catatan manual), jadi unggah ulang hanya menyesuaikan selisihnya.
  */
 class ContributionImportService
 {
@@ -21,6 +24,9 @@ class ContributionImportService
         'wajib' => ['wajib', 'simpanan wajib'],
         'sukarela' => ['sukarela', 'simpanan sukarela'],
         'angsuran' => ['angsuran koperasi', 'angsuran pinjaman', 'angsuran'],
+        'total_pokok' => ['total pokok'],
+        'total_wajib' => ['total wajib'],
+        'total_sukarela' => ['total sukarela'],
         'month' => ['bulan'],
         'year' => ['tahun'],
     ];
@@ -69,8 +75,14 @@ class ContributionImportService
                     $amounts[$type] = SpreadsheetReader::money($row[$map[$type]] ?? 0);
                 }
             }
+            $totals = [];
+            foreach (MemberContribution::SAVINGS_TYPES as $type) {
+                if (isset($map['total_'.$type])) {
+                    $totals[$type] = SpreadsheetReader::money($row[$map['total_'.$type]] ?? 0);
+                }
+            }
             $nip = isset($map['nip']) ? Nip::normalize($row[$map['nip']] ?? '') : '';
-            $parsed[] = ['nip' => $nip !== '' ? $nip : null, 'name' => $name, 'year' => $year, 'month' => $month, 'amounts' => $amounts];
+            $parsed[] = ['nip' => $nip !== '' ? $nip : null, 'name' => $name, 'year' => $year, 'month' => $month, 'amounts' => $amounts, 'totals' => $totals];
         }
 
         return $parsed;
@@ -106,7 +118,7 @@ class ContributionImportService
             }
             $period = sprintf('%04d-%02d', $row['year'], $row['month']);
             $names[$key]['rows']++;
-            $names[$key]['total'] += array_sum($row['amounts']);
+            $names[$key]['total'] += array_sum($row['amounts']) + array_sum($row['totals'] ?? []);
             $names[$key]['first'] = min($names[$key]['first'] ?? $period, $period);
             $names[$key]['last'] = max($names[$key]['last'] ?? $period, $period);
         }
@@ -131,6 +143,8 @@ class ContributionImportService
             $resolved = [];
             $periods = [];
             $insert = [];
+            $targets = []; // [customer, type, year, month, total] dari kolom "Total ..."
+
             $now = now();
             foreach ($parsed as $row) {
                 $key = NameMatcher::normalize($row['name']);
@@ -162,6 +176,9 @@ class ContributionImportService
                 }
 
                 $periods[$row['year']][$row['month']][$customerId] = true;
+                foreach ($row['totals'] ?? [] as $type => $total) {
+                    $targets[] = [$customerId, $type, $row['year'], $row['month'], $total, $row['name']];
+                }
                 foreach ($row['amounts'] as $type => $amount) {
                     if ($amount === 0) {
                         continue;
@@ -181,16 +198,39 @@ class ContributionImportService
                 }
             }
 
-            // Timpa hasil import sebelumnya untuk pegawai & periode yang sama.
+            // Timpa hasil import sebelumnya untuk pegawai, periode, dan jenis yang ada di file
+            // (file tanpa kolom angsuran tidak menghapus angsuran).
+            $types = array_values(array_unique(array_merge(...array_map(fn ($r) => [...array_keys($r['amounts']), ...array_keys($r['totals'] ?? [])], $parsed ?: [['amounts' => []]]))));
             foreach ($periods as $year => $months) {
                 foreach ($months as $month => $customers) {
                     foreach (array_chunk(array_keys($customers), 500) as $ids) {
                         MemberContribution::where('source', 'import')
+                            ->whereIn('type', $types)
                             ->where('period_year', $year)
                             ->where('period_month', $month)
                             ->whereIn('customer_id', $ids)
                             ->delete();
                     }
+                }
+            }
+            // Kolom total: catatan import = total − catatan lain (manual/tunai) di bulan itu, supaya tidak dobel.
+            $others = [];
+            foreach (array_chunk(array_unique(array_column($targets, 0)), 500) as $ids) {
+                MemberContribution::whereIn('customer_id', $ids)->whereIn('type', MemberContribution::SAVINGS_TYPES)
+                    ->selectRaw('customer_id, type, period_year, period_month, SUM(amount) as total')
+                    ->groupBy('customer_id', 'type', 'period_year', 'period_month')->get()
+                    ->each(function ($r) use (&$others) {
+                        $others["{$r->customer_id}|{$r->type}|{$r->period_year}|{$r->period_month}"] = (int) $r->total;
+                    });
+            }
+            foreach ($targets as [$customerId, $type, $year, $month, $total, $sourceName]) {
+                $other = $others["{$customerId}|{$type}|{$year}|{$month}"] ?? 0;
+                if ($total - $other !== 0) {
+                    $insert[] = [
+                        'customer_id' => $customerId, 'type' => $type, 'period_year' => $year, 'period_month' => $month,
+                        'amount' => $total - $other, 'source' => 'import', 'source_name' => $sourceName,
+                        'created_by' => $userId, 'created_at' => $now, 'updated_at' => $now,
+                    ];
                 }
             }
             foreach (array_chunk($insert, 500) as $chunk) {
@@ -225,7 +265,7 @@ class ContributionImportService
             }
         }
 
-        $hasAmount = array_intersect(array_keys($map), MemberContribution::TYPES) !== [];
+        $hasAmount = array_intersect(array_keys($map), [...MemberContribution::TYPES, 'total_pokok', 'total_wajib', 'total_sukarela']) !== [];
 
         return isset($map['name'], $map['year'], $map['month']) && $hasAmount ? $map : null;
     }

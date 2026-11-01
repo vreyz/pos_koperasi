@@ -24,6 +24,11 @@ class FinancingImportService
     private const MONTHS = ['januari' => 1, 'februari' => 2, 'pebruari' => 2, 'maret' => 3, 'april' => 4, 'mei' => 5, 'juni' => 6,
         'juli' => 7, 'agustus' => 8, 'september' => 9, 'oktober' => 10, 'november' => 11, 'nopember' => 11, 'desember' => 12];
 
+    /** Kolom file unduhan aplikasi (Pembiayaan → Unduh Excel). */
+    public const APP_HEADERS = ['Jenis Pembiayaan', 'Nomor Formulir', 'NIP', 'Nama Pemohon', 'Nama Barang', 'Tanggal Permohonan', 'Tanggal Cair',
+        'Nominal', 'Bagi Hasil (%)', 'Biaya Formulir / Biaya Lain', 'Tenor (bulan)', 'Cicilan per Bulan', 'Cicilan Terbayar', 'Sisa Cicilan',
+        'Status', 'Macet', 'Bank', 'No Rekening', 'Catatan'];
+
     public function __construct(private readonly FinancingService $financings) {}
 
     /**
@@ -52,6 +57,7 @@ class FinancingImportService
                     continue;
                 }
                 $parsed = match ($kind) {
+                    'app' => $this->appRow($row, $map),
                     'dana' => $this->danaRow($row, $map),
                     'barang' => $this->barangRow($row, $map),
                     'pencairan' => $this->disbursementRow($row, $map),
@@ -93,7 +99,7 @@ class FinancingImportService
 
                 continue;
             }
-            $id = $matcher->match($row['name']);
+            $id = (! empty($row['nip']) ? Customer::where('nip', $row['nip'])->value('id') : null) ?? $matcher->match($row['name']);
             $names[$key] = [
                 'key' => $key,
                 'name' => $row['name'],
@@ -169,7 +175,7 @@ class FinancingImportService
                     'notes' => $row['note'] ?? null,
                     'status' => 'berjalan',
                     'created_by' => $userId,
-                ];
+                ] + array_filter(['bank_name' => $row['bank_name'] ?? null, 'bank_account' => $row['bank_account'] ?? null]);
 
                 $existing = Financing::where('type', $row['type'])
                     ->where('customer_id', $customer->id)
@@ -178,7 +184,8 @@ class FinancingImportService
                     ->first();
 
                 if ($existing) {
-                    $existing->update(collect($attributes)->except(['status', 'created_by', 'admin_fee'])->all());
+                    // File LK tidak memuat biaya formulir (diisi dari daftar pencairan); file unduhan aplikasi memuatnya.
+                    $existing->update(collect($attributes)->except(['status', 'created_by', ...(($row['kind'] ?? null) === 'app' ? [] : ['admin_fee'])])->all());
                     $alreadyPaid = $existing->installments()->whereNotNull('paid_at')->count();
                     if ($row['paid'] > $alreadyPaid) {
                         $existing->installments()->whereNull('paid_at')->orderBy('seq')->limit($row['paid'] - $alreadyPaid)->get()
@@ -262,6 +269,17 @@ class FinancingImportService
         };
         $name = $find(['nama pemohon']);
 
+        // File unduhan aplikasi sendiri.
+        if ($name !== null && ($type = $find(['jenis pembiayaan'])) !== null) {
+            $col = fn (string $header) => $find([SpreadsheetReader::label($header)]);
+
+            return ['app', ['type' => $type, 'name' => $name] + array_combine(
+                ['number', 'nip', 'item', 'applied', 'date', 'principal', 'margin', 'admin', 'tenor', 'installment', 'paid', 'status', 'bad_debt', 'bank', 'account', 'note'],
+                array_map($col, ['Nomor Formulir', 'NIP', 'Nama Barang', 'Tanggal Permohonan', 'Tanggal Cair', 'Nominal', 'Bagi Hasil (%)',
+                    'Biaya Formulir / Biaya Lain', 'Tenor (bulan)', 'Cicilan per Bulan', 'Cicilan Terbayar', 'Status', 'Macet', 'Bank', 'No Rekening', 'Catatan']),
+            )];
+        }
+
         // Barang dicek dulu: sheet barang juga punya kolom "Nominal Pembiayaan Dana yang disetujui".
         if ($name !== null && ($principal = $find(['nominal pengajuan'])) !== null) {
             return ['barang', [
@@ -313,6 +331,40 @@ class FinancingImportService
         }
 
         return null;
+    }
+
+    private function appRow(array $row, array $map): ?array
+    {
+        $cell = fn (string $key) => $map[$key] === null ? null : ($row[$map[$key]] ?? null);
+        $text = fn (string $key) => trim((string) ($cell($key) ?? '')) ?: null;
+        $name = $text('name');
+        $principal = SpreadsheetReader::money($cell('principal') ?? 0);
+        if (! $name || $principal <= 0 || str_contains(strtolower((string) $text('status')), 'tolak')) {
+            return null;
+        }
+        $type = str_contains(strtolower((string) $text('type')), 'barang') ? 'barang' : 'dana';
+
+        return [
+            'type' => $type,
+            'kind' => 'app',
+            'name' => $name,
+            'nip' => Nip::normalize((string) $cell('nip')) ?: null,
+            'number' => $text('number'),
+            'item_name' => $text('item'),
+            'applied_at' => $this->date($cell('applied')),
+            'disbursed_at' => $this->date($cell('date')),
+            'principal' => $principal,
+            'margin_percent' => $type === 'barang' ? (float) str_replace(',', '.', (string) ($cell('margin') ?? 0)) : null,
+            'admin_fee' => SpreadsheetReader::money($cell('admin') ?? 0),
+            'tenor' => max(1, min((int) $cell('tenor') ?: 1, 36)),
+            'installment' => SpreadsheetReader::money($cell('installment') ?? 0) ?: null,
+            'transferred' => null,
+            'paid' => (int) $cell('paid'),
+            'bad_debt' => in_array(strtolower((string) $text('bad_debt')), ['ya', 'y', 'macet', '1', 'true'], true),
+            'bank_name' => $text('bank'),
+            'bank_account' => $text('account'),
+            'note' => $text('note'),
+        ];
     }
 
     private function danaRow(array $row, array $map): ?array
@@ -439,6 +491,9 @@ class FinancingImportService
         }
         if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $text, $m)) {
             return "{$m[1]}-{$m[2]}-{$m[3]}";
+        }
+        if (preg_match('/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/', $text, $m) && checkdate((int) $m[2], (int) $m[1], (int) $m[3])) {
+            return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]); // dd/mm/yyyy (file unduhan aplikasi)
         }
 
         return null;

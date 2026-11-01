@@ -27,7 +27,7 @@ export default function Import({ preview, employees }) {
             <PageHeader
                 icon={IconFileSpreadsheet}
                 title="Impor Data Pembiayaan"
-                subtitle="Bisa file PEMBIAYAAN KOPERASI (sheet dana pegawai, dana PPNPN, barang), Data Pembiayaan LK, atau Permohonan Pencairan Dana (biaya formulir & rekening). Impor ulang tidak membuat data dobel."
+                subtitle="Bisa file PEMBIAYAAN KOPERASI (sheet dana pegawai, dana PPNPN, barang), Data Pembiayaan LK, Permohonan Pencairan Dana (biaya formulir & rekening), atau file hasil Unduh Excel dari aplikasi. Impor ulang tidak membuat data dobel: kontrak yang sama diperbarui."
                 actions={<Link href={route("financing.index", "dana")} className={btn.secondary}><IconArrowLeft size={18} /> Kembali</Link>}
             />
             <Panel title="1. Upload file Excel" className="mb-6">

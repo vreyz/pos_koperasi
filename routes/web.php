@@ -190,6 +190,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     // Koperasi: pegawai, simpanan, SHU
     Route::get('employees', [EmployeeController::class, 'index'])->middleware('permission:employees-access')->name('employees.index');
     Route::get('employees/export', [EmployeeController::class, 'export'])->middleware('permission:employees-access')->name('employees.export');
+    Route::get('cooperative-members/export', [EmployeeController::class, 'exportMembers'])->middleware('permission:employees-access')->name('cooperative-members.export');
     Route::get('employees/import', [EmployeeController::class, 'import'])->middleware('permission:employees-import')->name('employees.import');
     Route::get('employees/import/template', [EmployeeController::class, 'template'])->middleware('permission:employees-import')->name('employees.import.template');
     Route::post('employees/import/preview', [EmployeeController::class, 'previewImport'])->middleware('permission:employees-import')->name('employees.import.preview');
@@ -204,6 +205,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
 
     Route::get('savings', [MemberContributionController::class, 'index'])->middleware('permission:savings-access')->name('savings.index');
     Route::get('savings/export', [MemberContributionController::class, 'export'])->middleware('permission:savings-access')->name('savings.export');
+    Route::get('savings/export-data', [MemberContributionController::class, 'exportData'])->middleware('permission:savings-access')->name('savings.export-data');
     Route::get('savings/import', [MemberContributionController::class, 'import'])->middleware('permission:savings-import')->name('savings.import');
     Route::get('savings/import/template', [MemberContributionController::class, 'template'])->middleware('permission:savings-import')->name('savings.import.template');
     Route::post('savings/import/preview', [MemberContributionController::class, 'previewImport'])->middleware('permission:savings-import')->name('savings.import.preview');
@@ -215,6 +217,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     // Pembiayaan Dana & Barang
     Route::get('financing-reconcile', [FinancingController::class, 'reconcile'])->middleware('permission:financing-access')->name('financing.reconcile');
     Route::post('financing-reconcile/mark', [FinancingController::class, 'markFromPayroll'])->middleware('permission:financing-disburse')->name('financing.reconcile.mark');
+    Route::get('financing-export/{type}', [FinancingController::class, 'export'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.export');
     Route::get('financing-import', [FinancingController::class, 'import'])->middleware('permission:financing-import')->name('financing.import');
     Route::post('financing-import/preview', [FinancingController::class, 'previewImport'])->middleware('permission:financing-import')->name('financing.import.preview');
     Route::post('financing-import/commit', [FinancingController::class, 'commitImport'])->middleware('permission:financing-import')->name('financing.import.commit');
@@ -240,6 +243,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::post('board', [BoardController::class, 'store'])->middleware('permission:board-manage')->name('board.store');
     Route::put('board/{decree}', [BoardController::class, 'update'])->middleware('permission:board-manage')->name('board.update');
     Route::delete('board/{decree}', [BoardController::class, 'destroy'])->middleware('permission:board-manage')->name('board.destroy');
+    Route::get('board-export', [BoardController::class, 'export'])->middleware('permission:board-access')->name('board.export');
     Route::get('board/{decree}/file', [BoardController::class, 'file'])->middleware('permission:board-access')->name('board.file');
     Route::get('shu', [ShuController::class, 'index'])->middleware('permission:shu-access')->name('shu.index');
     Route::post('shu', [ShuController::class, 'store'])->middleware('permission:shu-manage')->name('shu.store');
