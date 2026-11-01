@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\CashierShift;
+use App\Models\Customer;
 use App\Models\DineOrder;
 use App\Models\ProductBatch;
 use App\Models\ProductWarehouse;
 use App\Models\Transaction;
+use App\Services\Cooperative\PayrollReceivableService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -208,6 +210,43 @@ class DineOrderService
                 'transaction_id' => $transaction->id,
                 'cashier_id' => $userId,
             ]);
+        });
+    }
+
+    /**
+     * Bayar pesanan kantin yang sudah diterima: Tunai, QRIS, Transfer, Kartu, atau Potong Gaji
+     * (piutang pegawai yang dilunasi dari Potong Gaji Koperasi).
+     */
+    public function pay(DineOrder $order, string $method, ?int $customerId): void
+    {
+        $allowed = ['cash', 'qris_manual', 'bank_transfer', 'card', PayrollReceivableService::POTONG_GAJI];
+        if (! in_array($method, $allowed, true)) {
+            throw ValidationException::withMessages(['method' => 'Metode pembayaran tidak valid.']);
+        }
+
+        DB::transaction(function () use ($order, $method, $customerId) {
+            $order = DineOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $transaction = $order->transaction_id ? Transaction::whereKey($order->transaction_id)->lockForUpdate()->first() : null;
+            if ($order->status !== DineOrder::STATUS_ACCEPTED || ! $transaction || $transaction->payment_status === 'paid') {
+                throw ValidationException::withMessages(['method' => 'Pesanan ini tidak bisa dibayar (belum diterima atau sudah lunas).']);
+            }
+
+            if ($method === PayrollReceivableService::POTONG_GAJI) {
+                $payroll = app(PayrollReceivableService::class);
+                $customer = $payroll->ensureEmployee(Customer::find($customerId ?: $order->customer_id));
+                $transaction->update(['customer_id' => $customer->id, 'payment_method' => $method, 'payment_status' => 'unpaid']);
+                $payroll->open($transaction, $customer);
+                $order->update(['customer_id' => $customer->id, 'payment_method' => $method, 'payment_status' => 'unpaid', 'status' => DineOrder::STATUS_COMPLETED]);
+
+                return;
+            }
+
+            $transaction->update([
+                'payment_method' => $method,
+                'payment_status' => 'paid',
+                'cash' => $method === 'cash' ? (int) $transaction->grand_total : 0,
+            ]);
+            $order->update(['payment_method' => $method, 'payment_status' => 'paid', 'status' => DineOrder::STATUS_COMPLETED]);
         });
     }
 

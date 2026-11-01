@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Apps;
 
 use App\Http\Controllers\Controller;
+use App\Models\Customer;
 use App\Models\DineOrder;
 use App\Models\Outlet;
 use App\Services\DineOrderService;
@@ -39,6 +40,7 @@ class DineOrderController extends Controller
 
         return Inertia::render('Dashboard/DineIn/Orders/Index', [
             'orders' => $orders,
+            'employees' => Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type', 'employment_status']),
         ]);
     }
 
@@ -48,6 +50,15 @@ class DineOrderController extends Controller
         $this->service->accept($dineOrder);
 
         return back()->with('success', 'Pesanan diterima dan siap diproses di kasir.');
+    }
+
+    public function pay(Request $request, DineOrder $dineOrder)
+    {
+        $this->ensureOutletAccess($request, $dineOrder);
+        $data = $request->validate(['method' => 'required|string', 'customer_id' => 'nullable|integer|exists:customers,id']);
+        $this->service->pay($dineOrder, $data['method'], $data['customer_id'] ?? null);
+
+        return back()->with('success', $data['method'] === 'potong_gaji' ? 'Pesanan dicatat sebagai Potong Gaji.' : 'Pembayaran pesanan dicatat.');
     }
 
     public function reject(Request $request, DineOrder $dineOrder)

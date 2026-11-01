@@ -320,13 +320,17 @@ export default function Index({
               )
             : [];
 
+        // Koperasi: Tunai, QRIS, Transfer, Kartu Debit/Kredit, Potong Gaji.
+        const hasGatewayQris = options.some((o) => o.value === "qris");
+        const transfer = options.filter((o) => o.value === "bank_transfer").map((o) => ({ ...o, label: "Transfer" }));
+        const others = options.filter((o) => o.value !== "bank_transfer");
         return [
-            {
-                value: "cash",
-                label: "Tunai",
-                description: "Pembayaran tunai langsung di kasir.",
-            },
-            ...options,
+            { value: "cash", label: "Tunai", description: "Pembayaran tunai langsung di kasir." },
+            ...(hasGatewayQris ? [] : [{ value: "qris_manual", label: "QRIS", description: "Pelanggan scan QRIS koperasi; kasir cek dana masuk." }]),
+            ...transfer,
+            { value: "card", label: "Kartu Debit/Kredit", description: "Gesek / tap kartu di mesin EDC." },
+            { value: "potong_gaji", label: "Potong Gaji", description: "Dipotong dari gaji pegawai (pelanggan harus pegawai)." },
+            ...others,
         ];
     }, [paymentGateways]);
 

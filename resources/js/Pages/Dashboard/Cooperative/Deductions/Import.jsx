@@ -96,6 +96,7 @@ export default function Import({ fields, typeLabels, employees }) {
                     <div className="space-y-3 p-4 text-sm">
                         <p className="flex items-center gap-2 text-success-600"><IconCheck size={18} /> {result.inserted} data baru disimpan, {result.updated} data diperbarui, {result.skipped} dilewati.</p>
                         {result.installments_paid > 0 && <p>{result.installments_paid} cicilan pembiayaan ditandai lunas dari Angsuran Koperasi.</p>}
+                        {result.debts_paid > 0 && <p>{result.debts_paid} utang belanja/kantin (Potong Gaji) dilunasi dari Potong Gaji Koperasi.</p>}
                         <button onClick={() => router.visit(route("deductions.index"))} className={btn.primary}>Lihat rekap</button>
                     </div>
                 </Panel>

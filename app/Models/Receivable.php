@@ -19,6 +19,7 @@ class Receivable extends Model
         'status',
         'note',
         'collection_notes',
+        'source',
     ];
 
     protected $casts = [

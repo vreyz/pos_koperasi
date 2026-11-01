@@ -115,6 +115,15 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
   nilai file; catatan manual/tunai tetap). Nilai 0/kosong di file tidak menghapus data.
 - Setelah impor, Angsuran Koperasi menandai cicilan pembiayaan pegawai itu lunas (`markPaidFromPayroll`).
 
+## Cara bayar kasir & kantin
+
+- Kasir (POS): **Tunai**, **QRIS** (`qris_manual`, langsung lunas, kasir cek dana masuk; QRIS gateway tetap dipakai bila
+  Midtrans/Xendit aktif), **Transfer** (muncul bila ada Rekening Bank aktif), **Kartu Debit/Kredit** (`card`, langsung lunas),
+  **Potong Gaji** (`potong_gaji`, pelanggan wajib pegawai → piutang `source=potong_gaji`, jatuh tempo akhir bulan).
+- Kantin: pesanan yang sudah diterima punya tombol **Bayar** dengan cara bayar yang sama (Potong Gaji memilih pegawai).
+- `PayrollReceivableService::allocate()` dijalankan setelah impor Angsuran & Potongan: total Potong Gaji Koperasi pegawai
+  melunasi piutang potong gaji terlama lebih dulu (berbasis selisih, aman diulang).
+
 ## Pengurus Koperasi (`board.*`)
 
 - Upload SK pengurus (PDF/Word/foto, maks 20 MB). File disimpan di storage privat (`storage/app/private/board-decrees`,
