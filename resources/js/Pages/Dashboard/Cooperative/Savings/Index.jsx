@@ -32,7 +32,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
         if (!history) return [];
         if (!merged) return history;
         const byPerson = {};
-        history.filter((r) => r.type !== "angsuran").forEach((r) => {
+        history.forEach((r) => {
             const p = (byPerson[r.customer_id] ??= { ...r, key: `${r.customer_id}|simpanan`, type: "simpanan", months: {}, total: 0, entries: {} });
             for (let m = 1; m <= 12; m++) {
                 p.months[m] = (p.months[m] || 0) + Number(r.months[m] || 0);
@@ -113,7 +113,6 @@ export default function Index({ tab, year, years, filters, recap, history, total
         { key: "pokok", label: "Pokok", align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0), render: (r) => num(r.pokok_total) },
         { key: "wajib", label: "Wajib", align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num(r.wajib_total) },
         { key: "sukarela", label: "Sukarela", align: "right", filter: "number", value: (r) => Number(r.sukarela_total || 0), render: (r) => num(r.sukarela_total) },
-        { key: "angsuran", label: "Angsuran", align: "right", filter: "number", value: (r) => Number(r.angsuran_total || 0), render: (r) => num(r.angsuran_total) },
         { key: "balance", label: `Saldo s.d. ${year}`, align: "right", filter: "number", value: (r) => Number(r.savings_balance || 0), render: (r) => <span className="font-semibold">{num(r.savings_balance)}</span> },
     ];
     const initialHistoryFilters = filters.customer_id ? { name: employees.find((e) => e.id === filters.customer_id)?.name || "" } : {};
@@ -129,7 +128,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
             <PageHeader
                 icon={IconPigMoney}
                 title="Simpanan Anggota"
-                subtitle="Simpanan pokok, wajib, sukarela, dan angsuran pinjaman per bulan."
+                subtitle="Simpanan pokok, wajib, dan sukarela per bulan. Angsuran pinjaman tidak termasuk simpanan (dicek di menu Pembiayaan → Cek angsuran)."
                 actions={
                     <>
                         <a href={route("savings.export", { year })} className={btn.secondary}><IconDownload size={18} /> Ekspor {year}</a>
@@ -151,13 +150,12 @@ export default function Index({ tab, year, years, filters, recap, history, total
                 ))}
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-6">
+            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
                 <Stat label="Anggota membayar" value={payers} helper={`membayar simpanan di ${year}`} />
                 <Stat label="Pokok" value={rupiah(totals.pokok)} />
                 <Stat label="Wajib" value={rupiah(totals.wajib)} />
                 <Stat label="Sukarela" value={rupiah(totals.sukarela)} />
                 <Stat label="Total simpanan" value={rupiah(savingsTotal)} />
-                <Stat label="Angsuran pinjaman" value={rupiah(totals.angsuran)} />
             </div>
 
             <Panel
@@ -189,7 +187,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
                         columns={recapColumns}
                         initialSort={{ key: "name", dir: "asc" }}
                         emptyText={`Belum ada simpanan di tahun ${year}.`}
-                        footer={sumFooter(recapColumns, ["pokok", "wajib", "sukarela", "angsuran", "balance"])}
+                        footer={sumFooter(recapColumns, ["pokok", "wajib", "sukarela", "balance"])}
                     />
                 ) : (
                     <SortableTable

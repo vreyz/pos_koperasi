@@ -88,6 +88,10 @@ class ContributionImportTest extends TestCase
             MemberContribution::create(['customer_id' => $a->id, 'type' => 'wajib', 'period_year' => 2025, 'period_month' => $month, 'amount' => $amount]);
         }
         MemberContribution::create(['customer_id' => $a->id, 'type' => 'sukarela', 'period_year' => 2025, 'period_month' => 3, 'amount' => 20000]);
+        // Angsuran pinjaman bukan simpanan: tidak tampil di menu Simpanan.
+        MemberContribution::create(['customer_id' => $a->id, 'type' => 'angsuran', 'period_year' => 2025, 'period_month' => 3, 'amount' => 900000]);
+        $onlyLoan = Customer::create(['name' => 'Z', 'employee_type' => 'PNS', 'employment_status' => 'AKTIF', 'no_telp' => 0, 'address' => '']);
+        MemberContribution::create(['customer_id' => $onlyLoan->id, 'type' => 'angsuran', 'period_year' => 2025, 'period_month' => 3, 'amount' => 900000]);
 
         $this->actingAs($user)->get(route('savings.index', ['year' => 2025, 'tab' => 'history']))
             ->assertOk()
@@ -102,7 +106,8 @@ class ContributionImportTest extends TestCase
 
         $this->actingAs($user)->get(route('savings.index', ['year' => 2025]))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->has('recap', 1)->where('recap.0.wajib_total', 250000));
+            ->assertInertia(fn (Assert $page) => $page->has('recap', 1)->where('recap.0.wajib_total', 250000)
+                ->missing('totals.angsuran')->missing('typeLabels.angsuran'));
     }
 
     public function test_manual_withdrawal_cannot_exceed_balance_and_generate_skips_existing(): void
@@ -120,6 +125,10 @@ class ContributionImportTest extends TestCase
             'customer_id' => $a->id, 'type' => 'sukarela', 'period_year' => 2026, 'period_month' => 3,
             'direction' => 'out', 'amount' => 300000, 'source' => 'tunai',
         ])->assertSessionHasErrors('amount');
+        $this->actingAs($user)->post(route('savings.store'), [
+            'customer_id' => $a->id, 'type' => 'angsuran', 'period_year' => 2026, 'period_month' => 3,
+            'direction' => 'in', 'amount' => 100000, 'source' => 'tunai',
+        ])->assertSessionHasErrors('type');
 
         $this->actingAs($user)->post(route('savings.generate'), [
             'type' => 'wajib', 'period_year' => 2026, 'period_month' => 2, 'amount' => 100000, 'employee_types' => ['PNS', 'PPPK'],

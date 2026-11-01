@@ -43,7 +43,7 @@ export default function Import({ preview, employees }) {
             <PageHeader
                 icon={IconFileSpreadsheet}
                 title="Impor Rekap Simpanan"
-                subtitle="Format sheet Master: Nama Pegawai, Wajib, Pokok, Sukarela, Angsuran Koperasi, Bulan, Tahun (NIP opsional). Impor ulang periode yang sama menimpa hasil import sebelumnya."
+                subtitle="Format sheet Master: Nama Pegawai, Wajib, Pokok, Sukarela, Bulan, Tahun (NIP opsional). Kolom Angsuran Koperasi tidak masuk simpanan; hanya dipakai untuk Cek angsuran di menu Pembiayaan. Impor ulang periode yang sama menimpa hasil import sebelumnya."
                 actions={
                     <>
                         <Link href={route("savings.index")} className={btn.secondary}><IconArrowLeft size={18} /> Kembali</Link>

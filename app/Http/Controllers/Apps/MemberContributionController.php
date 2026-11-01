@@ -34,7 +34,7 @@ class MemberContributionController extends Controller
 
         if ($tab === 'recap') {
             $recap = $this->recapQuery($year)
-                ->when(! $request->boolean('all'), fn ($q) => $q->whereHas('contributions', fn ($c) => $c->where('period_year', $year)))
+                ->when(! $request->boolean('all'), fn ($q) => $q->whereHas('contributions', fn ($c) => $c->where('period_year', $year)->whereIn('type', MemberContribution::SAVINGS_TYPES)))
                 ->orderBy('name')
                 ->get();
         } else {
@@ -42,6 +42,7 @@ class MemberContributionController extends Controller
             $entries = MemberContribution::query()
                 ->with('creator:id,name')
                 ->where('period_year', $year)
+                ->whereIn('type', MemberContribution::SAVINGS_TYPES) // angsuran pinjaman bukan simpanan (dicek di menu Pembiayaan)
                 ->orderBy('period_month')
                 ->orderBy('id')
                 ->get(['id', 'customer_id', 'type', 'period_month', 'amount', 'source', 'source_name', 'notes', 'created_by']);
@@ -82,6 +83,7 @@ class MemberContributionController extends Controller
         }
 
         $totals = MemberContribution::where('period_year', $year)
+            ->whereIn('type', MemberContribution::SAVINGS_TYPES)
             ->selectRaw('type, SUM(amount) as total')
             ->groupBy('type')
             ->pluck('total', 'type');
@@ -95,7 +97,7 @@ class MemberContributionController extends Controller
             'history' => $history,
             'totals' => $totals,
             'payers' => MemberContribution::where('period_year', $year)->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('amount', '>', 0)->distinct()->count('customer_id'),
-            'typeLabels' => MemberContribution::TYPE_LABELS,
+            'typeLabels' => array_intersect_key(MemberContribution::TYPE_LABELS, array_flip(MemberContribution::SAVINGS_TYPES)),
             'employees' => Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type', 'employment_status']),
         ]);
     }
@@ -104,7 +106,7 @@ class MemberContributionController extends Controller
     {
         $data = $request->validate([
             'customer_id' => ['required', Rule::exists('customers', 'id')->whereNotNull('employee_type')],
-            'type' => ['required', Rule::in(MemberContribution::TYPES)],
+            'type' => ['required', Rule::in(MemberContribution::SAVINGS_TYPES)],
             'period_year' => ['required', 'integer', 'min:2000', 'max:2100'],
             'period_month' => ['required', 'integer', 'min:1', 'max:12'],
             'direction' => ['required', Rule::in(['in', 'out'])],
@@ -114,9 +116,6 @@ class MemberContributionController extends Controller
         ]);
 
         if ($data['direction'] === 'out') {
-            if ($data['type'] === MemberContribution::TYPE_ANGSURAN) {
-                return back()->withErrors(['direction' => 'Angsuran pinjaman tidak bisa ditarik.']);
-            }
             $balance = (int) MemberContribution::where('customer_id', $data['customer_id'])->where('type', $data['type'])->sum('amount');
             if ($data['amount'] > $balance) {
                 return back()->withErrors(['amount' => 'Penarikan melebihi saldo '.MemberContribution::TYPE_LABELS[$data['type']].' (Rp '.number_format($balance, 0, ',', '.').').']);
@@ -254,8 +253,8 @@ class MemberContributionController extends Controller
     public function template()
     {
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama Pegawai', 'Tahun', 'Bulan', 'Pokok', 'Wajib', 'Sukarela', 'Angsuran Koperasi'],
-            [['199001012015031001', 'Contoh Pegawai', now()->year, 1, 50000, 100000, 0, 0]],
+            ['NIP', 'Nama Pegawai', 'Tahun', 'Bulan', 'Pokok', 'Wajib', 'Sukarela'],
+            [['199001012015031001', 'Contoh Pegawai', now()->year, 1, 50000, 100000, 0]],
             ['A' => '@'],
         ), 'template-simpanan.xlsx');
     }
@@ -264,18 +263,18 @@ class MemberContributionController extends Controller
     {
         $year = (int) $request->query('year', now()->year);
         $rows = $this->recapQuery($year)
-            ->whereHas('contributions', fn ($c) => $c->where('period_year', $year))
+            ->whereHas('contributions', fn ($c) => $c->where('period_year', $year)->whereIn('type', MemberContribution::SAVINGS_TYPES))
             ->orderBy('name')
             ->get()
             ->map(fn (Customer $c) => [
                 $c->nip, $c->name, $c->employee_type, $c->employment_status,
                 (int) $c->pokok_total, (int) $c->wajib_total, (int) $c->sukarela_total,
                 (int) $c->pokok_total + (int) $c->wajib_total + (int) $c->sukarela_total,
-                (int) $c->angsuran_total, (int) $c->savings_balance,
+                (int) $c->savings_balance,
             ])->all();
 
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Status', 'Pokok '.$year, 'Wajib '.$year, 'Sukarela '.$year, 'Total Simpanan '.$year, 'Angsuran '.$year, 'Saldo Simpanan s.d. '.$year],
+            ['NIP', 'Nama', 'Jenis', 'Status', 'Pokok '.$year, 'Wajib '.$year, 'Sukarela '.$year, 'Total Simpanan '.$year, 'Saldo Simpanan s.d. '.$year],
             $rows,
             ['A' => '@'],
         ), "rekap-simpanan-{$year}.xlsx");
@@ -284,7 +283,7 @@ class MemberContributionController extends Controller
     private function recapQuery(int $year)
     {
         $query = Customer::employees()->select(['id', 'name', 'nip', 'employee_type', 'employment_status']);
-        foreach (MemberContribution::TYPES as $type) {
+        foreach (MemberContribution::SAVINGS_TYPES as $type) {
             $query->withSum(["contributions as {$type}_total" => fn ($q) => $q->where('type', $type)->where('period_year', $year)], 'amount');
         }
 
@@ -298,6 +297,6 @@ class MemberContributionController extends Controller
      */
     private function years(): array
     {
-        return MemberContribution::query()->distinct()->orderByDesc('period_year')->pluck('period_year')->map(fn ($y) => (int) $y)->all();
+        return MemberContribution::query()->whereIn('type', MemberContribution::SAVINGS_TYPES)->distinct()->orderByDesc('period_year')->pluck('period_year')->map(fn ($y) => (int) $y)->all();
     }
 }
