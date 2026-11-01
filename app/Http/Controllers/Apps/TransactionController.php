@@ -20,6 +20,7 @@ use App\Services\AuditLogService;
 use App\Services\BatchService;
 use App\Services\CashierShiftService;
 use App\Services\CheckoutService;
+use App\Services\Cooperative\PayrollReceivableService;
 use App\Services\LoyaltyService;
 use App\Services\OutletAccessService;
 use App\Services\Payments\PaymentGatewayManager;
@@ -593,8 +594,16 @@ class TransactionController extends Controller
      */
     public function store(Request $request, PaymentGatewayManager $paymentGatewayManager)
     {
-        $isPayLater = $request->boolean('pay_later');
-        $paymentGateway = $isPayLater ? null : $request->input('payment_gateway');
+        // Koperasi: Potong Gaji = piutang pegawai (jatuh tempo akhir bulan), Kartu / QRIS manual = langsung lunas.
+        $requestedMethod = strtolower((string) $request->input('payment_gateway'));
+        $isPayroll = ! $request->boolean('pay_later') && $requestedMethod === PayrollReceivableService::POTONG_GAJI;
+        $isManualPaid = in_array($requestedMethod, PayrollReceivableService::MANUAL_PAID, true);
+        if ($isPayroll) {
+            app(PayrollReceivableService::class)->ensureEmployee($request->filled('customer_id') ? Customer::find($request->integer('customer_id')) : null);
+            $request->merge(['due_date' => now()->endOfMonth()->toDateString()]);
+        }
+        $isPayLater = $request->boolean('pay_later') || $isPayroll;
+        $paymentGateway = $isPayLater || $isManualPaid ? null : $request->input('payment_gateway');
         if ($paymentGateway) {
             $paymentGateway = strtolower($paymentGateway);
         }
@@ -638,7 +647,7 @@ class TransactionController extends Controller
         $tenderInput = is_array($request->input('tenders')) ? $request->input('tenders') : [];
         $useTenders = ! $isPayLater && $tenderInput !== [];
         // ponytail: legacy single-method path kept — split tenders only activate when payload has tenders[]
-        $isCashPayment = empty($paymentGateway) && ! $isPayLater && ! $useTenders;
+        $isCashPayment = empty($paymentGateway) && ! $isPayLater && ! $useTenders && ! $isManualPaid;
         $cashAmount = $isCashPayment ? max(0, (int) $request->cash) : 0;
 
         $context = new CheckoutContext(
@@ -660,7 +669,13 @@ class TransactionController extends Controller
             tenderInput: $tenderInput,
             outlet: $outlet,
             bankAccountId: $request->input('bank_account_id'),
+            isManualPaid: $isManualPaid && ! $useTenders,
+            payLaterMethod: $isPayroll ? PayrollReceivableService::POTONG_GAJI : 'pay_later',
         );
+        if ($isManualPaid && ! $useTenders) {
+            // paymentGateway null agar tidak memanggil gateway; metode tetap tercatat (card / qris_manual).
+            $context = new CheckoutContext(...array_merge(get_object_vars($context), ['paymentGateway' => $requestedMethod]));
+        }
 
         $result = $this->checkoutService->execute($context);
 

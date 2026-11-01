@@ -9,6 +9,7 @@ use App\Models\ProductWarehouse;
 use App\Models\Receivable;
 use App\Models\Transaction;
 use App\Models\TransactionTender;
+use App\Services\Cooperative\PayrollReceivableService;
 use App\Support\Checkout\CheckoutContext;
 use App\Support\Checkout\CheckoutResult;
 use Illuminate\Database\Eloquent\Builder;
@@ -80,10 +81,10 @@ class CheckoutService
             $tenderChange = (int) collect($tenders)->sum('change');
             $paymentMethod = $ctx->useTenders
                 ? (count($tenders) > 1 ? 'split' : $tenders[0]['method'])
-                : ($ctx->isPayLater ? 'pay_later' : ($ctx->paymentGateway ?: 'cash'));
+                : ($ctx->isPayLater ? $ctx->payLaterMethod : ($ctx->paymentGateway ?: 'cash'));
             $paymentStatus = $ctx->useTenders
                 ? $this->tenderService->aggregateStatus($tenders)
-                : ($ctx->isCashPayment ? 'paid' : ($ctx->isPayLater ? 'unpaid' : 'pending'));
+                : ($ctx->isCashPayment || $ctx->isManualPaid ? 'paid' : ($ctx->isPayLater ? 'unpaid' : 'pending'));
             $tenderBankAccountId = $ctx->useTenders
                 ? (collect($tenders)->firstWhere('bank_account_id', '!==', null)['bank_account_id'] ?? null)
                 : ($ctx->paymentGateway === 'bank_transfer' ? $ctx->bankAccountId : null);
@@ -139,6 +140,7 @@ class CheckoutService
                     'paid' => 0,
                     'due_date' => $ctx->dueDate,
                     'status' => 'unpaid',
+                    'source' => $ctx->payLaterMethod === PayrollReceivableService::POTONG_GAJI ? PayrollReceivableService::POTONG_GAJI : null,
                 ]);
             }
 

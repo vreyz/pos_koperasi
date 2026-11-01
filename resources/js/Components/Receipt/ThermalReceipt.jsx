@@ -64,6 +64,10 @@ export default function ThermalReceipt({
         xendit: "XENDIT",
         qris: "QRIS",
         split: "SPLIT PEMBAYARAN",
+        qris_manual: "QRIS",
+        card: "KARTU DEBIT/KREDIT",
+        potong_gaji: "POTONG GAJI",
+        pay_later: "PIUTANG",
     };
     const paymentMethod =
         paymentLabels[transaction?.payment_method?.toLowerCase()] || "TUNAI";

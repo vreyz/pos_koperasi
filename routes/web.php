@@ -516,6 +516,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     // dine-in orders
     Route::get('/dine-orders', [App\Http\Controllers\Apps\DineOrderController::class, 'index'])->middleware('permission:dine-orders-access')->name('dine-orders.index');
     Route::post('/dine-orders/{dineOrder}/accept', [App\Http\Controllers\Apps\DineOrderController::class, 'accept'])->middleware('permission:dine-orders-process')->name('dine-orders.accept');
+    Route::post('/dine-orders/{dineOrder}/pay', [App\Http\Controllers\Apps\DineOrderController::class, 'pay'])->middleware('permission:dine-orders-process')->name('dine-orders.pay');
     Route::post('/dine-orders/{dineOrder}/reject', [App\Http\Controllers\Apps\DineOrderController::class, 'reject'])->middleware('permission:dine-orders-process')->name('dine-orders.reject');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

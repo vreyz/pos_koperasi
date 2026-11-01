@@ -118,6 +118,9 @@ export default function Print({ transaction }) {
         qris: "QRIS",
         split: "Split Pembayaran",
         pay_later: "Piutang",
+        qris_manual: "QRIS",
+        card: "Kartu Debit/Kredit",
+        potong_gaji: "Potong Gaji",
     };
     const paymentMethodKey = (
         transaction?.payment_method || "cash"
@@ -133,7 +136,7 @@ export default function Print({ transaction }) {
 
     const paymentStatuses = {
         paid: "Lunas",
-        pending: transaction?.payment_method === "pay_later" ? "Belum Lunas" : "Menunggu",
+        pending: ["pay_later", "potong_gaji"].includes(transaction?.payment_method) ? "Belum Lunas" : "Menunggu",
         failed: "Gagal",
         expired: "Kedaluwarsa",
         unpaid: "Belum Lunas",

@@ -325,6 +325,8 @@ class DeductionImportService
         foreach (array_unique(array_column($diff['cells'], 'year')) as $year) {
             $result['installments_paid'] += $financing->markPaidFromPayroll((int) $year);
         }
+        // Potong Gaji Koperasi = pelunasan utang belanja/kantin (metode bayar Potong Gaji).
+        $result['debts_paid'] = app(PayrollReceivableService::class)->allocate(array_values(array_unique(array_column($diff['cells'], 'customer_id'))));
 
         return $result;
     }

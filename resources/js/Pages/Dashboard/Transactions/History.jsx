@@ -306,12 +306,11 @@ const History = ({ transactions, filters, warehouses = [] }) => {
                                                 )}
                                             </td>
                                             <td className="px-4 py-4 text-center">
-                                                {transaction.payment_method ===
-                                                    "pay_later" &&
+                                                {["pay_later", "potong_gaji"].includes(transaction.payment_method) &&
                                                 transaction.payment_status !==
                                                     "paid" ? (
                                                     <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full">
-                                                        Piutang
+                                                        {transaction.payment_method === "potong_gaji" ? "Potong Gaji" : "Piutang"}
                                                     </span>
                                                 ) : transaction.payment_status ===
                                                   "paid" ? (
@@ -432,12 +431,11 @@ const History = ({ transactions, filters, warehouses = [] }) => {
                                         </div>
                                         <div className="text-right space-y-2">
                                             <div className="flex flex-wrap gap-2 justify-end">
-                                                {transaction.payment_method ===
-                                                    "pay_later" &&
+                                                {["pay_later", "potong_gaji"].includes(transaction.payment_method) &&
                                                 transaction.payment_status !==
                                                     "paid" ? (
                                                     <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full">
-                                                        Piutang
+                                                        {transaction.payment_method === "potong_gaji" ? "Potong Gaji" : "Piutang"}
                                                     </span>
                                                 ) : transaction.payment_status ===
                                                   "paid" ? (

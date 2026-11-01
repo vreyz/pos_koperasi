@@ -6,6 +6,7 @@ use App\Models\CashierShift;
 use App\Models\Setting;
 use App\Models\ShiftCashMovement;
 use App\Models\Transaction;
+use App\Services\Cooperative\PayrollReceivableService;
 
 class ThermalPrintService
 {
@@ -84,6 +85,8 @@ class ThermalPrintService
             if (($transaction->change ?? 0) > 0) {
                 $lines[] = $this->leftRight('Kembali', number_format((int) $transaction->change, 0, ',', '.'), $maxWidth);
             }
+        } elseif (isset(PayrollReceivableService::LABELS[$transaction->payment_method])) {
+            $lines[] = $this->leftRight(PayrollReceivableService::LABELS[$transaction->payment_method], number_format((int) $transaction->grand_total, 0, ',', '.'), $maxWidth);
         }
 
         $lines[] = $this->line($maxWidth);

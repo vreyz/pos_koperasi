@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { Head, usePage, router } from "@inertiajs/react";
 import Button from "@/Components/Dashboard/Button";
@@ -13,6 +13,16 @@ import {
 import Table from "@/Components/Dashboard/Table";
 import { useAuthorization } from "@/Utils/authorization";
 import toast from "react-hot-toast";
+import { SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
+
+// Koperasi: cara bayar kantin.
+const PAY_METHODS = [
+    { value: "cash", label: "Tunai" },
+    { value: "qris_manual", label: "QRIS" },
+    { value: "bank_transfer", label: "Transfer" },
+    { value: "card", label: "Kartu Debit/Kredit" },
+    { value: "potong_gaji", label: "Potong Gaji" },
+];
 
 const STATUS_CONFIG = {
     submitted: { label: "Menunggu", color: "bg-warning-100 text-warning-700 dark:bg-warning-900/50 dark:text-warning-400", icon: IconClock },
@@ -26,10 +36,18 @@ const PAY_CONFIG = {
     pay_at_counter: { label: "Bayar di Kasir", color: "text-slate-600 dark:text-slate-400" },
 };
 
-export default function Index({ orders }) {
+export default function Index({ orders, employees = [] }) {
     const { auth } = usePage().props;
     const { can } = useAuthorization();
     const canProcess = can("dine-orders-process");
+    const [paying, setPaying] = useState(null); // { id, method, customer_id }
+    const empOptions = useMemo(() => employeeOptions(employees), [employees]);
+    const submitPay = () =>
+        router.post(route("dine-orders.pay", paying.id), { method: paying.method, customer_id: paying.customer_id || null }, {
+            preserveScroll: true,
+            onSuccess: () => setPaying(null),
+            onError: (e) => toast.error(Object.values(e)[0] || "Gagal mencatat pembayaran."),
+        });
 
     const handleAccept = (order) => {
         if (!confirm("Terima pesanan ini dan lanjutkan ke kasir?")) return;
@@ -104,6 +122,10 @@ export default function Index({ orders }) {
                                             </div>
                                         </div>
                                         <div className="flex gap-2">
+                                            {canProcess && order.status === "accepted" && order.payment_status !== "paid" && paying?.id !== order.id && (
+                                                <Button type={"button"} label={"Bayar"} icon={<IconCheck size={16} strokeWidth={1.5} />} className={"bg-primary-500 hover:bg-primary-600 text-white"}
+                                                    onClick={() => setPaying({ id: order.id, method: "cash", customer_id: order.customer_id || "" })} />
+                                            )}
                                             {canProcess && order.status === "submitted" && (
                                                 <>
                                                     <Button
@@ -130,6 +152,29 @@ export default function Index({ orders }) {
                                     </div>
                                 </div>
 
+                                {paying?.id === order.id && (
+                                    <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+                                        <div>
+                                            <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">Cara bayar (Rp {Number(order.subtotal ?? 0).toLocaleString("id-ID")})</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {PAY_METHODS.map((m) => (
+                                                    <button key={m.value} type="button" onClick={() => setPaying({ ...paying, method: m.value })}
+                                                        className={`rounded-lg border px-3 py-1.5 text-sm ${paying.method === m.value ? "border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30" : "border-slate-200 dark:border-slate-700"}`}>{m.label}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        {paying.method === "potong_gaji" && (
+                                            <div className="min-w-[16rem] flex-1">
+                                                <p className="mb-1 text-xs font-medium text-slate-600 dark:text-slate-400">Pegawai yang dipotong gajinya</p>
+                                                <SearchSelect options={empOptions} value={paying.customer_id} onChange={(v) => setPaying({ ...paying, customer_id: v })} placeholder="Cari nama / NIP…" />
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700" onClick={() => setPaying(null)}>Batal</button>
+                                            <button type="button" className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50" disabled={paying.method === "potong_gaji" && !paying.customer_id} onClick={submitPay}>Simpan pembayaran</button>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="p-4">
                                     <div className="space-y-2">
                                         {(order.items ?? []).map((item) => (

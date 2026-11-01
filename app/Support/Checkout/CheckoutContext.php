@@ -30,6 +30,9 @@ class CheckoutContext
         public readonly ?string $clientUuid = null,
         public readonly ?string $syncFingerprint = null,
         public readonly ?array $onlyCartIds = null,
+        // Koperasi: kartu / QRIS manual langsung lunas; "potong_gaji" = piutang pegawai yang dipotong dari gaji.
+        public readonly bool $isManualPaid = false,
+        public readonly string $payLaterMethod = 'pay_later',
     ) {}
 
     public function isSplit(): bool
