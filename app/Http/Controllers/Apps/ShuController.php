@@ -158,7 +158,11 @@ class ShuController extends Controller
         ], $data['board_members'] ?? []));
 
         $data['excluded_customer_ids'] = array_values(array_unique(array_map('intval', $data['excluded_customer_ids'] ?? [])));
-        $shu->update($data);
+        $shu->fill($data);
+        if ($capErrors = $this->calculator->financingCapErrors($shu)) {
+            return back()->withErrors($capErrors);
+        }
+        $shu->save();
 
         return back()->with('success', 'Pengaturan SHU disimpan. Klik "Hitung SHU" untuk memperbarui hasil.');
     }
@@ -356,6 +360,7 @@ class ShuController extends Controller
             "Bagian Iuran Koperasi dibagi sebanding jumlah {$types} ".($period->savings_period === 'all_time' ? "yang terkumpul sejak awal s.d. {$y}" : "yang dibayar selama tahun {$y}").' dibanding total semua anggota.',
             'Bagian Belanja Toko dibagi sebanding total belanja '.($period->sales_source === 'excel' ? '(impor Excel)' : 'di POS (dikurangi retur)')." selama tahun {$y} dibanding total belanja semua pegawai aktif.",
             "Bagian Pembiayaan Dana dibagi sebanding biaya formulir dari pembiayaan yang dicairkan di tahun {$y}.",
+            'Bagian Pembiayaan Dana dan Pembiayaan Barang masing-masing paling banyak 50% dari pendapatan koperasi dari pembiayaan tersebut di tahun '.$y.' (biaya formulir; bagi hasil + biaya lain).',
             "Bagian Pembiayaan Barang dibagi sebanding bagi hasil (dari cicilan yang dibayar di tahun {$y}) + biaya lain (pencairan di tahun {$y}). Cicilan/angsuran pokoknya tidak dihitung.",
             count($period->excluded_customer_ids ?? []) > 0 ? count($period->excluded_customer_ids).' nama dikecualikan dan tidak mendapat SHU.' : null,
             "Nilai SHU per orang {$roundingText}.",
