@@ -49,6 +49,7 @@ IconRulerMeasure,
     IconShoppingBag,
     IconLayoutSidebar,
     IconUsersGroup,
+    IconReceipt2,
 } from "@tabler/icons-react";
 import hasAnyPermission from "./Permission";
 import React from "react";
@@ -136,6 +137,13 @@ export default function Menu({ includeHidden = false } = {}) {
                     active: url.startsWith("/dashboard/savings"),
                     icon: <IconPigMoney size={20} strokeWidth={1.5} />,
                     permissions: hasAnyPermission(["savings-access"]),
+                },
+                {
+                    title: t("sidebar.items.deductions"),
+                    href: route("deductions.index"),
+                    active: url.startsWith("/dashboard/deductions"),
+                    icon: <IconReceipt2 size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["deductions-access"]),
                 },
                 {
                     title: t("sidebar.items.financingDana"),

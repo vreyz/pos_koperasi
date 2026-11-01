@@ -68,10 +68,18 @@ class SpreadsheetReader
         return $sheets;
     }
 
+    /** @return list<string> */
+    public function sheetNames(string $path): array
+    {
+        $reader = IOFactory::createReaderForFile($path);
+
+        return array_map('strval', method_exists($reader, 'listWorksheetNames') ? $reader->listWorksheetNames($path) : ['']);
+    }
+
     /**
      * @return array<int, array<int, mixed>>
      */
-    private function readSheet(string $path, ?string $sheet): array
+    public function readSheet(string $path, ?string $sheet): array
     {
         $reader = IOFactory::createReaderForFile($path);
         if ($sheet !== null && method_exists($reader, 'setLoadSheetsOnly')) {
