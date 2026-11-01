@@ -280,6 +280,38 @@ class MemberContributionController extends Controller
         ), "rekap-simpanan-{$year}.xlsx");
     }
 
+    /**
+     * Data simpanan per pegawai per bulan dalam format yang bisa diunggah ulang:
+     * kolom "Total ..." = total bulan itu, jadi unggah ulang memperbarui, tidak dobel.
+     */
+    public function exportData(Request $request)
+    {
+        $year = $request->query('year');
+        $rows = MemberContribution::query()
+            ->whereIn('type', MemberContribution::SAVINGS_TYPES)
+            ->when($year && $year !== 'all', fn ($q) => $q->where('period_year', (int) $year))
+            ->selectRaw('customer_id, period_year, period_month, type, SUM(amount) as total')
+            ->groupBy('customer_id', 'period_year', 'period_month', 'type')
+            ->get()
+            ->groupBy(fn ($r) => "{$r->customer_id}|{$r->period_year}|{$r->period_month}");
+        $people = Customer::whereIn('id', $rows->keys()->map(fn ($k) => (int) explode('|', $k)[0])->unique())->get(['id', 'name', 'nip'])->keyBy('id');
+
+        $data = $rows->map(function ($group) use ($people) {
+            $first = $group->first();
+            $byType = $group->pluck('total', 'type');
+            $person = $people[$first->customer_id] ?? null;
+
+            return [$person?->nip, $person?->name, (int) $first->period_year, (int) $first->period_month,
+                (int) ($byType['pokok'] ?? 0), (int) ($byType['wajib'] ?? 0), (int) ($byType['sukarela'] ?? 0)];
+        })->sortBy(fn ($r) => sprintf('%s|%04d|%02d', $r[1], $r[2], $r[3]))->values()->all();
+
+        return Excel::download(new ArrayExport(
+            ['NIP', 'Nama Pegawai', 'Tahun', 'Bulan', 'Total Pokok', 'Total Wajib', 'Total Sukarela'],
+            $data,
+            ['A' => '@'],
+        ), 'data-simpanan'.($year && $year !== 'all' ? "-{$year}" : '').'.xlsx');
+    }
+
     private function recapQuery(int $year)
     {
         $query = Customer::employees()->select(['id', 'name', 'nip', 'employee_type', 'employment_status']);

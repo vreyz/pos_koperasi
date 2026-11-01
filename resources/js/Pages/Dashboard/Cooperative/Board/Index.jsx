@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Head, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import { IconFileText, IconPencil, IconPlus, IconTrash, IconUpload, IconUsersGroup, IconX } from "@tabler/icons-react";
+import { IconDownload, IconFileText, IconPencil, IconPlus, IconTrash, IconUpload, IconUsersGroup, IconX } from "@tabler/icons-react";
 import Swal from "sweetalert2";
 import SortableTable from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
@@ -143,7 +143,12 @@ export default function Index({ decrees, currentId, positions, employees }) {
                 icon={IconUsersGroup}
                 title="Pengurus Koperasi"
                 subtitle="Upload SK pengurus: nama pengurus dibaca otomatis dari SK (PDF/Word), file SK disimpan. Masa berlaku SK dipakai untuk menghitung bulan bertugas di SHU Pengurus Koperasi."
-                actions={manage && <button onClick={openNew} className={btn.primary}><IconUpload size={18} /> Upload SK</button>}
+                actions={
+                    <>
+                        {decrees.length > 0 && <a href={route("board.export")} className={btn.secondary}><IconDownload size={18} /> Unduh Excel</a>}
+                        {manage && <button onClick={openNew} className={btn.primary}><IconUpload size={18} /> Upload SK</button>}
+                    </>
+                }
             />
 
             {form && (

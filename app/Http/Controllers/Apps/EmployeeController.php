@@ -156,6 +156,22 @@ class EmployeeController extends Controller
         return Excel::download(new ArrayExport(['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status', 'Alias', 'Aktif Sejak', 'Aktif Sampai'], $rows, ['A' => '@', 'J' => '@', 'K' => '@']), 'pegawai.xlsx');
     }
 
+    /** Daftar anggota koperasi (otomatis dari pembayar iuran pokok/wajib/sukarela). */
+    public function exportMembers()
+    {
+        $rows = Customer::where('is_loyalty_member', true)
+            ->withSum(['contributions as savings_total' => fn ($q) => $q->whereIn('type', MemberContribution::SAVINGS_TYPES)], 'amount')
+            ->orderBy('name')->get()
+            ->map(fn (Customer $c) => [$c->member_code, $c->nip, $c->name, $c->employee_type, $c->employment_status,
+                $c->loyalty_member_since?->format('d/m/Y'), (int) $c->savings_total])->all();
+
+        return Excel::download(new ArrayExport(
+            ['Kode Anggota', 'NIP', 'Nama', 'Jenis', 'Status', 'Anggota Sejak', 'Total Simpanan'],
+            $rows,
+            ['A' => '@', 'B' => '@'],
+        ), 'anggota-koperasi.xlsx');
+    }
+
     private function validated(Request $request, ?Customer $employee = null): array
     {
         $request->merge(['nip' => Nip::normalize($request->input('nip')) ?: null]);

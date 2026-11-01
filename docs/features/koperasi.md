@@ -109,6 +109,22 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
   SK yang berlaku di **akhir bulan** (`BoardService::membersForYear`).
 - SHU: periode baru langsung terisi pengurus + bulan dari SK; di halaman SHU ada tombol *Ambil dari SK pengurus*.
 
+## Unduh & unggah data
+
+Semua file unduhan bisa diedit lalu diunggah ulang; unggah ulang **memperbarui**, tidak membuat data dobel.
+
+| Data | Unduh | Unggah ulang (kunci pencocokan) |
+|------|-------|---------------------------------|
+| Pegawai | Data Pegawai → Unduh pegawai | Impor Excel pegawai (NIP; beda → konfirmasi) |
+| Anggota | Data Pegawai → Unduh anggota | — (anggota otomatis dari pembayar iuran) |
+| Simpanan | Simpanan → Data {tahun} (kolom `Total Pokok/Wajib/Sukarela`) | Impor Excel simpanan: nilai = total bulan itu; catatan import disesuaikan dengan selisih terhadap catatan manual/tunai |
+| Pembiayaan | Pembiayaan Dana/Barang → Unduh Excel | Impor Excel pembiayaan (jenis + pegawai + nominal + tanggal cair) |
+| Pengurus | Pengurus Koperasi → Unduh Excel | Upload SK |
+| SHU | SHU → Ekspor Excel | — |
+
+Impor simpanan hanya menimpa jenis yang ada kolomnya di file (file tanpa kolom angsuran tidak menghapus angsuran).
+Kolom berformat teks (`ArrayExport` format `@`) ditulis sebagai teks supaya NIP 18 digit tidak berubah jadi angka.
+
 ## Anggota & customer
 
 - Pembayar simpanan pokok/wajib/sukarela otomatis ditandai **anggota** (member, kode = NIP atau `AGT-xxxxx`).

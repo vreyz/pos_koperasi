@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import { IconAlertTriangle, IconChecklist, IconCash, IconPlus, IconPrinter, IconSettings, IconUpload } from "@tabler/icons-react";
+import { IconAlertTriangle, IconChecklist, IconCash, IconDownload, IconPlus, IconPrinter, IconSettings, IconUpload } from "@tabler/icons-react";
 import SortableTable from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, PageHeader, Panel, Stat, btn, inputClass, rupiah, useFlashToasts } from "@/Components/Cooperative/ui";
@@ -101,6 +101,7 @@ export default function Index({ type, typeLabel, financings, statusLabels, summa
                             <a href={route("financing.blank-form", "barang")} target="_blank" className={btn.secondary}><IconPrinter size={18} /> Formulir kosong</a>
                         )}
                         <Link href={route("financing.reconcile")} className={btn.secondary}><IconChecklist size={18} /> Cek angsuran</Link>
+                        <a href={route("financing.export", type)} className={btn.secondary} title="Bisa diedit lalu diunggah ulang di Impor Excel: kontrak yang sama diperbarui, tidak dobel."><IconDownload size={18} /> Unduh Excel</a>
                         {can("financing-import") && <Link href={route("financing.import")} className={btn.secondary}><IconUpload size={18} /> Impor Excel</Link>}
                         {can("financing-approve") && <button onClick={() => setShowSettings(!showSettings)} className={btn.secondary}><IconSettings size={18} /> Aturan</button>}
                         {can("financing-create") && <Link href={route("financing.create", type)} className={btn.primary}><IconPlus size={18} /> Pengajuan baru</Link>}

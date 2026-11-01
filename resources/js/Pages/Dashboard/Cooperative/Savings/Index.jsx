@@ -131,7 +131,8 @@ export default function Index({ tab, year, years, filters, recap, history, total
                 subtitle="Simpanan pokok, wajib, dan sukarela per bulan. Angsuran pinjaman tidak termasuk simpanan (dicek di menu Pembiayaan → Cek angsuran)."
                 actions={
                     <>
-                        <a href={route("savings.export", { year })} className={btn.secondary}><IconDownload size={18} /> Ekspor {year}</a>
+                        <a href={route("savings.export", { year })} className={btn.secondary} title="Rekap per pegawai untuk laporan."><IconDownload size={18} /> Rekap {year}</a>
+                        <a href={route("savings.export-data", { year })} className={btn.secondary} title="Data per pegawai per bulan. Bisa diedit lalu diunggah ulang di Impor Excel: memperbarui total bulan itu, tidak dobel."><IconDownload size={18} /> Data {year}</a>
                         {can("savings-import") && <Link href={route("savings.import")} className={btn.secondary}><IconUpload size={18} /> Impor Excel</Link>}
                         {can("savings-create") && (
                             <>

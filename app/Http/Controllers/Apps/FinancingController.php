@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Apps;
 
+use App\Exports\ArrayExport;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Financing;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
 
 class FinancingController extends Controller
@@ -53,6 +55,25 @@ class FinancingController extends Controller
             ],
             'settings' => FinancingSettings::all(),
         ]);
+    }
+
+    /** Unduh daftar pembiayaan; file ini bisa diunggah ulang di Impor Excel (memperbarui, tidak dobel). */
+    public function export(string $type)
+    {
+        $rows = Financing::query()->where('type', $type)
+            ->with('customer:id,name,nip')
+            ->withSum(['installments as outstanding' => fn ($q) => $q->whereNull('paid_at')], 'amount')
+            ->withCount(['installments as paid_count' => fn ($q) => $q->whereNotNull('paid_at')])
+            ->orderBy('disbursed_at')->orderBy('id')->get()
+            ->map(fn (Financing $f) => [
+                Financing::TYPE_LABELS[$f->type], $f->number, $f->customer?->nip, $f->customer?->name, $f->item_name,
+                $f->applied_at?->format('d/m/Y'), $f->disbursed_at?->format('d/m/Y'),
+                (int) $f->principal, (float) $f->margin_percent, (int) $f->admin_fee, (int) $f->tenor, (int) $f->installment,
+                (int) $f->paid_count, (int) $f->outstanding, Financing::STATUS_LABELS[$f->status] ?? $f->status,
+                $f->is_bad_debt ? 'Ya' : '', $f->bank_name, $f->bank_account, $f->notes,
+            ])->all();
+
+        return Excel::download(new ArrayExport(FinancingImportService::APP_HEADERS, $rows, ['B' => '@', 'C' => '@', 'R' => '@']), "pembiayaan-{$type}.xlsx");
     }
 
     public function create(Request $request, string $type)
