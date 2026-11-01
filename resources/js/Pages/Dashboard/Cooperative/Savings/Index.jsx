@@ -182,7 +182,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
                     )
                 }
             >
-                <p className="px-4 pt-3 text-xs text-slate-500">Klik judul kolom untuk mengurutkan. Kotak di bawah judul untuk menyaring — kolom angka menerima &gt;0, 0, &gt;=100000, 50000-100000, atau "kosong".{tab === "history" && " Klik angka bulan untuk melihat atau menghapus catatannya."}</p>
+                <p className="px-4 pt-3 text-xs text-slate-500">Klik judul kolom untuk mengurutkan; Shift+klik kolom lain untuk urutan kedua (mis. Nama lalu nilai). Kotak di bawah judul untuk menyaring — kolom angka menerima &gt;0, 0, &gt;=100000, 50000-100000, atau "kosong".{tab === "history" && " Klik angka bulan untuk melihat atau menghapus catatannya."}</p>
                 {tab === "recap" ? (
                     <SortableTable
                         key={`recap-${year}-${filters.all}`}

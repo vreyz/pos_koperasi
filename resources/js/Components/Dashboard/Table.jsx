@@ -3,7 +3,7 @@ import React from 'react'
 const Card = ({ icon, title, className, children }) => {
     return (
         <>
-            <div className={`p-4 rounded-t-lg border ${className} bg-white dark:bg-gray-950 dark:border-gray-900 `}>
+            <div className={`px-4 py-2.5 rounded-t-lg border ${className} bg-white dark:bg-gray-950 dark:border-gray-900 `}>
                 <div className='flex items-center gap-2 font-semibold text-sm text-gray-700 dark:text-gray-200'>
                     {title}
                 </div>
@@ -43,7 +43,7 @@ const Tbody = ({ className, children }) => {
 const Td = ({ className, children }) => {
     return (
         <td
-            className={`${className} whitespace-nowrap p-4 align-middle text-gray-700 dark:text-gray-400`}
+            className={`${className} whitespace-nowrap px-3 py-2 align-middle text-gray-700 dark:text-gray-400`}
         >
             {children}
         </td>
@@ -54,7 +54,7 @@ const Th = ({ className, children }) => {
     return (
         <th
             scope="col"
-            className={`${className} h-12 px-4 text-left align-middle font-medium text-gray-700 dark:text-gray-400`}
+            className={`${className} h-9 px-3 text-left align-middle font-medium text-gray-700 dark:text-gray-400`}
         >
             {children}
         </th>
@@ -65,7 +65,7 @@ const Empty = ({ colSpan, message, children }) => {
     return (
         <tr>
             <td colSpan={colSpan}>
-                <div className="flex items-center justify-center h-96">
+                <div className="flex items-center justify-center h-64">
                     <div className="text-center">
                         {children}
                         <div className="mt-5">
