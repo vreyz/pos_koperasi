@@ -208,6 +208,7 @@ class FinancingController extends Controller
             'type' => $financing->type,
             'financing' => $financing->load(['customer', 'checker:id,name', 'reviewer:id,name', 'approver:id,name']),
             'settings' => FinancingSettings::all(),
+            'coop' => FinancingSettings::coop(),
             'ppnpn' => $financing->customer->employee_type === 'PPNPN',
         ]);
     }
@@ -219,6 +220,7 @@ class FinancingController extends Controller
             'type' => $type,
             'financing' => null,
             'settings' => FinancingSettings::all(),
+            'coop' => FinancingSettings::coop(),
             'ppnpn' => $request->boolean('ppnpn'),
         ]);
     }
@@ -241,10 +243,10 @@ class FinancingController extends Controller
         return back()->with('success', "{$count} cicilan ditandai lunas sesuai potongan gaji {$year}.");
     }
 
-    public function updateSettings(Request $request)
+    public function updateSettings(Request $request, string $type)
     {
         $rules = [];
-        foreach (FinancingSettings::DEFAULTS as $key => $default) {
+        foreach (array_intersect_key(FinancingSettings::DEFAULTS, array_flip(FinancingSettings::KEYS[$type])) as $key => $default) {
             $rules[$key] = is_numeric($default) ? ['required', 'numeric', 'min:0'] : ['nullable', 'string', 'max:255'];
         }
         $data = $request->validate($rules);
@@ -252,7 +254,7 @@ class FinancingController extends Controller
             Setting::set($key, $value ?? '');
         }
 
-        return back()->with('success', 'Pengaturan pembiayaan disimpan.');
+        return back()->with('success', 'Aturan '.Financing::TYPE_LABELS[$type].' disimpan.');
     }
 
     public function import(Request $request)

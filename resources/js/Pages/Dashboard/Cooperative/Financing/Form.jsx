@@ -31,7 +31,7 @@ export default function Form({ type, typeLabel, financing, employees, settings, 
     const employee = employees.find((e) => e.id === Number(form.customer_id));
     const ppnpn = employee?.employee_type === "PPNPN";
     const max = Number(ppnpn ? settings.financing_max_ppnpn : settings.financing_max_pegawai);
-    const unit = Number(settings.financing_fee_unit) || 5000000;
+    const unit = 5000000; // biaya formulir per Rp 5 jt pembiayaan
 
     // Pratinjau angka yang juga dihitung ulang di server.
     const calc = useMemo(() => {

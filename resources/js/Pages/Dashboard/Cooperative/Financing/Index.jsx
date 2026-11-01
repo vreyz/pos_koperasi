@@ -11,31 +11,31 @@ export const STATUS_COLOR = { pengajuan: "gray", diperiksa: "blue", direview: "b
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
 
-const SETTING_FIELDS = [
-    ["financing_fee_pegawai", "Biaya formulir pegawai (per Rp 5 jt)", "money"],
-    ["financing_fee_ppnpn", "Biaya formulir PPNPN (per Rp 5 jt)", "money"],
-    ["financing_fee_unit", "1 formulir untuk pembiayaan", "money"],
-    ["financing_max_pegawai", "Plafon dana pegawai", "money"],
-    ["financing_max_ppnpn", "Plafon dana PPNPN", "money"],
-    ["financing_tenor_dana_max", "Tenor dana maksimal (bulan)", "int"],
-    ["financing_margin_barang", "Bagi hasil barang", "percent"],
-    ["financing_admin_barang", "Biaya lain barang", "percent"],
-    ["financing_tenor_barang", "Tenor barang bawaan (bulan)", "int"],
-    ["coop_name", "Nama koperasi", "text"],
-    ["coop_office", "Kantor", "text"],
-    ["coop_city", "Kota (tempat tanda tangan)", "text"],
-    ["coop_bank", "Rekening pembayaran biaya formulir", "text"],
-    ["coop_contact_pegawai", "Kontak konfirmasi (pegawai)", "text"],
-    ["coop_contact_ppnpn", "Kontak konfirmasi (PPNPN)", "text"],
-    ["coop_chair", "Nama Ketua Koperasi", "text"],
-    ["coop_business_head", "Nama Kepala Unit Usaha", "text"],
-];
+// Aturan terpisah per jenis pembiayaan. Nama/alamat/kota koperasi dari Profil Toko, Ketua & Kepala Unit Usaha dari SK Pengurus.
+const SETTING_FIELDS = {
+    dana: [
+        ["financing_fee_pegawai", "Biaya formulir pegawai per Rp 5 jt pembiayaan", "money"],
+        ["financing_fee_ppnpn", "Biaya formulir PPNPN per Rp 5 jt pembiayaan", "money"],
+        ["financing_max_pegawai", "Plafon pegawai", "money"],
+        ["financing_max_ppnpn", "Plafon PPNPN", "money"],
+        ["financing_tenor_dana_max", "Jangka waktu bawaan & maksimal (bulan)", "int"],
+        ["coop_bank", "Rekening pembayaran biaya formulir", "text"],
+        ["coop_contact_pegawai", "Kontak konfirmasi pembayaran (pegawai)", "text"],
+        ["coop_contact_ppnpn", "Kontak konfirmasi pembayaran (PPNPN)", "text"],
+    ],
+    barang: [
+        ["financing_margin_barang", "Bagi hasil", "percent"],
+        ["financing_admin_barang", "Biaya lain (dipotong saat pencairan)", "percent"],
+        ["financing_tenor_barang", "Jangka waktu bawaan (bulan)", "int"],
+    ],
+};
 
 export default function Index({ type, typeLabel, financings, statusLabels, summary, settings }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const [showSettings, setShowSettings] = useState(false);
-    const [form, setForm] = useState(settings);
+    const fields = SETTING_FIELDS[type];
+    const [form, setForm] = useState(() => Object.fromEntries(fields.map(([key]) => [key, settings[key]])));
     const [errors, setErrors] = useState({});
 
     const columns = [
@@ -76,7 +76,7 @@ export default function Index({ type, typeLabel, financings, statusLabels, summa
 
     const saveSettings = (e) => {
         e.preventDefault();
-        router.put(route("financing.settings"), form, { preserveScroll: true, onError: setErrors, onSuccess: () => setShowSettings(false) });
+        router.put(route("financing.settings", type), form, { preserveScroll: true, onError: setErrors, onSuccess: () => setShowSettings(false) });
     };
 
     return (
@@ -118,9 +118,9 @@ export default function Index({ type, typeLabel, financings, statusLabels, summa
             </div>
 
             {showSettings && (
-                <Panel title="Aturan pembiayaan (dipakai di formulir & perhitungan)" className="mb-6">
+                <Panel title={`Aturan ${typeLabel} (dipakai di formulir & perhitungan)`} className="mb-6">
                     <form onSubmit={saveSettings} className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {SETTING_FIELDS.map(([key, label, kind]) => (
+                        {fields.map(([key, label, kind]) => (
                             <Field key={key} label={label} error={errors[key]}>
                                 {kind === "money" ? (
                                     <MoneyInput value={form[key]} onChange={(v) => setForm({ ...form, [key]: v })} />
@@ -131,6 +131,9 @@ export default function Index({ type, typeLabel, financings, statusLabels, summa
                                 )}
                             </Field>
                         ))}
+                        <p className="text-xs text-slate-500 sm:col-span-2 lg:col-span-3">
+                            Nama, alamat, dan kota koperasi di formulir diambil dari Pengaturan → Profil Toko. Nama Ketua dan Kepala Unit Usaha diambil dari SK di menu Pengurus Koperasi.
+                        </p>
                         <div className="flex items-end justify-end gap-2 sm:col-span-2 lg:col-span-3">
                             <button type="button" onClick={() => setShowSettings(false)} className={btn.secondary}>Batal</button>
                             <button type="submit" className={btn.primary}>Simpan aturan</button>
