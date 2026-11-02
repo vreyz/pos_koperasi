@@ -344,22 +344,34 @@ class EventCatalog
             ->with('customer:id,name,employee_type')
             ->get();
 
-        // Angsuran dibagi menurut jadwal cicilan bulan itu: pembiayaan barang dulu, sisanya pembiayaan dana.
-        $due = \App\Models\FinancingInstallment::query()
-            ->join('financings', 'financings.id', '=', 'financing_installments.financing_id')
-            ->whereYear('financing_installments.due_month', $year)->whereMonth('financing_installments.due_month', $month)
-            ->where('financings.type', 'barang')
-            ->groupBy('financings.customer_id')
-            ->selectRaw('financings.customer_id, SUM(financing_installments.amount) as total')
-            ->pluck('total', 'customer_id');
-        $loanLines = function (Customer $c, int $amount, string $memo) use ($due, $K): array {
-            $barang = min($amount, (int) ($due[$c->id] ?? 0));
-            $dana = $amount - $barang;
+        // Angsuran dibagi sama seperti menu Pembiayaan: tunggakan terlama dulu, lalu cicilan berikutnya
+        // (dana/barang sesuai cicilan yang diisi); sisa setelah semua lunas = hutang lebih potong.
+        $financing = app(\App\Services\Cooperative\FinancingService::class);
+        $period = sprintf('%04d-%02d', $year, $month);
+        $loanLines = function (Customer $c, int $amount, string $memo) use ($financing, $period, $K): array {
+            $split = $financing->payrollPlan($c->id)['split'][$period] ?? [];
+            $total = array_sum($split);
+            if ($total <= 0) {
+                $split = ['dana' => $amount];
+                $total = $amount;
+            }
+            $lines = [];
+            $left = $amount;
+            $keys = array_keys($split);
+            foreach ($keys as $n => $type) {
+                $part = $n === count($keys) - 1 ? $left : (int) round($amount * $split[$type] / $total);
+                $left -= $part;
+                $acc = match ($type) {
+                    'barang' => '11303',
+                    'lebih' => '21110',
+                    default => $c->employee_type === 'PPNPN' ? '11302' : '11301',
+                };
+                if ($part > 0) {
+                    $lines[] = $K($acc, $part, $c->id, $type === 'lebih' ? $memo.' (lebih potong)' : $memo);
+                }
+            }
 
-            return array_values(array_filter([
-                $barang > 0 ? $K('11303', $barang, $c->id, $memo) : null,
-                $dana > 0 ? $K($c->employee_type === 'PPNPN' ? '11302' : '11301', $dana, $c->id, $memo) : null,
-            ]));
+            return $lines;
         };
 
         $memo = sprintf('%04d-%02d', $year, $month);
