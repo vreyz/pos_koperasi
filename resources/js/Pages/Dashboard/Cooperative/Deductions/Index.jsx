@@ -7,7 +7,7 @@ import { useAuthorization } from "@/Utils/authorization";
 import { Badge, PageHeader, Panel, Stat, btn, inputBase, rupiah } from "@/Components/Cooperative/ui";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-const TYPES = ["pinjaman", "wajib", "pokok", "sukarela", "angsuran", "pg"];
+const TYPES = ["pokok", "wajib", "sukarela", "pinjaman", "angsuran", "pg"]; // urutan simpanan: pokok, wajib, sukarela
 const SHORT = { pinjaman: "Simpanan Pinjaman", wajib: "Simpanan Wajib", pokok: "Simpanan Pokok", sukarela: "Simpanan Sukarela", angsuran: "Angsuran Koperasi", pg: "Potong Gaji Koperasi" };
 const num = (v) => Math.round(Number(v || 0)).toLocaleString("id-ID");
 
