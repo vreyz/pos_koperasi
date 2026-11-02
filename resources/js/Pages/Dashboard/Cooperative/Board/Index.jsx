@@ -5,11 +5,25 @@ import { IconDownload, IconFileText, IconPencil, IconPlus, IconTrash, IconUpload
 import Swal from "sweetalert2";
 import SortableTable from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
-import { Badge, Field, PageHeader, Panel, btn, inputClass, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
+import { Badge, Field, PageHeader, Panel, btn, inputClass, useFlashToasts } from "@/Components/Cooperative/ui";
 import { SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "");
-const period = (d) => `${fmtDate(d.effective_from)} – ${d.effective_until ? fmtDate(d.effective_until) : "sampai SK berikutnya"}`;
+const dayBefore = (date) => {
+    const d = new Date(`${date}T00:00:00`);
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** SK diurutkan dari yang terlama; periode berakhir sehari sebelum SK berikutnya berlaku (atau tanggal "berlaku sampai" bila diisi). */
+function withPeriods(decrees) {
+    const ordered = [...decrees].sort((a, b) => a.effective_from.localeCompare(b.effective_from) || a.id - b.id);
+    return ordered.map((d, i) => ({
+        ...d,
+        seq: i + 1,
+        period_until: d.effective_until || (ordered[i + 1] ? dayBefore(ordered[i + 1].effective_from) : null),
+    }));
+}
 
 /** Teks PDF dibaca di browser (pdf.js dimuat hanya saat dibutuhkan). */
 async function pdfText(file) {
@@ -54,7 +68,9 @@ export default function Index({ decrees, currentId, positions, employees }) {
     const [readInfo, setReadInfo] = useState(null);
     const [saving, setSaving] = useState(false);
     const empOptions = useMemo(() => employeeOptions(employees), [employees]);
-    const current = decrees.find((d) => d.id === currentId);
+    const rows = useMemo(() => withPeriods(decrees), [decrees]);
+    const [selectedId, setSelectedId] = useState(currentId ?? rows[rows.length - 1]?.id ?? null);
+    const selected = rows.find((d) => d.id === selectedId);
 
     const openNew = () => { setForm(blankForm()); setErrors({}); setReadInfo(null); };
     const openEdit = (d) => {
@@ -118,27 +134,40 @@ export default function Index({ decrees, currentId, positions, employees }) {
         );
 
     const columns = [
-        { key: "number", label: "Nomor SK", filter: "text", value: (d) => d.number || "", render: (d) => <><div className="font-medium">{d.number || "-"}</div><div className="text-xs text-slate-500">{fmtDate(d.decree_date)}</div></> },
-        { key: "effective_from", label: "Masa berlaku", value: (d) => d.effective_from, render: (d) => <>{period(d)} {d.id === currentId && <Badge color="green">Berlaku</Badge>}</> },
+        { key: "seq", label: "No", value: (d) => d.seq },
+        { key: "number", label: "Nomor SK", filter: "text", value: (d) => d.number || "", render: (d) => <span className="font-medium text-slate-900 dark:text-white">{d.number || "-"}</span> },
+        { key: "decree_date", label: "Tanggal SK", value: (d) => d.decree_date || "", render: (d) => fmtDate(d.decree_date) || "-" },
         {
-            key: "members",
-            label: "Pengurus",
-            filter: "text",
-            value: (d) => d.members.map((m) => `${m.position || ""} ${m.customer?.name}`).join(", "),
-            render: (d) => <div className="text-xs leading-5">{d.members.map((m) => <div key={m.id}><span className="text-slate-500">{m.position || "Pengurus"}:</span> {m.customer?.name}</div>)}</div>,
+            key: "effective_from",
+            label: "Periode",
+            value: (d) => d.effective_from,
+            render: (d) => (
+                <span className="inline-flex items-center gap-2">
+                    {fmtDate(d.effective_from)} – {d.period_until ? fmtDate(d.period_until) : "sekarang"}
+                    {d.id === currentId && <Badge color="green">Berlaku</Badge>}
+                </span>
+            ),
         },
+        { key: "count", label: "Pengurus", align: "right", value: (d) => d.members.length, render: (d) => `${d.members.length} orang` },
         {
             key: "actions",
             label: "",
             value: () => "",
             render: (d) => (
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                     {d.file_name && <a href={route("board.file", d.id)} target="_blank" className={btn.secondary} title={d.file_name}><IconFileText size={16} /> SK</a>}
-                    {manage && <button onClick={() => openEdit(d)} className={btn.secondary}><IconPencil size={16} /></button>}
-                    {manage && <button onClick={() => remove(d)} className={btn.secondary + " text-danger-600"}><IconTrash size={16} /></button>}
+                    {manage && <button onClick={() => openEdit(d)} className={btn.secondary} title="Ubah"><IconPencil size={16} /></button>}
+                    {manage && <button onClick={() => remove(d)} className={btn.secondary + " text-danger-600"} title="Hapus"><IconTrash size={16} /></button>}
                 </div>
             ),
         },
+    ];
+
+    const memberColumns = [
+        { key: "no", label: "No", value: (m) => m.no },
+        { key: "position", label: "Jabatan", filter: "text", value: (m) => m.position || "-" },
+        { key: "name", label: "Nama", filter: "text", value: (m) => m.customer?.name || "", render: (m) => <span className="font-medium text-slate-900 dark:text-white">{m.customer?.name}</span> },
+        { key: "nip", label: "NIP", filter: "text", value: (m) => m.customer?.nip || "", render: (m) => <span className="font-mono text-slate-700 dark:text-slate-200">{m.customer?.nip || "-"}</span> },
     ];
 
     return (
@@ -208,22 +237,32 @@ export default function Index({ decrees, currentId, positions, employees }) {
                 </Panel>
             )}
 
-            {current && (
-                <Panel title={`Pengurus saat ini — SK ${current.number || ""}`} className="mb-6">
-                    <table className="w-full text-sm">
-                        <thead><tr><th className={th}>Jabatan</th><th className={th}>Nama</th><th className={th}>NIP</th></tr></thead>
-                        <tbody>
-                            {current.members.map((m) => (
-                                <tr key={m.id}><td className={td}>{m.position || "-"}</td><td className={td}>{m.customer?.name}</td><td className={td}>{m.customer?.nip || "-"}</td></tr>
-                            ))}
-                        </tbody>
-                    </table>
+            <Panel title={`SK pengurus (${decrees.length}) — klik SK untuk melihat daftar pengurusnya`} className="mb-4">
+                <SortableTable
+                    rows={rows}
+                    rowKey={(d) => d.id}
+                    columns={columns}
+                    initialSort={{ key: "seq", dir: "asc" }}
+                    onRowClick={(d) => setSelectedId(d.id)}
+                    isSelected={(d) => d.id === selectedId}
+                    emptyText="Belum ada SK. Klik Upload SK."
+                />
+            </Panel>
+
+            {selected && (
+                <Panel
+                    key={selected.id}
+                    title={`Pengurus — SK ${selected.number || "-"} (${fmtDate(selected.effective_from)} – ${selected.period_until ? fmtDate(selected.period_until) : "sekarang"})`}
+                >
+                    <SortableTable
+                        rows={selected.members.map((m, i) => ({ ...m, no: i + 1 }))}
+                        rowKey={(m) => m.id}
+                        columns={memberColumns}
+                        initialSort={{ key: "no", dir: "asc" }}
+                        emptyText="SK ini belum punya daftar pengurus."
+                    />
                 </Panel>
             )}
-
-            <Panel title={`Riwayat SK pengurus (${decrees.length})`}>
-                <SortableTable rows={decrees} rowKey={(d) => d.id} columns={columns} initialSort={{ key: "effective_from", dir: "desc" }} emptyText="Belum ada SK. Klik Upload SK." />
-            </Panel>
         </>
     );
 }

@@ -9,6 +9,7 @@ import { inputBase, td, th } from "@/Components/Cooperative/ui";
  * columns: [{ key, label, value: (row) => string|number, render?: (row) => node,
  *             filter?: "text" | "number" | "select", options?: [{value,label}], align?: "right", className? }]
  * initialSort: { key, dir } atau daftar [{ key, dir }, ...]
+ * onRowClick / isSelected: baris bisa diklik (mis. memilih SK) dan ditandai terpilih.
  *
  * Saringan angka menerima: 0, >0, >=100000, <50000, =100000, 100000-500000, kosong.
  */
@@ -37,7 +38,7 @@ export function matchNumber(value, expr) {
     }
 }
 
-export default function SortableTable({ columns, rows, rowKey, initialSort, initialFilters = {}, emptyText = "Tidak ada data.", footer }) {
+export default function SortableTable({ columns, rows, rowKey, initialSort, initialFilters = {}, emptyText = "Tidak ada data.", footer, onRowClick, isSelected }) {
     const [sorts, setSorts] = useState(() => {
         const initial = initialSort || { key: columns[0].key, dir: "asc" };
         return Array.isArray(initial) ? initial : [initial];
@@ -134,7 +135,15 @@ export default function SortableTable({ columns, rows, rowKey, initialSort, init
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {visible.map((row) => (
-                        <tr key={rowKey(row)} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                        <tr
+                            key={rowKey(row)}
+                            onClick={onRowClick ? () => onRowClick(row) : undefined}
+                            className={`${onRowClick ? "cursor-pointer" : ""} ${
+                                isSelected?.(row)
+                                    ? "bg-accent-50 shadow-[inset_3px_0_0_0] shadow-accent-500 dark:bg-accent-500/10"
+                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                            }`}
+                        >
                             {columns.map((c) => (
                                 <td key={c.key} className={`${td} ${c.align === "right" ? "text-right" : ""} ${c.className || ""}`}>
                                     {c.render ? c.render(row) : c.value(row)}

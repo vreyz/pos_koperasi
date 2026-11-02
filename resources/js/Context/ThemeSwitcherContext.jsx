@@ -4,8 +4,9 @@ const ThemeSwitcher = createContext();
 
 export const ThemeSwitcherProvider = ({ children }) => {
     // define state darkMode
+    // Bawaan tema gelap (biru tua seperti halaman login); pilihan pengguna tetap diingat.
     const [darkMode, setDarkMode] = useState(
-        localStorage.getItem('darkMode') === 'true'
+        localStorage.getItem('darkMode') !== 'false'
     )
 
     useEffect(() => {

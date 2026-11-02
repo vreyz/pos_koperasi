@@ -22,3 +22,36 @@
 .kawung-navy {
     background-color: #0b1f3a;
 }
+
+/*
+ * Mode gelap untuk elemen yang belum punya varian dark: (banyak halaman bawaan):
+ * teks gelap jadi terang, latar putih jadi biru tua, garis terang jadi gelap.
+ * Elemen yang sudah menulis dark:text-/dark:bg-/dark:border- sendiri tidak diubah.
+ * Hanya di layar (cetakan tetap hitam di atas putih); area .light-surface (kertas cetak) dikecualikan.
+ */
+@media screen {
+    .dark :is(.text-slate-900, .text-slate-800, .text-gray-900, .text-gray-800, .text-black):not([class*="dark:text-"]):not(.light-surface, .light-surface *) {
+        color: #ebeff6;
+    }
+    .dark :is(.text-slate-700, .text-slate-600, .text-gray-700, .text-gray-600):not([class*="dark:text-"]):not(.light-surface, .light-surface *) {
+        color: #c3cedd;
+    }
+    .dark :is(.text-slate-500, .text-gray-500):not([class*="dark:text-"]):not(.light-surface, .light-surface *) {
+        color: #a3b0c4;
+    }
+    .dark :is(.text-primary-600, .text-primary-700, .text-primary-800, .text-primary-500):not([class*="dark:text-"]):not(.light-surface, .light-surface *) {
+        color: #9dbbe6;
+    }
+    .dark :is(.bg-white, .bg-slate-50, .bg-gray-50):not([class*="dark:bg-"]):not(.light-surface, .light-surface *) {
+        background-color: #132744;
+    }
+    .dark :is(.bg-slate-100, .bg-gray-100):not([class*="dark:bg-"]):not(.light-surface, .light-surface *) {
+        background-color: #1e2f4d;
+    }
+    .dark :is(.border-slate-200, .border-slate-100, .border-gray-200, .border-gray-100):not([class*="dark:border-"]):not(.light-surface, .light-surface *) {
+        border-color: #1e2f4d;
+    }
+    .dark :is(.divide-slate-100, .divide-slate-200, .divide-gray-100, .divide-gray-200):not([class*="dark:divide-"]):not(.light-surface, .light-surface *) > :not([hidden]) ~ :not([hidden]) {
+        border-color: #1e2f4d;
+    }
+}

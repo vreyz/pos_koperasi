@@ -252,7 +252,7 @@ export default function Print({ doc, type, financing, settings: rules, coop = {}
     // Identitas koperasi dari Profil Toko & SK Pengurus (bukan isian terpisah).
     const settings = { ...rules, coop_name: coop.name, coop_city: coop.city || DOTS, coop_chair: coop.chair, coop_business_head: coop.business_head };
     return (
-        <div className="min-h-screen bg-gray-100 py-6 text-black print:bg-white print:py-0">
+        <div className="light-surface min-h-screen bg-gray-100 py-6 text-black print:bg-white print:py-0">
             <Head title={doc === "pencairan" ? "Bukti Pencairan" : "Formulir Pembiayaan"} />
             <style>{`@page { size: A4; margin: 18mm 16mm; } .page { background: white; width: 210mm; min-height: 297mm; margin: 0 auto 16px; padding: 18mm 16mm; font-family: "Times New Roman", serif; font-size: 12pt; line-height: 1.4; } @media print { .page { width: auto; min-height: auto; margin: 0; padding: 0; break-after: page; } }`}</style>
             <div className="mx-auto mb-4 flex max-w-[210mm] justify-end gap-2 print:hidden">
