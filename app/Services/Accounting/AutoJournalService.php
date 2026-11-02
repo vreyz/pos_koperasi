@@ -11,6 +11,9 @@ use App\Models\MemberContribution;
 use App\Models\PayablePayment;
 use App\Models\ReceivablePayment;
 use App\Models\SalesReturn;
+use App\Models\ShiftCashMovement;
+use App\Models\StockMutation;
+use App\Models\SupplierReturn;
 use App\Models\Setting;
 use App\Models\ShuPeriod;
 use App\Models\StockOpname;
@@ -47,6 +50,9 @@ class AutoJournalService
     private array $stats = ['dibuat' => 0, 'diganti' => 0, 'dihapus' => 0, 'sama' => 0, 'terkunci' => 0, 'gagal' => 0];
 
     private array $messages = [];
+
+    /** Kunci jurnal yang sudah diperiksa dalam satu sinkronisasi (untuk sapu bersih). */
+    private array $visited = [];
 
     public function __construct(private readonly JournalService $journal, private readonly EventCatalog $catalog) {}
 
@@ -97,6 +103,10 @@ class AutoJournalService
             'contribution' => $this->syncContribution((int) $id),
             'recap' => $this->syncRecap($id),
             'shu' => $this->syncShu((int) $id),
+            'supplier_return' => $this->syncSupplierReturn((int) $id),
+            'init' => $this->syncInitialStock((int) $id),
+            'cash_move' => $this->syncCashMovement((int) $id),
+            'all' => $this->syncAll(),
             default => null,
         };
     }
@@ -136,8 +146,44 @@ class AutoJournalService
             $this->safely(fn () => $this->syncRecap($p));
         }
         ShuPeriod::where('status', 'final')->pluck('id')->each(fn ($id) => $this->safely(fn () => $this->syncShu($id)));
+        SupplierReturn::whereBetween('returned_at', [$from, $end])->pluck('id')->each(fn ($id) => $this->safely(fn () => $this->syncSupplierReturn($id)));
+        StockMutation::where('reference_type', 'product_create')->whereBetween('created_at', [$from, $end])->pluck('id')
+            ->each(fn ($id) => $this->safely(fn () => $this->syncInitialStock($id)));
+        ShiftCashMovement::whereBetween('created_at', [$from, $end])->pluck('id')->each(fn ($id) => $this->safely(fn () => $this->syncCashMovement($id)));
+
+        // Sapu bersih: jurnal otomatis yang sumbernya sudah dihapus/diubah tanpa pemicu (mis. upload massal).
+        foreach (JournalEntry::whereNotNull('auto_key')->distinct()->pluck('auto_key') as $key) {
+            if (! isset($this->visited[$key])) {
+                $this->safely(fn () => $this->resyncKey($key));
+            }
+        }
 
         return ['stats' => $this->stats, 'messages' => $this->messages];
+    }
+
+    /** Periksa ulang satu kunci jurnal; bila sumbernya tidak ada / tidak lagi memenuhi syarat, jurnalnya dihapus. */
+    private function resyncKey(string $key): void
+    {
+        $p = explode(':', $key);
+        match ($p[0]) {
+            'pos' => $this->syncSalesDay($p[1]),
+            'fin', 'inst' => ($f = Financing::find((int) $p[1])) ? $this->syncFinancing($f) : null,
+            'gr' => $this->syncGoodsReceiving((int) $p[1]),
+            'ret' => $this->syncReturn((int) $p[1]),
+            'so' => $this->syncOpname((int) $p[1]),
+            'pp' => $this->syncPayablePayment((int) $p[1]),
+            'rp' => $this->syncReceivablePayment((int) $p[1]),
+            'mc' => $this->syncContribution((int) $p[1]),
+            'rekap' => $this->syncRecap($p[1]),
+            'shu' => $this->syncShu((int) $p[1]),
+            'sr' => $this->syncSupplierReturn((int) $p[1]),
+            'init' => $this->syncInitialStock((int) $p[1]),
+            'cm' => $this->syncCashMovement((int) $p[1]),
+            default => null,
+        };
+        if (! isset($this->visited[$key])) {
+            $this->apply($key, []);
+        }
     }
 
     private function safely(callable $fn): void
@@ -160,11 +206,15 @@ class AutoJournalService
      */
     public function apply(string $key, array $entries, $source = null): string
     {
+        $this->visited[$key] = true;
+        // Kejadian bertanggal di masa depan (mis. cicilan yang sudah ditandai lunas lebih dulu) dijurnal
+        // oleh sinkronisasi harian saat tanggalnya tiba, bukan sekarang.
+        $today = now()->toDateString();
         $entries = array_values(array_filter(array_map(function ($e) {
             $e['lines'] = $this->journal->normalize($e['lines']);
 
             return $e;
-        }, $entries), fn ($e) => count($e['lines']) >= 2));
+        }, $entries), fn ($e) => count($e['lines']) >= 2 && $e['date'] <= $today));
         $fingerprint = sha1(json_encode($entries));
         $existing = JournalEntry::where('auto_key', $key)->get();
 
@@ -443,6 +493,61 @@ class AutoJournalService
             'event_code' => 'TK-14', 'lines' => $lines]], $so);
     }
 
+    /** Retur barang ke supplier: mengurangi hutang supplier dan persediaan. */
+    public function syncSupplierReturn(int $id): void
+    {
+        $r = SupplierReturn::with('items')->find($id);
+        $key = "sr:{$id}";
+        if (! $r || $r->status !== 'completed' || ! $r->returned_at) {
+            $this->apply($key, []);
+
+            return;
+        }
+        if (! self::enabledFor($r->returned_at)) {
+            return;
+        }
+        $total = $r->items->sum(fn ($i) => (int) $i->qty_returned * (float) $i->unit_price);
+        $this->apply($key, [['date' => Carbon::parse($r->returned_at)->toDateString(), 'description' => 'Retur barang ke supplier '.($r->document_number ?: "#{$r->id}"),
+            'division' => 'toko', 'event_code' => 'TK-03', 'lines' => [self::D('21111', $total), self::K('11501', $total)]]], $r);
+    }
+
+    /** Produk baru yang langsung diisi stok awal: persediaan bertambah, dibayar lewat hutang supplier. */
+    public function syncInitialStock(int $id): void
+    {
+        $m = StockMutation::with('product:id,title,buy_price')->find($id);
+        $key = "init:{$id}";
+        if (! $m || $m->reference_type !== 'product_create') {
+            $this->apply($key, []);
+
+            return;
+        }
+        if (! self::enabledFor($m->created_at)) {
+            return;
+        }
+        $value = (int) $m->qty * (int) ($m->product?->buy_price ?? 0);
+        $this->apply($key, [['date' => Carbon::parse($m->created_at)->toDateString(), 'description' => 'Stok awal produk baru '.($m->product?->title ?? ''),
+            'division' => 'toko', 'event_code' => 'TK-03', 'lines' => [self::D('11501', $value), self::K('21111', $value)]]], $m);
+    }
+
+    /** Kas masuk/keluar laci kasir: pindah antara Kas di Kasir dan Kas Kecil. */
+    public function syncCashMovement(int $id): void
+    {
+        $c = ShiftCashMovement::find($id);
+        $key = "cm:{$id}";
+        if (! $c) {
+            $this->apply($key, []);
+
+            return;
+        }
+        if (! self::enabledFor($c->created_at)) {
+            return;
+        }
+        $in = $c->type === ShiftCashMovement::TYPE_IN;
+        $this->apply($key, [['date' => Carbon::parse($c->created_at)->toDateString(), 'description' => ($in ? 'Kas masuk laci kasir' : 'Kas keluar laci kasir').($c->note ? ': '.$c->note : ''),
+            'division' => 'toko', 'event_code' => 'UM-12',
+            'lines' => $in ? [self::D('11104', $c->amount), self::K('11101', $c->amount)] : [self::D('11101', $c->amount), self::K('11104', $c->amount)]]], $c);
+    }
+
     // ------------------------------------------------------------------ Pembiayaan
 
     public function syncFinancing(Financing $f): void
@@ -475,7 +580,7 @@ class AutoJournalService
         // Angsuran: transfer/pelunasan -> kas; potong gaji -> dilunasi lewat rekap. Barang: akui margin.
         $total = max(1, $f->total());
         foreach ($f->installments as $i) {
-            $key = "inst:{$i->id}";
+            $key = "inst:{$f->id}:{$i->id}";
             if (! $i->paid_at || ! $disbursed) {
                 $this->apply($key, []);
 
@@ -499,6 +604,12 @@ class AutoJournalService
             $this->apply($key, $lines ? [['date' => $date, 'description' => "{$label} {$f->number}", 'division' => $div,
                 'event_code' => $div === 'barang' ? 'PB-04' : 'PD-05', 'lines' => $lines]] : [], $i);
         }
+
+        // Jadwal cicilan dibuat ulang (id lama hilang): hapus jurnal cicilan lama.
+        $ids = $f->installments->pluck('id')->all();
+        JournalEntry::where('auto_key', 'like', "inst:{$f->id}:%")->pluck('auto_key')->unique()
+            ->reject(fn ($k) => in_array((int) explode(':', $k)[2], $ids, true))
+            ->each(fn ($k) => $this->apply($k, []));
 
         // Tanda macet: cadangan sebesar sisa saat ditandai (tidak ikut berubah setiap hari).
         $badKey = "fin:{$f->id}:macet";

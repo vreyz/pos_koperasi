@@ -236,10 +236,8 @@ class ContributionImportService
             foreach (array_chunk($insert, 500) as $chunk) {
                 MemberContribution::insert($chunk);
             }
-            // Jurnal rekap potongan otomatis untuk bulan yang berubah (berlaku mulai tanggal otomatis akuntansi).
-            foreach (array_unique(array_map(fn ($r) => sprintf('%04d-%02d', $r['period_year'], $r['period_month']), $insert)) as $period) {
-                \App\Services\Accounting\AutoJournalService::markDirty('recap', $period);
-            }
+            // Hasil upload juga dijurnal otomatis (termasuk baris yang terhapus/berubah), mulai tanggal otomatis akuntansi.
+            \App\Services\Accounting\AutoJournalHooks::bulkChanged();
             $summary['saved'] = count($insert);
         });
         app(MemberSync::class)->syncMembers();

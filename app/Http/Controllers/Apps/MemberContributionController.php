@@ -186,6 +186,7 @@ class MemberContributionController extends Controller
         foreach (array_chunk($rows, 500) as $chunk) {
             MemberContribution::insert($chunk);
         }
+        \App\Services\Accounting\AutoJournalHooks::bulkChanged(); // insert massal: jurnal otomatis tetap dibuat
 
         app(MemberSync::class)->syncMembers();
 

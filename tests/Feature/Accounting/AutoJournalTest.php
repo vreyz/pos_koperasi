@@ -20,10 +20,14 @@ class AutoJournalTest extends TestCase
 {
     use RefreshDatabase;
 
+    private const NOW = '2027-12-31 12:00:00';
+
     protected function setUp(): void
     {
         parent::setUp();
         Setting::set(AutoJournalService::FROM_KEY, '2027-01-01');
+        // Jurnal otomatis tidak dibuat untuk tanggal yang belum lewat: tes berjalan "di akhir 2027".
+        $this->travelTo(self::NOW);
     }
 
     private function employee(string $name, string $type = 'PNS'): Customer
@@ -48,7 +52,7 @@ class AutoJournalTest extends TestCase
             'cashier_id' => User::factory()->create()->id, 'warehouse_id' => $wh->id, 'invoice' => 'TRX-'.uniqid(),
             'cash' => 0, 'change' => 0, 'discount' => 0, 'payment_status' => 'paid',
         ]);
-        $this->travelBack();
+        $this->travelTo(self::NOW);
 
         return $t;
     }
@@ -142,7 +146,7 @@ class AutoJournalTest extends TestCase
         MemberContribution::create(['customer_id' => $dewi->id, 'type' => 'wajib', 'period_year' => 2027, 'period_month' => 1, 'amount' => 50000, 'source' => 'import']);
         $this->travelTo('2027-01-20 09:00:00'); // setoran tunai dijurnal pada tanggal uangnya diterima
         MemberContribution::create(['customer_id' => $andi->id, 'type' => 'sukarela', 'period_year' => 2027, 'period_month' => 1, 'amount' => 20000, 'source' => 'tunai']);
-        $this->travelBack();
+        $this->travelTo(self::NOW);
         $this->flush();
 
         $recap = JournalEntry::where('auto_key', 'rekap:2027-01')->sole();
@@ -179,5 +183,91 @@ class AutoJournalTest extends TestCase
         $user->givePermissionTo(['accounting-access', 'accounting-manage']);
         $this->actingAs($user)->post(route('accounting.sync'))->assertSessionHas('success');
         $this->artisan('accounting:sync')->assertSuccessful();
+    }
+
+    private function product(int $buyPrice): \App\Models\Product
+    {
+        $cat = \App\Models\Category::create(['name' => 'Umum', 'image' => 'x.png', 'description' => '-']);
+
+        return \App\Models\Product::create(['category_id' => $cat->id, 'image' => 'x.png', 'barcode' => uniqid(), 'sku' => uniqid(), 'title' => 'Gula 1kg',
+            'description' => '-', 'buy_price' => $buyPrice, 'sell_price' => $buyPrice + 2000, 'stock' => 0, 'tax_rate' => 0]);
+    }
+
+    public function test_supplier_return_initial_stock_and_cash_drawer_are_journaled(): void
+    {
+        $this->travelTo('2027-02-01 09:00:00');
+        $product = $this->product(15000);
+        \App\Models\StockMutation::create(['product_id' => $product->id, 'reference_type' => 'product_create', 'reference_id' => $product->id,
+            'mutation_type' => 'in', 'qty' => 10, 'stock_before' => 0, 'stock_after' => 10]);
+        $supplier = \App\Models\Supplier::create(['name' => 'Grosir Jaya']);
+        $ret = \App\Models\SupplierReturn::create(['supplier_id' => $supplier->id, 'document_number' => 'RS-1', 'status' => 'draft']);
+        $ret->items()->create(['product_id' => $product->id, 'qty_returned' => 2, 'unit_price' => 15000]);
+        $ret->update(['status' => 'completed', 'returned_at' => now()]);
+        $cashier = User::factory()->create();
+        $shift = \App\Models\CashierShift::create(['user_id' => $cashier->id, 'opened_by' => $cashier->id, 'opened_at' => now(), 'status' => 'open']);
+        \App\Models\ShiftCashMovement::create(['cashier_shift_id' => $shift->id, 'type' => 'out', 'amount' => 40000, 'note' => 'Setor ke bendahara', 'user_id' => $cashier->id]);
+        $this->travelTo(self::NOW);
+        $this->flush();
+
+        $this->assertSame(150000 - 30000, $this->bal('11501'));   // stok awal 10 x 15rb, retur 2 x 15rb
+        $this->assertSame(-150000 + 30000, $this->bal('21111'));
+        $this->assertSame(-40000, $this->bal('11104'));
+        $this->assertSame(40000, $this->bal('11101'));
+
+        // Retur dibatalkan -> jurnalnya hilang.
+        $ret->update(['status' => 'cancelled']);
+        $this->flush();
+        $this->assertSame(150000, $this->bal('11501'));
+    }
+
+    public function test_bulk_upload_and_deleted_rows_are_followed_by_sync(): void
+    {
+        $andi = $this->employee('Andi');
+        // Upload massal (insert tanpa model) -> tetap terjurnal.
+        MemberContribution::insert([['customer_id' => $andi->id, 'type' => 'wajib', 'period_year' => 2027, 'period_month' => 2, 'amount' => 100000,
+            'source' => 'import', 'created_at' => now(), 'updated_at' => now()]]);
+        \App\Services\Accounting\AutoJournalHooks::bulkChanged();
+        $this->flush();
+        $this->assertSame(-100000, $this->bal('31201'));
+
+        // Baris dihapus lewat query (tanpa model) -> sapu bersih menghapus jurnalnya.
+        MemberContribution::query()->delete();
+        app(AutoJournalService::class)->syncAll();
+        $this->assertSame(0, JournalEntry::where('auto_key', 'rekap:2027-02')->count());
+        $this->assertSame(0, $this->bal('31201'));
+    }
+
+    public function test_rebuilt_installment_schedule_does_not_leave_old_journals(): void
+    {
+        $svc = app(FinancingService::class);
+        $andi = $this->employee('Andi');
+        $f = Financing::create(['type' => 'dana', 'customer_id' => $andi->id, 'status' => 'disetujui', 'number' => 'FPD-9', 'principal' => 2000000,
+            'margin_amount' => 0, 'admin_fee' => 0, 'tenor' => 2, 'installment' => 1000000]);
+        $svc->disburse($f, '2027-01-10', null);
+        $svc->setPaid($f->installments()->first(), true, 'manual', '2027-02-05');
+        $this->flush();
+        $this->assertSame(1, JournalEntry::where('auto_key', 'like', "inst:{$f->id}:%")->count());
+
+        $svc->buildSchedule($f->fresh()); // jadwal dibuat ulang: id cicilan lama hilang
+        $this->flush();
+        $this->assertSame(0, JournalEntry::where('auto_key', 'like', "inst:{$f->id}:%")->count());
+        $this->assertSame(2000000, $this->bal('11301'));
+    }
+
+    public function test_future_dated_events_wait_until_their_date(): void
+    {
+        Setting::set(AutoJournalService::FROM_KEY, '2020-01-01');
+        $svc = app(FinancingService::class);
+        $andi = $this->employee('Andi');
+        $f = Financing::create(['type' => 'dana', 'customer_id' => $andi->id, 'status' => 'disetujui', 'number' => 'FPD-F', 'principal' => 1000000,
+            'margin_amount' => 0, 'admin_fee' => 0, 'tenor' => 1, 'installment' => 1000000]);
+        $svc->disburse($f, now()->toDateString(), null);
+        $svc->setPaid($f->installments()->first(), true, 'manual', now()->addMonth()->toDateString());
+        $this->flush();
+        $this->assertSame(0, JournalEntry::where('auto_key', 'like', 'inst:%')->count());
+
+        $this->travel(40)->days();
+        app(AutoJournalService::class)->syncAll();
+        $this->assertSame(1, JournalEntry::where('auto_key', 'like', 'inst:%')->count());
     }
 }
