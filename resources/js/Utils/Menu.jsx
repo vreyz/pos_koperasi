@@ -176,6 +176,23 @@ export default function Menu({ includeHidden = false } = {}) {
             ],
         },
         {
+            title: "Akuntansi",
+            details: [
+                ["Jurnal", "accounting.journals", (u) => u === "/dashboard/accounting" || u.startsWith("/dashboard/accounting?"), "accounting-access"],
+                ["Catat Kejadian", "accounting.record", (u) => u.startsWith("/dashboard/accounting/record"), "accounting-create"],
+                ["Buku Besar", "accounting.ledger", (u) => u.startsWith("/dashboard/accounting/ledger"), "accounting-access"],
+                ["Neraca Saldo", "accounting.trial-balance", (u) => u.startsWith("/dashboard/accounting/trial-balance"), "accounting-access"],
+                ["Laporan Keuangan", "accounting.reports", (u) => u.startsWith("/dashboard/accounting/reports"), "accounting-access"],
+                ["COA & Saldo Awal", "accounting.accounts", (u) => u.startsWith("/dashboard/accounting/accounts") || u.startsWith("/dashboard/accounting/opening") || u.startsWith("/dashboard/accounting/manual"), "accounting-access"],
+            ].map(([title, name, isActive, perm]) => ({
+                title,
+                href: route(name),
+                active: isActive(url),
+                icon: <IconBooks size={20} strokeWidth={1.5} />,
+                permissions: hasAnyPermission([perm]),
+            })),
+        },
+        {
             title: t("sidebar.sections.sales"),
             details: [
                 {

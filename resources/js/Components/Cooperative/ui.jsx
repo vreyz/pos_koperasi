@@ -35,7 +35,7 @@ export function PageHeader({ icon: Icon, title, subtitle, actions }) {
 
 export function Panel({ title, actions, children, className = "" }) {
     return (
-        <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 ${className}`}>
+        <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 ${className}`}>
             {(title || actions) && (
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
                     <h3 className="font-semibold text-slate-800 dark:text-white">{title}</h3>

@@ -30,6 +30,7 @@ class DemoDatabaseResetter
                 [
                     'settings',
                     'payment_settings',
+                    'accounts', // bagan akun (COA) koperasi adalah pengaturan, bukan data demo
                     'indonesia_provinces',
                     'indonesia_cities',
                     'indonesia_districts',

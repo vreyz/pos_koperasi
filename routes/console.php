@@ -12,3 +12,4 @@ Schedule::command('crm:sync-segments')->dailyAt('01:00');
 Schedule::command('crm:generate-reminders')->dailyAt('01:15');
 Schedule::command('reorder:generate')->dailyAt('02:00');
 Schedule::command('transactions:expire')->hourly();
+Schedule::command('accounting:sync')->dailyAt('00:30'); // jurnal otomatis akuntansi (aktif mulai tanggal di pengaturan)

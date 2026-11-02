@@ -11,6 +11,7 @@ use App\Http\Controllers\Apps\CrmReminderController;
 use App\Http\Controllers\Apps\CustomerController;
 use App\Http\Controllers\Apps\CustomerSegmentController;
 use App\Http\Controllers\Apps\CustomerVoucherController;
+use App\Http\Controllers\Apps\AccountingController;
 use App\Http\Controllers\Apps\DeductionController;
 use App\Http\Controllers\Apps\DineAreaController;
 use App\Http\Controllers\Apps\DineTableController;
@@ -250,6 +251,28 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::post('deductions/import/analyze', [DeductionController::class, 'analyze'])->middleware('permission:deductions-import')->name('deductions.import.analyze');
     Route::post('deductions/import/preview', [DeductionController::class, 'preview'])->middleware('permission:deductions-import')->name('deductions.import.preview');
     Route::post('deductions/import/commit', [DeductionController::class, 'commit'])->middleware('permission:deductions-import')->name('deductions.import.commit');
+
+    // Akuntansi: jurnal, catat kejadian, buku besar, neraca saldo, laporan keuangan
+    Route::prefix('accounting')->name('accounting.')->group(function () {
+        Route::get('/', [AccountingController::class, 'journals'])->middleware('permission:accounting-access')->name('journals');
+        Route::get('record', [AccountingController::class, 'record'])->middleware('permission:accounting-create')->name('record');
+        Route::post('record/preview', [AccountingController::class, 'preview'])->middleware('permission:accounting-create')->name('record.preview');
+        Route::post('record', [AccountingController::class, 'storeEvent'])->middleware('permission:accounting-create')->name('record.store');
+        Route::get('manual', [AccountingController::class, 'manual'])->middleware('permission:accounting-manage')->name('manual');
+        Route::post('manual', [AccountingController::class, 'storeManual'])->middleware('permission:accounting-manage')->name('manual.store');
+        Route::post('journals/{entry}/reverse', [AccountingController::class, 'reverse'])->middleware('permission:accounting-manage')->name('reverse');
+        Route::get('ledger', [AccountingController::class, 'ledger'])->middleware('permission:accounting-access')->name('ledger');
+        Route::get('trial-balance', [AccountingController::class, 'trialBalance'])->middleware('permission:accounting-access')->name('trial-balance');
+        Route::get('reports', [AccountingController::class, 'reports'])->middleware('permission:accounting-access')->name('reports');
+        Route::get('accounts', [AccountingController::class, 'accounts'])->middleware('permission:accounting-access')->name('accounts');
+        Route::post('accounts', [AccountingController::class, 'storeAccount'])->middleware('permission:accounting-manage')->name('accounts.store');
+        Route::put('accounts/{account}', [AccountingController::class, 'updateAccount'])->middleware('permission:accounting-manage')->name('accounts.update');
+        Route::put('settings', [AccountingController::class, 'updateSettings'])->middleware('permission:accounting-manage')->name('settings');
+        Route::get('opening', [AccountingController::class, 'opening'])->middleware('permission:accounting-access')->name('opening');
+        Route::post('opening', [AccountingController::class, 'storeOpening'])->middleware('permission:accounting-manage')->name('opening.store');
+        Route::post('close-year', [AccountingController::class, 'closeYear'])->middleware('permission:accounting-manage')->name('close-year');
+        Route::post('sync', [AccountingController::class, 'sync'])->middleware('permission:accounting-manage')->name('sync');
+    });
     Route::get('board', [BoardController::class, 'index'])->middleware('permission:board-access')->name('board.index');
     Route::post('board/preview', [BoardController::class, 'preview'])->middleware('permission:board-manage')->name('board.preview');
     Route::post('board', [BoardController::class, 'store'])->middleware('permission:board-manage')->name('board.store');

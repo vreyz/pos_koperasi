@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { usePage } from "@inertiajs/react";
 import Sidebar from "@/Components/Dashboard/Sidebar";
 import Navbar from "@/Components/Dashboard/Navbar";
+import DivisionBar from "@/Components/Dashboard/DivisionBar";
 import { Toaster } from "react-hot-toast";
 import { useTheme } from "@/Context/ThemeSwitcherContext";
 
@@ -67,6 +68,7 @@ export default function AppLayout({ children }) {
                     themeSwitcher={themeSwitcher}
                     darkMode={darkMode}
                 />
+                <DivisionBar />
                 <main className="dashboard-scrollbar kawung-bg flex-1 overflow-y-auto">
                     <div className="w-full py-4 px-3 md:px-5 lg:px-6 pb-20 md:pb-5">
                         {showSecurityWarnings && (

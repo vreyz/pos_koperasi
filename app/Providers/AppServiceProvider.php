@@ -25,6 +25,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Jurnal otomatis akuntansi dari kasir, pembiayaan, simpanan, potongan, dll.
+        \App\Services\Accounting\AutoJournalHooks::register();
+
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(env('API_RATE_LIMIT_PER_MINUTE', 120))
                 ->by($request->user()?->id ?: $request->ip());
