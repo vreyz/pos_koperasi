@@ -49,4 +49,9 @@ return [
         ],
     ],
 
+    // OCR untuk SK hasil scan (menu Pengurus Koperasi). Kosong = cari di lokasi instalasi umum.
+    'tesseract' => [
+        'path' => env('TESSERACT_PATH'),
+    ],
+
 ];

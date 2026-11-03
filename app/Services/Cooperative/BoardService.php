@@ -5,6 +5,7 @@ namespace App\Services\Cooperative;
 use App\Models\BoardDecree;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Process;
 use ZipArchive;
 
 /**
@@ -15,10 +16,19 @@ class BoardService
 {
     public const POSITIONS = ['Pembina', 'Ketua', 'Wakil Ketua', 'Sekretaris', 'Bendahara', 'Ketua Pengawas', 'Pengawas', 'Kepala Unit Usaha', 'Anggota Pengurus'];
 
-    /** Teks SK: Word dibaca di server, PDF dibaca di browser (dikirim sebagai teks). */
-    public function text(?UploadedFile $file, ?string $clientText): string
+    /** null = belum dicoba, true = teks diambil lewat OCR, false = perlu OCR tapi Tesseract tidak terpasang. */
+    public ?bool $ocr = null;
+
+    /**
+     * Teks SK: Word dibaca di server, PDF berteks dibaca di browser (dikirim sebagai teks). SK hasil scan
+     * (foto/gambar, atau halaman PDF tanpa teks yang dirender browser jadi gambar) dibaca dengan OCR Tesseract.
+     *
+     * @param  list<UploadedFile>  $pages
+     */
+    public function text(?UploadedFile $file, ?string $clientText, array $pages = []): string
     {
-        if ($file && strtolower($file->getClientOriginalExtension()) === 'docx') {
+        $ext = $file ? strtolower($file->getClientOriginalExtension()) : null;
+        if ($ext === 'docx') {
             $zip = new ZipArchive;
             if ($zip->open($file->getRealPath()) === true) {
                 $xml = (string) $zip->getFromName('word/document.xml');
@@ -27,8 +37,63 @@ class BoardService
                 return $this->docxText($xml);
             }
         }
+        if (in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+            $pages = [$file];
+        }
+        if ($pages !== []) {
+            return $this->ocrText($pages);
+        }
 
         return (string) $clientText;
+    }
+
+    /** Lokasi tesseract: TESSERACT_PATH, lalu lokasi instalasi umum Windows/Linux/macOS. */
+    public static function tesseract(): ?string
+    {
+        foreach (array_filter([config('services.tesseract.path'), 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe', 'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe',
+            '/usr/bin/tesseract', '/usr/local/bin/tesseract', '/opt/homebrew/bin/tesseract']) as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /** @param list<UploadedFile> $pages */
+    private function ocrText(array $pages): string
+    {
+        $bin = self::tesseract();
+        if (! $bin) {
+            $this->ocr = false;
+
+            return '';
+        }
+        $texts = [];
+        foreach ($pages as $page) {
+            // psm 4 = satu kolom teks dengan ukuran beragam: baris "Jabatan : Nama" tetap utuh.
+            $run = fn (string $lang) => Process::timeout(120)->run([$bin, $page->getRealPath(), 'stdout', '-l', $lang, '--psm', '4']);
+            $result = $run('ind');
+            if (! $result->successful()) {
+                $result = $run('eng'); // bahasa Indonesia belum terpasang
+            }
+            $texts[] = $result->successful() ? $result->output() : '';
+        }
+        $this->ocr = true;
+
+        return $this->ocrClean(implode("\n", $texts));
+    }
+
+    /**
+     * Rapikan salah baca OCR yang umum di SK: titik dua di kolom jabatan terbaca "1", "l", "|", "»", ";"
+     * ("Ketua 1 Adi" → "Ketua : Adi", "Divisi Pembiayaan Dana 1 1. Fira" → "Divisi Pembiayaan Dana : 1. Fira").
+     */
+    public function ocrClean(string $text): string
+    {
+        $lines = preg_split('/\R/u', $text) ?: [];
+
+        return implode("\n", array_map(fn ($line) => str_contains($line, ':') ? $line
+            : preg_replace('/^(\s*[\-\x{2013}\x{2022}]?\s*[A-Za-z][A-Za-z ]{1,40}?)\s+(?:1|l|\||\x{00BB}|;|!|\.|,|\x{00A6})\s+(?=(?:\d{1,2}[.)]\s+)?\p{Lu})/u', '$1 : ', $line), $lines));
     }
 
     /**
@@ -82,6 +147,14 @@ class BoardService
         foreach ($lines as $i => $line) {
             $clean = trim(preg_replace('/^[\-\x{2013}\x{2022}\x{00B7}*]+\s*/u', '', $line));
             $value = $clean;
+            // Blok tanda tangan / lampiran memutus daftar jabatan: nama penandatangan dan judul
+            // "LAMPIRAN", "I. Ketua" (uraian tugas) tidak ikut jabatan terakhir.
+            if (preg_match('/^(ditandatangani|ditetapkan\s+di|kepala\s+k\S*\s+wilayah|lampiran\b|salinan\b|tembusan\b|a\.\s?n\.\s|pl[ht]\.?\s)/i', $clean)) {
+                $label = null;
+                $labelLine = -1;
+
+                continue;
+            }
             // Titik dua di baris sendiri (label di baris atas, mis. kolom label rata tengah): baris atas = jabatan.
             if (str_starts_with($clean, ':') && $i > 0 && ! str_contains($lines[$i - 1], ':')) {
                 // Hingga 2 baris di atas tanpa ":" (mis. "- Divisi Pembiayaan" / "Barang") = potongan label.
@@ -168,9 +241,17 @@ class BoardService
             ];
         }
 
-        preg_match('/NOMOR\s*:?\s*([A-Z0-9][A-Z0-9\/.\-]{3,})/i', $text, $number);
+        return ['members' => $members, 'number' => $this->number($text), 'decree_date' => $this->decreeDate($text)];
+    }
 
-        return ['members' => $members, 'number' => $number[1] ?? null, 'decree_date' => $this->decreeDate($text)];
+    /** Nomor SK; spasi sisa baca PDF/scan ("KEP- 29 /WBC.07/ 2026") dibuang. */
+    private function number(string $text): ?string
+    {
+        if (preg_match('/NOMOR\s*:?\s*((?:SKEP|KEP|SK)\s*-\s*\d[\d ]{0,5}\s*\/\s*[A-Z0-9.\-]+(?:\s*\/\s*[A-Z0-9.\-]*\d)*)/i', $text, $m)) {
+            return preg_replace('/\s+/', '', $m[1]);
+        }
+
+        return preg_match('/NOMOR\s*:?\s*([A-Z0-9][A-Z0-9\/.\-]{3,})/i', $text, $m) ? $m[1] : null;
     }
 
     /**
@@ -247,7 +328,7 @@ class BoardService
     {
         $name = trim(preg_replace('/\bNIP\b.*$/i', '', $segment));
         $words = preg_split('/\s+/', $name) ?: [];
-        if ($name === '' || count($words) > 5 || mb_strlen($name) > 50 || preg_match('/\d/', $name)) {
+        if ($name === '' || count($words) > 5 || mb_strlen($name) > 50 || preg_match('/\d/', $name) || preg_match('/^[IVX]+\./', $name)) {
             return false;
         }
         foreach ($words as $word) {
@@ -256,7 +337,7 @@ class BoardService
             }
         }
 
-        return ! preg_match('/\b(koperasi|nomor|tahun|tentang|keputusan|rapat|anggota|pengurus|kantor|wilayah|direktorat|jenderal|divisi|bagian|seksi|bidang|unit|support)\b/i', $name);
+        return ! preg_match('/\b(koperasi|nomor|tahun|tentang|keputusan|lampiran|rapat|anggota|pengurus|kantor|wilayah|direktorat|jenderal|divisi|bagian|seksi|bidang|unit|support)\b/i', $name);
     }
 
     /** Baris pendek tanpa ":" dan bukan nama, tepat setelah baris jabatan: sambungan label (mis. "Barang"). */
@@ -319,6 +400,7 @@ class BoardService
      */
     private function dates(string $text, bool $monthOnly): array
     {
+        $text = preg_replace('/(?<=\d) (?=\d)/', '', $text); // angka terpecah di PDF: "2 7 Januari 202 6"
         $months = '(januari|februari|pebruari|maret|april|mei|juni|juli|agustus|september|oktober|november|nopember|desember|jan|feb|peb|mar|apr|jun|jul|agu|agt|ags|agust|sep|sept|okt|nov|nop|des)\.?';
         $pattern = '/(?<![\d])(\d{1,2})\s*[-\/.]\s*(\d{1,2})\s*[-\/.]\s*(\d{4})|(?:(\d{1,2})\s+)?\b'.$months.'\s+(\d{4})/iu';
         preg_match_all($pattern, $text, $m, PREG_SET_ORDER);

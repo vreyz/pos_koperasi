@@ -49,9 +49,11 @@ class BoardController extends Controller
     /** Baca nama pengurus dari SK yang baru dipilih (belum disimpan). */
     public function preview(Request $request, BoardService $board)
     {
-        $request->validate(['file' => 'nullable|file|'.self::FILE_RULE, 'text' => 'nullable|string|max:500000']);
+        $request->validate(['file' => 'nullable|file|'.self::FILE_RULE, 'text' => 'nullable|string|max:500000',
+            'pages' => 'nullable|array|max:10', 'pages.*' => 'file|mimes:png,jpg,jpeg|max:10240']);
+        $text = $board->text($request->file('file'), $request->input('text'), $request->file('pages', []));
 
-        return response()->json($board->detect($board->text($request->file('file'), $request->input('text'))));
+        return response()->json($board->detect($text) + ['ocr' => $board->ocr]);
     }
 
     public function store(Request $request)

@@ -25,13 +25,34 @@ function withPeriods(decrees) {
     }));
 }
 
-/** Teks PDF dibaca di browser (pdf.js dimuat hanya saat dibutuhkan). */
-async function pdfText(file) {
+async function openPdf(file) {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     // ?worker: Vite menyimpan worker sebagai file .js (aman untuk MIME type Apache/Laragon).
     const { default: PdfWorker } = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker");
     pdfjs.GlobalWorkerOptions.workerPort ??= new PdfWorker();
-    const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+    return pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+}
+
+/** PDF hasil scan (tanpa teks): halaman dirender jadi gambar PNG untuk dibaca OCR di server. */
+async function pdfPages(pdf) {
+    const blobs = [];
+    for (let p = 1; p <= Math.min(pdf.numPages, 10); p++) {
+        const page = await pdf.getPage(p);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        blobs.push(await new Promise((resolve) => canvas.toBlob(resolve, "image/png")));
+    }
+    return blobs;
+}
+
+/** Teks PDF dibaca di browser (pdf.js dimuat hanya saat dibutuhkan). */
+async function pdfText(pdf) {
     const lines = [];
     for (let p = 1; p <= Math.min(pdf.numPages, 20); p++) {
         const content = await (await pdf.getPage(p)).getTextContent();
@@ -84,24 +105,32 @@ export default function Index({ decrees, currentId, positions, employees }) {
         const next = { ...form, file };
         setForm(next);
         const ext = file.name.split(".").pop().toLowerCase();
-        if (!["pdf", "docx"].includes(ext)) {
-            setReadInfo({ ok: false, text: "File gambar/scan tidak bisa dibaca otomatis. Isi daftar pengurus di bawah secara manual." });
+        if (!["pdf", "docx", "jpg", "jpeg", "png"].includes(ext)) {
+            setReadInfo({ ok: false, text: "File .doc lama tidak bisa dibaca otomatis. Simpan ulang sebagai .docx/PDF, atau isi daftar pengurus secara manual." });
             return;
         }
         setReading(true);
         try {
             const body = new FormData();
-            if (ext === "docx") body.append("file", file);
-            else body.append("text", await pdfText(file));
+            if (ext !== "pdf") body.append("file", file); // Word dibaca server; foto/scan dibaca OCR di server
+            else {
+                const pdf = await openPdf(file);
+                const text = await pdfText(pdf);
+                if (text.replace(/\s/g, "").length >= 200) body.append("text", text);
+                else (await pdfPages(pdf)).forEach((blob, i) => body.append("pages[]", blob, `halaman-${i + 1}.png`)); // PDF hasil scan
+            }
             const { data } = await window.axios.post(route("board.preview"), body);
             const manual = data.members.filter((m) => !m.customer_id).length;
             const check = data.members.filter((m) => m.customer_id && m.check).length;
-            if (!data.members.length) {
-                setReadInfo({ ok: false, text: "Tidak ada nama pegawai yang terbaca dari SK (mungkin hasil scan). Isi daftar pengurus secara manual." });
+            const scanNote = data.ocr ? " SK hasil scan dibaca dengan OCR: periksa nomor, tanggal, dan ejaan nama." : "";
+            if (data.ocr === false) {
+                setReadInfo({ ok: false, text: "SK ini hasil scan, tetapi OCR (Tesseract) belum terpasang di server. Isi daftar pengurus secara manual." });
+            } else if (!data.members.length) {
+                setReadInfo({ ok: false, text: "Tidak ada nama pegawai yang terbaca dari SK. Isi daftar pengurus secara manual." });
             } else {
                 setReadInfo({
-                    ok: manual === 0,
-                    text: `${data.members.length} pengurus terbaca dari SK` + (check ? `, ${check} dicocokkan ke nama mirip (periksa)` : "") + (manual ? `, ${manual} belum ketemu di Data Pegawai (pilih manual atau hapus barisnya)` : "") + ".",
+                    ok: manual === 0 && !data.ocr,
+                    text: `${data.members.length} pengurus terbaca dari SK` + (check ? `, ${check} dicocokkan ke nama mirip (periksa)` : "") + (manual ? `, ${manual} belum ketemu di Data Pegawai (pilih manual atau hapus barisnya)` : "") + "." + scanNote,
                 });
             }
             setForm({

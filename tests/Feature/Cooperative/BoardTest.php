@@ -180,6 +180,52 @@ class BoardTest extends TestCase
             collect($fromWord['members'])->pluck('sk_position', 'name')->all());
     }
 
+    public function test_signature_and_attachment_blocks_are_not_read_as_board_members(): void
+    {
+        foreach (['Bambang Contoh', 'Andi Pratama Putra', 'Citra Lestari', 'Kurnia Wati', 'Joko Susilo'] as $name) {
+            $this->person($name);
+        }
+
+        // Pola SK Kanwil: penandatangan (juga Pembina) muncul di blok tanda tangan sebelum lampiran,
+        // angka tanggal/nomor terpecah spasi, dan uraian tugas ("I. Ketua") setelah daftar pengawas.
+        $text = implode("\n", [
+            'NOMOR  KEP- 29 /WBC.07/ 2026',
+            'Dasar  :  2.  Akta Pendirian Nomor 139 tanggal 17 Februari 2021;',
+            'KELIMA  :  Keputusan  ini  berlaku  sejak  tanggal  ditetapkan.',
+            'Ditetapkan di Tangerang Selatan',
+            'pada tanggal  2 7  Januari  202 6',
+            'KEPALA KANTOR WILAYAH DIREKTORAT',
+            'Ditandatangani secara elektronik',
+            'BAMBANG CONTOH',
+            'Pembina  :  Bambang Contoh',
+            'Ketua  :  Andi Pratama Putra',
+            'Sekretaris I  :  Citra Lestari',
+            'Pengawas  :  1.  Kurnia Wati',
+            '2.  Joko Susilo',
+            'KEPALA KANTOR WILAYAH DIREKTORAT',
+            'Ditandatangani secara elektronik',
+            'BAMBANG CONTOH',
+            'LAMPIRAN I',
+            'I.  Ketua',
+            'a.  Mengendalikan seluruh kegiatan koperasi',
+            'LAMPIRAN II',
+            'BANTEN',
+        ]);
+        $result = app(BoardService::class)->detect($text);
+
+        $this->assertSame(['Bambang Contoh' => 'Pembina', 'Andi Pratama Putra' => 'Ketua', 'Citra Lestari' => 'Sekretaris', 'Kurnia Wati' => 'Pengawas', 'Joko Susilo' => 'Pengawas'],
+            collect($result['members'])->pluck('position', 'name')->all());
+        $this->assertSame('KEP-29/WBC.07/2026', $result['number']);
+        $this->assertSame('2026-01-27', $result['decree_date']);
+
+        // Hasil OCR SK scan: titik dua sering terbaca "1", "»", dst.
+        $board = app(BoardService::class);
+        $ocr = $board->detect($board->ocrClean(implode("\n", ['Pembina : Bambang Contoh', 'Ketua 1 Andi Pratama Putra', 'Sekretaris I 1 Citra Lestari',
+            'Pengawas » 1. Kurnia Wati', '2. Joko Susilo'])));
+        $this->assertSame(['Bambang Contoh' => 'Pembina', 'Andi Pratama Putra' => 'Ketua', 'Citra Lestari' => 'Sekretaris', 'Kurnia Wati' => 'Pengawas', 'Joko Susilo' => 'Pengawas'],
+            collect($ocr['members'])->pluck('position', 'name')->all());
+    }
+
     public function test_board_months_follow_sk_periods_and_feed_shu(): void
     {
         $old = $this->person('Ketua Lama');
