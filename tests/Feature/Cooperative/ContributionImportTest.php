@@ -97,7 +97,7 @@ class ContributionImportTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('history', 2)
-                ->where('history.0.key', $a->id.'|wajib')
+                ->where('history.0.key', $a->id.'|wajib|2025')
                 ->where('history.0.months.1', 100000)
                 ->where('history.0.months.2', 150000)
                 ->where('history.0.total', 250000)

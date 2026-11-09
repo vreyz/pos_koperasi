@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { IconArrowsSort, IconSortAscending, IconSortDescending } from "@tabler/icons-react";
 import { inputBase, td, th } from "@/Components/Cooperative/ui";
 
@@ -10,6 +10,8 @@ import { inputBase, td, th } from "@/Components/Cooperative/ui";
  *             filter?: "text" | "number" | "select", options?: [{value,label}], align?: "right", className? }]
  * initialSort: { key, dir } atau daftar [{ key, dir }, ...]
  * onRowClick / isSelected: baris bisa diklik (mis. memilih SK) dan ditandai terpilih.
+ * onFilter(keys | null): dipanggil dengan rowKey baris yang lolos saringan (null = tanpa saringan) — pakai
+ *   useFilteredRows() supaya kartu ringkasan di atas tabel ikut saringan.
  *
  * Saringan angka menerima: 0, >0, >=100000, <50000, =100000, 100000-500000, kosong.
  */
@@ -38,16 +40,38 @@ export function matchNumber(value, expr) {
     }
 }
 
-export default function SortableTable({ columns, rows, rowKey, initialSort, initialFilters = {}, emptyText = "Tidak ada data.", footer, onRowClick, isSelected }) {
+/**
+ * Kartu ringkasan yang ikut saringan tabel:
+ *   const recapView = useFilteredRows(recap, (r) => r.id);
+ *   <SortableTable ... onFilter={recapView.onFilter} />  → recapView.shown = baris tersaring, recapView.filtered = ada saringan
+ * Disimpan sebagai daftar kunci (bukan objek baris) supaya angka kartu selalu dari data terbaru.
+ */
+export function useFilteredRows(rows, rowKey) {
+    const [keys, setKeys] = useState(null);
+    const onFilter = useCallback((list) => {
+        const next = list ? list.join("\u0001") : null;
+        setKeys((prev) => (prev === next ? prev : next));
+    }, []);
+    const shown = useMemo(() => {
+        if (keys === null || !rows) return rows || [];
+        const set = new Set(keys === "" ? [] : keys.split("\u0001"));
+        return rows.filter((r) => set.has(String(rowKey(r))));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rows, keys]);
+
+    return { shown, filtered: keys !== null, onFilter };
+}
+
+export default function SortableTable({ columns, rows, rowKey, initialSort, initialFilters = {}, emptyText = "Tidak ada data.", footer, onRowClick, isSelected, onFilter }) {
     const [sorts, setSorts] = useState(() => {
         const initial = initialSort || { key: columns[0].key, dir: "asc" };
         return Array.isArray(initial) ? initial : [initial];
     });
     const [filters, setFilters] = useState(initialFilters);
 
-    const visible = useMemo(() => {
+    const filtered = useMemo(() => {
         const active = columns.filter((c) => c.filter && (filters[c.key] ?? "") !== "");
-        const filtered = rows.filter((row) =>
+        return rows.filter((row) =>
             active.every((c) => {
                 const f = filters[c.key];
                 const v = c.value(row);
@@ -56,6 +80,9 @@ export default function SortableTable({ columns, rows, rowKey, initialSort, init
                 return String(v ?? "").toLowerCase().includes(String(f).toLowerCase());
             })
         );
+    }, [rows, columns, filters]);
+
+    const visible = useMemo(() => {
         const keys = sorts
             .map((s) => ({ col: columns.find((c) => c.key === s.key), dir: s.dir === "asc" ? 1 : -1 }))
             .filter((s) => s.col);
@@ -67,7 +94,7 @@ export default function SortableTable({ columns, rows, rowKey, initialSort, init
             }
             return 0;
         });
-    }, [rows, columns, filters, sorts]);
+    }, [filtered, columns, sorts]);
 
     const toggleSort = (key, addLevel) =>
         setSorts((current) => {
@@ -80,6 +107,11 @@ export default function SortableTable({ columns, rows, rowKey, initialSort, init
             return [...current, { key, dir: "asc" }].slice(-MAX_SORTS);
         });
     const hasFilters = Object.values(filters).some((v) => v !== "" && v != null);
+
+    // Laporkan baris yang lolos saringan ke halaman (kartu ringkasan). Tanpa saringan → null.
+    useEffect(() => {
+        onFilter?.(hasFilters ? filtered.map((r) => String(rowKey(r))) : null);
+    });
     const label = (key) => columns.find((c) => c.key === key)?.label ?? key;
 
     return (

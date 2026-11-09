@@ -3,7 +3,7 @@ import { Head, Link, router, useForm } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { IconArrowLeft, IconCalculator, IconChevronRight, IconCoins, IconDownload, IconLock, IconLockOpen, IconLink, IconPencil, IconPlus, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
 import Modal from "@/Components/Modal";
-import SortableTable from "@/Components/Cooperative/SortableTable";
+import SortableTable, { useFilteredRows } from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, Tip, PageHeader, Panel, Stat, btn, inputBase, inputClass, percent, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 import { MoneyInput, PercentInput, SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
@@ -100,6 +100,12 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
         money("total_rounded", "Dibulatkan", null, { render: (a) => <span className="font-semibold text-slate-900 dark:text-white">{rupiah(a.total_rounded)}</span> }),
         ...(editable ? [{ key: "edit", label: "", value: () => "", render: (a) => <button onClick={() => openAdjust(a.customer_id)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" title="Koreksi manual"><IconPencil size={16} /></button> }] : []),
     ];
+
+    // Kartu hasil SHU ikut saringan tabel hasil perhitungan.
+    const allocView = useFilteredRows(allocations, (a) => a.id);
+    const sumOf = (list, key) => list.reduce((s, r) => s + Number(r[key] || 0), 0);
+    const shownAlloc = allocView.shown;
+    const fNote = allocView.filtered ? " · sesuai saringan" : "";
 
     const save = (e) => {
         e.preventDefault();
@@ -423,10 +429,21 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
             )}
 
             <div id="hasil-shu" className="mb-4 grid scroll-mt-4 grid-cols-2 gap-3 md:grid-cols-4">
-                <Stat label="Penerima SHU" value={allocations.length} helper={`${stats.active} pegawai aktif · ${stats.base_recipients} dapat SHU dasar`} />
-                <Stat label="Belanja toko" value={rupiah(stats.purchase_total)} helper={`${stats.purchase_buyers} pembeli · sumber ${period.sales_source === "excel" ? "Excel" : "POS"} · pendapatan pembiayaan pegawai ${rupiah(stats.financing_total)}`} />
-                <Stat label="Total terbagi" value={rupiah(stats.distributed)} helper={period.total_shu ? `dari ${rupiah(period.total_shu)}` : ""} />
-                <Stat label="Total dibulatkan" value={rupiah(stats.distributed_rounded)} helper="jumlah uang yang perlu disiapkan" />
+                {allocView.filtered ? (
+                    <>
+                        <Stat label="Penerima SHU" value={shownAlloc.length} helper={`dari ${allocations.length} · ${shownAlloc.filter((a) => Number(a.base_amount) > 0).length} dapat SHU dasar${fNote}`} />
+                        <Stat label="Belanja toko" value={rupiah(sumOf(shownAlloc, "purchase_amount"))} helper={`${shownAlloc.filter((a) => Number(a.purchase_amount) > 0).length} pembeli · pendapatan pembiayaan ${rupiah(sumOf(shownAlloc, "financing_amount"))}${fNote}`} />
+                        <Stat label="Total terbagi" value={rupiah(sumOf(shownAlloc, "total"))} helper={`dari ${rupiah(stats.distributed)}${fNote}`} />
+                        <Stat label="Total dibulatkan" value={rupiah(sumOf(shownAlloc, "total_rounded"))} helper={`dari ${rupiah(stats.distributed_rounded)}${fNote}`} />
+                    </>
+                ) : (
+                    <>
+                        <Stat label="Penerima SHU" value={allocations.length} helper={`${stats.active} pegawai aktif · ${stats.base_recipients} dapat SHU dasar`} />
+                        <Stat label="Belanja toko" value={rupiah(stats.purchase_total)} helper={`${stats.purchase_buyers} pembeli · sumber ${period.sales_source === "excel" ? "Excel" : "POS"} · pendapatan pembiayaan pegawai ${rupiah(stats.financing_total)}`} />
+                        <Stat label="Total terbagi" value={rupiah(stats.distributed)} helper={period.total_shu ? `dari ${rupiah(period.total_shu)}` : ""} />
+                        <Stat label="Total dibulatkan" value={rupiah(stats.distributed_rounded)} helper="jumlah uang yang perlu disiapkan" />
+                    </>
+                )}
             </div>
 
             <Panel
@@ -442,6 +459,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                     key={`${period.id}-${period.calculated_at}`}
                     rows={allocations}
                     rowKey={(a) => a.id}
+                    onFilter={allocView.onFilter}
                     columns={resultColumns}
                     initialSort={{ key: "total_rounded", dir: "desc" }}
                     emptyText="Belum dihitung. Isi pengaturan lalu klik “Simpan dan Kalkulasi Ulang”."

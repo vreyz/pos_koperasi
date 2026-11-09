@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Head, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { IconLink, IconUnlink } from "@tabler/icons-react";
-import SortableTable from "@/Components/Cooperative/SortableTable";
+import SortableTable, { useFilteredRows } from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, PageHeader, Panel, Stat, btn, inputBase, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 import { MoneyInput, PercentInput, SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
@@ -24,7 +24,11 @@ export default function Index({ rows, employees, shuPeriods, shuYear }) {
 
 
     const key = (r) => `${r.source}|${r.name}|${r.customer_id || ""}`;
-    const unmatched = rows.filter((r) => !r.customer_id).length;
+    // Kartu ikut saringan tabel.
+    const tableRows = useMemo(() => (status === "unmatched" ? rows.filter((r) => !r.customer_id) : rows), [rows, status]);
+    const view = useFilteredRows(tableRows, key);
+    const base = view.filtered ? view.shown : rows;
+    const unmatched = base.filter((r) => !r.customer_id).length;
     const link = (r) =>
         router.post(route("name-links.link"), { source: r.source, name: r.name, customer_id: choice[key(r)] }, { preserveScroll: true, preserveState: true });
     const unlink = (r) => {
@@ -43,10 +47,10 @@ export default function Index({ rows, employees, shuPeriods, shuYear }) {
             />
 
             <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Stat label="Nama penjualan" value={rows.filter((r) => r.source === "sales").length} />
-                <Stat label="Nama simpanan" value={rows.filter((r) => r.source === "savings").length} />
-                <Stat label="Alias tersimpan" value={rows.filter((r) => r.source === "alias").length} />
-                <Stat label="Belum cocok" value={unmatched} helper="tidak ikut SHU sampai dihubungkan" />
+                <Stat label="Nama penjualan" value={base.filter((r) => r.source === "sales").length} helper={view.filtered ? "sesuai saringan" : ""} />
+                <Stat label="Nama simpanan" value={base.filter((r) => r.source === "savings").length} helper={view.filtered ? "sesuai saringan" : ""} />
+                <Stat label="Alias tersimpan" value={base.filter((r) => r.source === "alias").length} helper={view.filtered ? "sesuai saringan" : ""} />
+                <Stat label="Belum cocok" value={unmatched} helper={`tidak ikut SHU sampai dihubungkan${view.filtered ? " · sesuai saringan" : ""}`} />
             </div>
 
             <Panel
@@ -66,8 +70,9 @@ export default function Index({ rows, employees, shuPeriods, shuYear }) {
             >
                 <SortableTable
                     key={status}
-                    rows={status === "unmatched" ? rows.filter((r) => !r.customer_id) : rows}
+                    rows={tableRows}
                     rowKey={key}
+                    onFilter={view.onFilter}
                     initialSort={{ key: "name", dir: "asc" }}
                     emptyText="Tidak ada nama dengan saringan ini."
                     columns={[
