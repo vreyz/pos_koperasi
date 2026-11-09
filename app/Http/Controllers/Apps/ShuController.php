@@ -11,6 +11,7 @@ use App\Models\ShuPeriod;
 use App\Models\Transaction;
 use App\Services\Cooperative\BoardService;
 use App\Services\Cooperative\ExternalSalesImportService;
+use App\Services\Cooperative\ImportFileStore;
 use App\Services\Cooperative\NameMatcher;
 use App\Services\Cooperative\ShuCalculator;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class ShuController extends Controller
     public function __construct(
         private readonly ShuCalculator $calculator,
         private readonly ExternalSalesImportService $salesImport,
+        private readonly ImportFileStore $files,
     ) {}
 
     public function index()
@@ -242,6 +244,108 @@ class ShuController extends Controller
         }
 
         return back()->with('success', 'Penjualan Excel diimport: '.number_format($result['rows'], 0, ',', '.').' baris, total Rp '.number_format($result['total'], 0, ',', '.').". {$result['unmatched_names']} nama belum cocok dengan pegawai.");
+    }
+
+    /** Halaman impor penjualan: upload → hasil validasi + cocokkan nama → simpan. */
+    public function salesImportPage(Request $request, ShuPeriod $shu)
+    {
+        set_time_limit(600);
+        $token = $request->query('token');
+        $path = $this->files->path('sales', $token);
+        if ($token && ! $path) {
+            return to_route('shu.sales-import.page', $shu)->with('error', 'File pratinjau sudah kedaluwarsa. Upload ulang.');
+        }
+
+        $preview = null;
+        if ($path) {
+            try {
+                $data = $this->salesImport->inspect($path, $shu->year);
+                $preview = $this->salesImport->preview($data);
+                $preview += [
+                    'token' => $token,
+                    'file_name' => (string) $request->session()->get("sales_import_name.{$token}", ''),
+                    'sheet' => $data['sheet'],
+                    'checks' => $this->salesImport->validate($data, $this->salesImport->autoMapping($preview), $shu),
+                ];
+                // Layar hanya perlu nama yang belum cocok dengan pegawai (yang cocok cukup dihitung).
+                $preview['names'] = array_values(array_filter($preview['names'], fn ($n) => ! $n['employee']));
+            } catch (RuntimeException $e) {
+                $this->files->forget('sales', $token);
+
+                return to_route('shu.sales-import.page', $shu)->with('error', $e->getMessage());
+            }
+        }
+
+        return Inertia::render('Dashboard/Cooperative/Shu/SalesImport', [
+            'period' => $shu->only(['id', 'year', 'status', 'sales_source']),
+            'current' => ['rows' => ExternalSale::where('year', $shu->year)->count(), 'total' => (int) ExternalSale::where('year', $shu->year)->sum('amount')],
+            'preview' => $preview,
+            'employees' => $path ? Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type', 'employment_status']) : [],
+        ]);
+    }
+
+    public function previewSales(Request $request, ShuPeriod $shu)
+    {
+        $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:20480']]);
+        $token = $this->files->put($request->file('file'), 'sales');
+        $request->session()->put("sales_import_name.{$token}", $request->file('file')->getClientOriginalName());
+
+        return to_route('shu.sales-import.page', [$shu, 'token' => $token]);
+    }
+
+    public function validateSales(Request $request, ShuPeriod $shu)
+    {
+        set_time_limit(600);
+        $validated = $request->validate(['token' => ['required', 'uuid'], 'mapping' => ['array']]);
+        $path = $this->files->path('sales', $validated['token']);
+        if (! $path) {
+            return response()->json(['message' => 'File pratinjau sudah kedaluwarsa. Upload ulang.'], 410);
+        }
+        $data = $this->salesImport->inspect($path, $shu->year);
+
+        return response()->json(['checks' => $this->salesImport->validate($data, $this->salesMapping($data, $validated['mapping'] ?? []), $shu)]);
+    }
+
+    public function commitSales(Request $request, ShuPeriod $shu)
+    {
+        set_time_limit(600);
+        $validated = $request->validate(['token' => ['required', 'uuid'], 'mapping' => ['array']]);
+        $path = $this->files->path('sales', $validated['token']);
+        if (! $path) {
+            return to_route('shu.sales-import.page', $shu)->with('error', 'File pratinjau sudah kedaluwarsa. Upload ulang.');
+        }
+        $data = $this->salesImport->inspect($path, $shu->year);
+        $mapping = $this->salesMapping($data, $validated['mapping'] ?? []);
+        $checks = $this->salesImport->validate($data, $mapping, $shu);
+        if (ExternalSalesImportService::hasErrors($checks)) {
+            return to_route('shu.sales-import.page', [$shu, 'token' => $validated['token']])
+                ->with('error', 'Belum disimpan — validasi menemukan kesalahan: '.collect($checks)->firstWhere('level', 'error')['title']);
+        }
+
+        $result = $this->salesImport->commit($data, $mapping);
+        $this->files->forget('sales', $validated['token']);
+        $request->session()->forget("sales_import_name.{$validated['token']}");
+
+        return to_route('shu.show', $shu)->with('success', 'Penjualan Excel diimport: '.number_format($result['rows'], 0, ',', '.').' baris, total Rp '.number_format($result['total'], 0, ',', '.').". {$result['unmatched_names']} nama belum cocok dengan pegawai.");
+    }
+
+    /**
+     * Pemetaan otomatis + pilihan di layar (hanya id pegawai yang sah; kosong = tetap otomatis).
+     *
+     * @return array<string, int|null>
+     */
+    private function salesMapping(array $data, array $raw): array
+    {
+        $mapping = $this->salesImport->autoMapping($this->salesImport->preview($data));
+        $chosen = collect($raw)->filter(fn ($v) => is_numeric($v))->map(fn ($v) => (int) $v);
+        $valid = Customer::employees()->whereIn('id', $chosen->values())->pluck('id')->flip();
+        foreach ($chosen as $key => $id) {
+            if (isset($valid[$id]) && array_key_exists($key, $mapping)) {
+                $mapping[$key] = $id;
+            }
+        }
+
+        return $mapping;
     }
 
     public function mapSalesName(Request $request, ShuPeriod $shu)

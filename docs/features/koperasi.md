@@ -166,6 +166,13 @@ Semua file unduhan bisa diedit lalu diunggah ulang; unggah ulang **memperbarui**
 | SHU | SHU → Ekspor Excel | — |
 
 Impor simpanan hanya menimpa jenis yang ada kolomnya di file (file tanpa kolom angsuran tidak menghapus angsuran).
+
+**Impor penjualan Excel (SHU → Penjualan dari Excel → Pratinjau & validasi, `shu.sales-import.*`)**: kolom TGL BELANJA,
+NAMA PEGAWAI (atau Nama Final), TOTAL HARGA per baris barang — termasuk rekap setahun "Penjualan 2025" (Sheet1, dengan
+kolom TOTAL BELANJA dan PG/QR/CASH/VC). Sebelum disimpan: total per bulan, TOTAL BELANJA vs TOTAL HARGA, jumlah cara bayar
+vs total, baris di luar tahun/tanpa tanggal, nama pembeli yang belum dikenali (bisa langsung dipilih pegawainya, disimpan
+sebagai alias), dan data lama yang akan diganti. SHU final → ditolak. Pencocokan otomatis memakai alias, lalu hubungan
+nama → pelanggan yang sudah tersimpan di penjualan Excel sebelumnya (impor ulang tidak menghapus pencocokan lama).
 Kolom berformat teks (`ArrayExport` format `@`) ditulis sebagai teks supaya NIP 18 digit tidak berubah jadi angka.
 
 ## Anggota & customer

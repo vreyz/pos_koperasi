@@ -301,6 +301,56 @@ class ShuCalculationTest extends TestCase
         $this->assertEquals(15, $period->fresh()->portion_financing);
     }
 
+    public function test_sales_import_is_validated_and_names_mapped_before_saving(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo(['shu-access', 'shu-manage']);
+        $budi = $this->person('Budi Santoso');
+        $period = $this->period(['sales_source' => 'excel']);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'LAMA', 'amount' => 999]);
+
+        // Format rekap setahun "Penjualan 2025" Sheet1: kolom per transaksi (TOTAL BELANJA, PG, CASH) di baris pertama.
+        $path = $this->xlsx([
+            ['Bulan', 'TGL BELANJA', 'NAMA PEGAWAI', 'BARANG YANG DIBELI', 'JUMLAH BARANG', 'HARGA BARANG', 'TOTAL HARGA', 'TOTAL BELANJA', 'PG', 'QR', 'CASH', 'VC', 'TGL BAYAR'],
+            [1, 45658, 'BUDI S', 'NASI', 1, 15000, 15000, 20000, 20000],
+            [1, 45658, 'BUDI S', 'TEH', 1, 5000, 5000],
+            [1, 45659, 'UMUM', 'KOPI', 2, 5000, 10000, 10000, null, null, 10000],
+            [12, 45292, 'BUDI S', 'TAHUN LALU', 1, 7000, 7000, 7000, 7000],
+        ], 'Sheet1', ['PEMBELI' => [['NAMA PEGAWAI', 'NOMINAL'], ['BUDI S', 20000]]]);
+
+        $response = $this->actingAs($user)->post(route('shu.sales-import.preview', $period), ['file' => $this->upload($path)]);
+        parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+        $this->assertSame(999, (int) ExternalSale::where('year', 2025)->sum('amount'), 'pratinjau belum mengubah data');
+
+        $this->actingAs($user)->get(route('shu.sales-import.page', [$period, 'token' => $query['token']]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard/Cooperative/Shu/SalesImport')
+                ->where('preview.rows', 3)
+                ->where('preview.total', 30000)
+                ->where('preview.names.0.key', 'BUDI S')
+                ->where('preview.names.0.suggestions.0.id', $budi->id)
+                ->where('preview.checks', fn ($checks) => collect($checks)->where('level', 'error')->isEmpty()
+                    && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'Pembayaran (PG + QR + Cash + Voucher) = total penjualan'))
+                    && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'di luar 2025 dilewati'))
+                    && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'akan diganti'))));
+
+        $this->actingAs($user)->post(route('shu.sales-import.commit', $period), ['token' => $query['token'], 'mapping' => ['BUDI S' => (string) $budi->id]])
+            ->assertRedirect(route('shu.show', $period));
+        $this->assertSame(30000, (int) ExternalSale::where('year', 2025)->sum('amount'));
+        $this->assertSame(20000, (int) ExternalSale::where('customer_id', $budi->id)->sum('amount'));
+        $this->assertDatabaseHas('customer_aliases', ['alias' => 'BUDI S', 'customer_id' => $budi->id]);
+
+        // SHU final → validasi error, data tidak diganti.
+        $period->update(['status' => 'final']);
+        $response = $this->actingAs($user)->post(route('shu.sales-import.preview', $period), ['file' => $this->upload($path)]);
+        parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+        ExternalSale::where('year', 2025)->delete();
+        $this->actingAs($user)->post(route('shu.sales-import.commit', $period), ['token' => $query['token'], 'mapping' => []])
+            ->assertSessionHas('error');
+        $this->assertSame(0, ExternalSale::where('year', 2025)->count());
+    }
+
     public function test_shu_pages_excel_import_and_name_mapping(): void
     {
         $user = User::factory()->create();

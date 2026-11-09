@@ -1,47 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import { IconAlertCircle, IconAlertTriangle, IconArrowLeft, IconCircleCheck, IconDownload, IconFileSpreadsheet, IconInfoCircle, IconRefresh, IconUpload } from "@tabler/icons-react";
+import { IconArrowLeft, IconDownload, IconFileSpreadsheet, IconRefresh, IconUpload } from "@tabler/icons-react";
 import { Badge, PageHeader, Panel, Stat, btn, inputClass, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 import { SearchSelect, employeeOptions } from "@/Components/Cooperative/inputs";
-
-const LEVELS = {
-    error: { icon: IconAlertCircle, label: "Kesalahan", box: "border-danger-200 bg-danger-50 text-danger-800 dark:border-danger-900/60 dark:bg-danger-950/40 dark:text-danger-200" },
-    warning: { icon: IconAlertTriangle, label: "Peringatan", box: "border-warning-200 bg-warning-50 text-warning-800 dark:border-warning-900/60 dark:bg-warning-950/40 dark:text-warning-200" },
-    info: { icon: IconInfoCircle, label: "Info", box: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" },
-    ok: { icon: IconCircleCheck, label: "OK", box: "border-success-200 bg-success-50 text-success-800 dark:border-success-900/60 dark:bg-success-950/40 dark:text-success-200" },
-};
-
-function Check({ check, picker }) {
-    const [open, setOpen] = useState(check.level === "error" || Boolean(check.names?.length));
-    const level = LEVELS[check.level] || LEVELS.info;
-    const Icon = level.icon;
-    return (
-        <div className={`rounded-lg border px-3 py-2 text-sm ${level.box}`}>
-            <div className="flex items-start gap-2">
-                <Icon size={18} className="mt-0.5 shrink-0" />
-                <div className="flex-1">
-                    {check.title}
-                    {check.details.length > 0 && (
-                        <button type="button" onClick={() => setOpen(!open)} className="ml-2 text-xs underline opacity-80">
-                            {open ? "sembunyikan" : `lihat rincian (${check.details.length})`}
-                        </button>
-                    )}
-                    {open && check.names?.length > 0 && picker && (
-                        <div className="mt-2 space-y-1.5">
-                            {check.names.map((key) => picker(key))}
-                        </div>
-                    )}
-                    {open && !check.names?.length && check.details.length > 0 && (
-                        <ul className="mt-1 max-h-60 list-disc overflow-y-auto pl-5 text-xs opacity-90">
-                            {check.details.map((d, i) => <li key={i}>{d}</li>)}
-                        </ul>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
+import ValidationCheck from "@/Components/Cooperative/ValidationCheck";
 
 // Pratinjau baru (file lain) = state baru: pilihan nama & hasil validasi tidak terbawa dari file sebelumnya.
 export default function Import(props) {
@@ -171,7 +134,7 @@ function ImportPage({ preview, employees }) {
                                     Pilihan nama berubah. Klik <b>Validasi ulang</b> sebelum menyimpan.
                                 </div>
                             )}
-                            {checks.map((c, i) => <Check key={`${c.level}-${i}-${c.title}`} check={c} picker={namePicker} />)}
+                            {checks.map((c, i) => <ValidationCheck key={`${c.level}-${i}-${c.title}`} check={c} picker={namePicker} />)}
                         </div>
                     </Panel>
 

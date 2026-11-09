@@ -360,12 +360,12 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                         <Stat label="Nama belum cocok" value={unmatched.length} helper="tidak ikut SHU sebelum dipetakan" />
                     </div>
                     {editable && (
-                        <form onSubmit={(e) => { e.preventDefault(); salesUpload.post(route("shu.sales-import", period.id), { forceFormData: true, preserveScroll: true, onSuccess: () => salesUpload.reset() }); }} className="flex flex-col gap-3 px-4 pb-4 sm:flex-row sm:items-center">
+                        <form onSubmit={(e) => { e.preventDefault(); salesUpload.post(route("shu.sales-import.preview", period.id), { forceFormData: true }); }} className="flex flex-col gap-3 px-4 pb-4 sm:flex-row sm:items-center">
                             <input type="file" accept=".xlsx,.xls,.csv" className={inputClass} onChange={(e) => salesUpload.setData("file", e.target.files[0])} />
-                            <button type="submit" className={btn.primary} disabled={!salesUpload.data.file || salesUpload.processing}><IconUpload size={18} /> {salesUpload.processing ? "Mengimpor..." : "Impor penjualan"}</button>
+                            <button type="submit" className={btn.primary} disabled={!salesUpload.data.file || salesUpload.processing}><IconUpload size={18} /> {salesUpload.processing ? "Membaca file..." : "Pratinjau & validasi"}</button>
                         </form>
                     )}
-                    <p className="px-4 pb-4 text-xs text-slate-500">Kolom: TGL BELANJA, NAMA PEGAWAI (atau "Nama Final"), TOTAL HARGA. Impor menimpa data Excel tahun {period.year} sebelumnya.</p>
+                    <p className="px-4 pb-4 text-xs text-slate-500">Kolom: TGL BELANJA, NAMA PEGAWAI (atau "Nama Final"), TOTAL HARGA per baris barang — mis. rekap "Penjualan {period.year}" (Sheet1). Setelah upload, isi file divalidasi dan nama dicocokkan dulu; data baru disimpan (menimpa data Excel {period.year} sebelumnya) setelah Anda klik Simpan.</p>
                     {unmatched.length > 0 && (
                         <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-800">
                             <table className="w-full">
