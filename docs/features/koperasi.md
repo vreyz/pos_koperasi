@@ -42,7 +42,7 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
 
 ### Koperasi → SHU (`shu.*`)
 - Satu perhitungan per **tahun buku Y** (dibagikan di Y+1), pengaturan disalin dari tahun sebelumnya.
-- Pengaturan: total SHU, base per orang, porsi % jasa simpanan / pembelian / pinjaman (total 100%),
+- Pengaturan: total SHU, base per orang, porsi % jasa simpanan / pembelian / pendapatan pembiayaan (total 100%),
   jenis simpanan yang dihitung, periode simpanan (tahun Y saja / sejak awal), sumber penjualan
   (**POS** atau **Excel**), pengecualian, pembulatan.
 - Panel **Aturan SHU** menampilkan aturan yang berlaku dalam bahasa biasa.
@@ -65,13 +65,15 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
    bulan dicentang, dipotong dari SHU lebih dulu.
 5. **Koreksi manual per orang** (base pengganti, tambahan/pengurangan nominal, mis. SHU pengurus koperasi) disimpan
    terpisah, tetap berlaku saat dihitung ulang, dan dipotong dari SHU lebih dulu.
-6. Sisa = total − base − SHU pengurus − koreksi, dibagi ke **4 komponen** dengan porsi (%) yang bisa diubah dan wajib total 100%
-   (bawaan periode baru: simpanan 40%, belanja 40%, pembiayaan dana 10%, pembiayaan barang 10%):
+6. Sisa = total − base − SHU pengurus − koreksi, dibagi ke **3 komponen** dengan porsi (%) yang bisa diubah dan wajib total 100%
+   (bawaan periode baru: simpanan 40%, belanja 40%, pendapatan pembiayaan 20%):
    - Simpanan: jenis (pokok/wajib/sukarela) dan periode (tahun Y / sejak awal) bisa dipilih.
    - Belanja: POS (`paid`/`unpaid`, dikurangi retur `completed`) atau import Excel.
-   - Pembiayaan dana: **biaya formulir** kontrak yang dicairkan di Y.
-   - Pembiayaan barang: **biaya lain** saat pencairan di Y + **bagi hasil** dari cicilan yang dibayar di Y.
-   - Cicilan/angsuran tidak dihitung (kolom `portion_loans` lama tidak dipakai; nilainya dipindah ke pembiayaan dana).
+   - Pendapatan pembiayaan (satu porsi, `portion_financing`): per pegawai = **biaya formulir** pembiayaan dana yang
+     dicairkan di Y + **biaya lain** pembiayaan barang yang dicairkan di Y + **bagi hasil** dari cicilan barang yang dibayar di Y.
+     Bagian ini dalam rupiah paling banyak **50% dari total pendapatan pembiayaan koperasi** di Y (dicek saat simpan & hitung).
+   - Cicilan/angsuran tidak dihitung. Kolom lama `portion_loans`, `portion_financing_dana`, `portion_financing_barang`
+     tidak dipakai lagi (nilainya dipindah ke `portion_financing`).
 6. Pembulatan: terdekat / ke atas / ke bawah / tidak, dengan kelipatan Rp 100–10.000.
 
 ## Pencocokan Nama (`name-links.*`)

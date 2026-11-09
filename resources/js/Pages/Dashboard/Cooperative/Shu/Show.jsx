@@ -12,7 +12,7 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Se
 // Data lama menyimpan jumlah bulan (angka) → anggap Januari s.d. bulan ke-n.
 const boardMonths = (m) => (Array.isArray(m.months) ? m.months : Array.from({ length: Math.min(12, Number(m.months || 0)) }, (_, i) => i + 1));
 
-const SETTING_KEYS = ["total_shu", "base_per_person", "base_requires_savings", "base_for_ppnpn", "base_mode", "board_amount", "board_members", "portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang", "savings_types", "savings_period", "sales_source", "rounding", "rounding_unit", "excluded_customer_ids"];
+const SETTING_KEYS = ["total_shu", "base_per_person", "base_requires_savings", "base_for_ppnpn", "base_mode", "board_amount", "board_members", "portion_savings", "portion_purchases", "portion_financing", "savings_types", "savings_period", "sales_source", "rounding", "rounding_unit", "excluded_customer_ids"];
 
 export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [], boardFromDecrees = [], nonEmployeeBuyers = [] }) {
     useFlashToasts();
@@ -46,22 +46,20 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
         router.post(route("shu.adjustments.save", period.id), { ...adjust, base_override: adjust.base_override === "" ? null : adjust.base_override }, { preserveScroll: true, onSuccess: () => setAdjust(null) });
     };
 
-    const portionTotal = ["portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
-    const businessTotal = ["portion_purchases", "portion_financing_dana", "portion_financing_barang"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
+    const portionTotal = ["portion_savings", "portion_purchases", "portion_financing"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
+    const businessTotal = ["portion_purchases", "portion_financing"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
     const boardTotal = (form.board_members || []).reduce((sum, m) => sum + Number(form.board_amount || 0) * m.months.length, 0);
     const boardPerMonth = MONTH_SHORT.map((_, i) => (form.board_members || []).filter((m) => m.customer_id && m.months.includes(i + 1)).length);
     const remainder = Number(form.total_shu || 0) - stats.base_total - boardTotal - stats.adjustment_total;
-    // Bagian SHU pembiayaan (rupiah) paling banyak 50% pendapatan koperasi dari pembiayaan itu di tahun buku.
-    const financingCap = (portionKey, incomeKey) => {
-        const income = Number(stats[incomeKey] || 0);
+    // Bagian SHU pendapatan pembiayaan (rupiah) paling banyak 50% pendapatan pembiayaan koperasi (dana + barang) di tahun buku.
+    const financingCap = (() => {
+        const income = Number(stats.financing_income || 0);
         const cap = income * Number(stats.financing_max_share ?? 0.5);
-        const pool = (Math.max(remainder, 0) * Number(form[portionKey] || 0)) / 100;
+        const pool = (Math.max(remainder, 0) * Number(form.portion_financing || 0)) / 100;
         const maxPercent = remainder > 0 ? Math.floor((cap / remainder) * 10000) / 100 : 0;
         return { income, cap, pool, maxPercent: maxPercent.toLocaleString("id-ID"), over: pool > cap + 0.5 };
-    };
-    const danaCap = financingCap("portion_financing_dana", "financing_dana_income");
-    const barangCap = financingCap("portion_financing_barang", "financing_barang_income");
-    const capError = (c) => (c.over ? `${rupiah(c.pool)} melebihi 50% pendapatan (${rupiah(c.cap)}). Maks ${c.maxPercent}%.` : null);
+    })();
+    const capError = financingCap.over ? `${rupiah(financingCap.pool)} melebihi 50% pendapatan pembiayaan (${rupiah(financingCap.cap)}). Maks ${financingCap.maxPercent}%.` : null;
     const employeeById = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
     const empOptions = useMemo(() => employeeOptions(employees), [employees]);
     const dirty = SETTING_KEYS.some((k) => JSON.stringify(form[k]) !== JSON.stringify(period[k] ?? empty(k)));
@@ -87,16 +85,14 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
         { key: "type", label: "Jenis", filter: "select", options: ["PNS", "PPPK", "PPNPN", "LAINNYA"].map((v) => ({ value: v, label: v })), value: (a) => a.customer?.employee_type || "" },
         money("savings_amount", "Iuran", "savings_share"),
         money("purchase_amount", "Belanja", "purchase_share"),
-        ...(period.portion_financing_dana > 0 ? [money("financing_dana_amount", "Pemb. dana", "financing_dana_share")] : []),
-        ...(period.portion_financing_barang > 0 ? [money("financing_barang_amount", "Pemb. barang", "financing_barang_share")] : []),
+        ...(period.portion_financing > 0 ? [money("financing_amount", "Pend. pembiayaan", "financing_share")] : []),
         money("base_amount", "SHU dasar", null, {
             render: (a) => <>{rupiah(a.base_amount)}{period.base_mode === "monthly" && <div className="text-xs text-slate-500">{a.months_paid} bln</div>}{adjustmentByCustomer[a.customer_id]?.base_override != null && <div className="text-xs text-warning-700">manual</div>}</>,
         }),
         ...(stats.board_total > 0 ? [money("board_amount", "SHU Pengurus Koperasi")] : []),
         money("shu_savings", "SHU iuran"),
         money("shu_purchases", "SHU belanja"),
-        ...(period.portion_financing_dana > 0 ? [money("shu_financing_dana", "SHU dana")] : []),
-        ...(period.portion_financing_barang > 0 ? [money("shu_financing_barang", "SHU barang")] : []),
+        ...(period.portion_financing > 0 ? [money("shu_financing", "SHU pembiayaan")] : []),
         money("adjustment_amount", "Koreksi", null, {
             render: (a) => <>{a.adjustment_amount ? rupiah(a.adjustment_amount) : "-"}{a.adjustment_note && <div className="max-w-[10rem] truncate text-xs text-slate-500" title={a.adjustment_note}>{a.adjustment_note}</div>}</>,
         }),
@@ -225,23 +221,20 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                             </div>
                             <div>
                                 <p className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-300">
-                                    Porsi sisa SHU<Tip text="Sisa = SHU yang dibagi − SHU dasar − SHU pengurus koperasi − koreksi manual. Sisa ini dibagi ke 4 bagian sesuai persentase; total harus 100%." /> ({rupiah(Math.max(remainder, 0))}) — total{" "}
+                                    Porsi sisa SHU<Tip text="Sisa = SHU yang dibagi − SHU dasar − SHU pengurus koperasi − koreksi manual. Sisa ini dibagi ke 3 bagian sesuai persentase; total harus 100%." /> ({rupiah(Math.max(remainder, 0))}) — total{" "}
                                     <span className={Math.abs(portionTotal - 100) > 0.001 ? "text-danger-600" : "text-success-700"}>{portionTotal}%</span>
                                     {Math.abs(portionTotal - 100) > 0.001 && <span className="text-danger-600"> (harus 100%)</span>}
                                     <span className="text-slate-500"> · jasa usaha (belanja + pembiayaan) {businessTotal}%</span>
                                 </p>
-                                <div className="grid gap-4 sm:grid-cols-4">
+                                <div className="grid gap-4 sm:grid-cols-3">
                                     <Field label="Iuran Koperasi" error={errors.portion_savings} hint="pokok + wajib + sukarela" tip="Bagian ini dibagi sebanding jumlah iuran (simpanan pokok + wajib + sukarela) tiap anggota dibanding total iuran semua anggota.">
                                         <PercentInput value={form.portion_savings} onChange={(v) => setForm({ ...form, portion_savings: v })} />
                                     </Field>
                                     <Field label="Belanja Toko" error={errors.portion_purchases} hint="total belanja" tip="Bagian ini dibagi sebanding total belanja tiap pegawai di toko koperasi (POS atau impor Excel) dibanding total belanja semua pegawai.">
                                         <PercentInput value={form.portion_purchases} onChange={(v) => setForm({ ...form, portion_purchases: v })} />
                                     </Field>
-                                    <Field label="Pembiayaan Dana" error={errors.portion_financing_dana || capError(danaCap)} hint={`biaya formulir ${rupiah(danaCap.income)} · maks ${danaCap.maxPercent}%`} tip="Bagian ini dibagi sebanding biaya formulir yang dibayar tiap pegawai untuk pembiayaan dana yang dicairkan di tahun buku ini. Cicilan pokoknya tidak dihitung. Dalam rupiah tidak boleh melebihi 50% total biaya formulir yang diterima koperasi di tahun buku ini.">
-                                        <PercentInput value={form.portion_financing_dana} onChange={(v) => setForm({ ...form, portion_financing_dana: v })} />
-                                    </Field>
-                                    <Field label="Pembiayaan Barang" error={errors.portion_financing_barang || capError(barangCap)} hint={`bagi hasil + biaya lain ${rupiah(barangCap.income)} · maks ${barangCap.maxPercent}%`} tip="Bagian ini dibagi sebanding bagi hasil (dari cicilan yang dibayar di tahun buku) + biaya lain saat pencairan, per pegawai. Cicilan pokoknya tidak dihitung. Dalam rupiah tidak boleh melebihi 50% total bagi hasil + biaya lain yang diterima koperasi di tahun buku ini.">
-                                        <PercentInput value={form.portion_financing_barang} onChange={(v) => setForm({ ...form, portion_financing_barang: v })} />
+                                    <Field label="Pendapatan Pembiayaan" error={errors.portion_financing || capError} hint={`biaya formulir + bagi hasil + biaya lain ${rupiah(financingCap.income)} · maks ${financingCap.maxPercent}%`} tip="Bagian ini dibagi sebanding pendapatan koperasi dari pembiayaan tiap pegawai di tahun buku: biaya formulir pembiayaan dana + bagi hasil pembiayaan barang (dari cicilan yang dibayar) + biaya lain saat pencairan. Cicilan pokoknya tidak dihitung. Dalam rupiah tidak boleh melebihi 50% total pendapatan pembiayaan koperasi di tahun buku ini.">
+                                        <PercentInput value={form.portion_financing} onChange={(v) => setForm({ ...form, portion_financing: v })} />
                                     </Field>
                                 </div>
                                 {remainder < 0 && <p className="mt-1 text-sm text-danger-600">SHU dasar + SHU pengurus koperasi + koreksi melebihi SHU yang dibagi.</p>}
@@ -409,7 +402,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
 
             <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <Stat label="Penerima SHU" value={allocations.length} helper={`${stats.active} pegawai aktif · ${stats.base_recipients} dapat SHU dasar`} />
-                <Stat label="Belanja toko" value={rupiah(stats.purchase_total)} helper={`${stats.purchase_buyers} pembeli · sumber ${period.sales_source === "excel" ? "Excel" : "POS"} · pendapatan pembiayaan: dana ${rupiah(stats.financing_dana_total)}, barang ${rupiah(stats.financing_barang_total)}`} />
+                <Stat label="Belanja toko" value={rupiah(stats.purchase_total)} helper={`${stats.purchase_buyers} pembeli · sumber ${period.sales_source === "excel" ? "Excel" : "POS"} · pendapatan pembiayaan pegawai ${rupiah(stats.financing_total)}`} />
                 <Stat label="Total terbagi" value={rupiah(stats.distributed)} helper={period.total_shu ? `dari ${rupiah(period.total_shu)}` : ""} />
                 <Stat label="Total dibulatkan" value={rupiah(stats.distributed_rounded)} helper="jumlah uang yang perlu disiapkan" />
             </div>
