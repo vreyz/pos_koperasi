@@ -36,9 +36,9 @@ function Row({ label, value }) {
 
 function Approval({ f, settings }) {
     const cells = [
-        ["Diperiksa oleh", "Divisi Pembiayaan", f?.checker?.name, f?.checked_at],
-        ["Direview dan Disetujui oleh", "Kepala Unit Usaha", f?.reviewer?.name || settings.coop_business_head, f?.reviewed_at],
-        ["Disetujui oleh", "Ketua Koperasi", f?.approver?.name || settings.coop_chair, f?.approved_at],
+        ["Diperiksa oleh", "Divisi Pembiayaan", f?.checked_signer || f?.checker?.name, f?.checked_at],
+        ["Direview dan Disetujui oleh", "Kepala Unit Usaha", f?.reviewed_signer || f?.reviewer?.name || settings.coop_business_head, f?.reviewed_at],
+        ["Disetujui oleh", "Ketua Koperasi", f?.approved_signer || f?.approver?.name || settings.coop_chair, f?.approved_at],
     ];
     return (
         <table className="mt-4 w-full border-collapse text-xs">
@@ -241,7 +241,7 @@ function Disbursement({ f, settings }) {
                 <Row label={f.type === "barang" ? "Biaya lain" : "Biaya formulir"} value={rupiah(f.admin_fee)} />
             </tbody></table>
             <div className="mt-12 grid grid-cols-2 gap-8 text-center text-sm">
-                <div><p>Menyetujui,</p><p>Ketua Koperasi</p><div className="h-20" /><p className="font-semibold underline">{f.approver?.name || settings.coop_chair || DOTS}</p></div>
+                <div><p>Menyetujui,</p><p>Ketua Koperasi</p><div className="h-20" /><p className="font-semibold underline">{f.approved_signer || f.approver?.name || settings.coop_chair || DOTS}</p></div>
                 <div><p>{settings.coop_city}, {longDate(f.disbursed_at)}</p><p>Penerima,</p><div className="h-20" /><p className="font-semibold underline">{c.name}</p></div>
             </div>
         </section>

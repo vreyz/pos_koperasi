@@ -87,7 +87,12 @@ class FinancingService
         return sprintf('%02d/KOP/%s/%s/%d', $last + 1, $code, $roman, $year);
     }
 
-    public function advance(Financing $financing, string $step, int $userId): void
+    /**
+     * Naikkan status satu tahap. Bila atasan tidak login, akun yang berwenang mencatat atas namanya:
+     * $signer = nama pejabat yang menyetujui (kosong = akun pencatat sendiri), $date = tanggal persetujuan
+     * (boleh mundur, tidak boleh ke depan). Akun pencatat & waktu pencatatan tetap disimpan.
+     */
+    public function advance(Financing $financing, string $step, int $userId, ?string $signer = null, ?string $date = null): void
     {
         $rule = self::STEPS[$step] ?? throw new RuntimeException('Langkah tidak dikenal.');
         if ($financing->status !== $rule['from']) {
@@ -96,16 +101,49 @@ class FinancingService
         $financing->update([
             'status' => $rule['to'],
             "{$rule['column']}_by" => $userId,
-            "{$rule['column']}_at" => now(),
+            "{$rule['column']}_at" => $this->decisionDate($financing, $date, $rule['column']),
+            "{$rule['column']}_signer" => $this->signer($signer),
+            "{$rule['column']}_recorded_at" => now(),
         ]);
     }
 
-    public function reject(Financing $financing, string $reason, int $userId): void
+    public function reject(Financing $financing, string $reason, int $userId, ?string $signer = null, ?string $date = null): void
     {
         if (! in_array($financing->status, ['pengajuan', 'diperiksa', 'direview', 'disetujui'], true)) {
             throw new RuntimeException('Pembiayaan yang sudah dicairkan tidak bisa ditolak.');
         }
-        $financing->update(['status' => 'ditolak', 'rejection_reason' => $reason, 'rejected_by' => $userId, 'rejected_at' => now()]);
+        $financing->update(['status' => 'ditolak', 'rejection_reason' => $reason, 'rejected_by' => $userId,
+            'rejected_at' => $this->decisionDate($financing, $date, 'rejected'), 'rejected_signer' => $this->signer($signer), 'rejected_recorded_at' => now()]);
+    }
+
+    private function signer(?string $signer): ?string
+    {
+        $signer = trim(preg_replace('/\s+/', ' ', (string) $signer));
+
+        return $signer === '' ? null : mb_substr($signer, 0, 120);
+    }
+
+    /** Tanggal keputusan: hari ini bila kosong; tidak boleh sebelum tahap sebelumnya / tanggal pengajuan, tidak boleh ke depan. */
+    private function decisionDate(Financing $financing, ?string $date, string $column): Carbon
+    {
+        if (! $date) {
+            return now();
+        }
+        $at = Carbon::parse($date);
+        $at = $at->isToday() ? now() : $at->setTime(12, 0);
+        if ($at->isAfter(now()->endOfDay())) {
+            throw new RuntimeException('Tanggal persetujuan tidak boleh setelah hari ini.');
+        }
+        $previous = match ($column) {
+            'reviewed' => $financing->checked_at,
+            'approved' => $financing->reviewed_at,
+            default => null,
+        } ?? $financing->applied_at;
+        if ($previous && $at->copy()->endOfDay()->isBefore(Carbon::parse($previous)->startOfDay())) {
+            throw new RuntimeException('Tanggal persetujuan tidak boleh sebelum '.Carbon::parse($previous)->format('d/m/Y').' (tahap sebelumnya / tanggal pengajuan).');
+        }
+
+        return $at;
     }
 
     /**

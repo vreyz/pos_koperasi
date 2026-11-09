@@ -171,9 +171,9 @@ class FinancingWordForm
             $cells = iterator_to_array($xp->query('./w:tc', $row));
             $first = mb_strtolower(trim($this->text($xp, $cells[0] ?? $row)));
             [$name, $date] = match (true) {
-                str_starts_with($first, 'diperiksa') => [$f->checker?->name, $f->checked_at],
-                str_starts_with($first, 'direview') => [$f->reviewer?->name, $f->reviewed_at],
-                $first === 'disetujui oleh' => [$f->approver?->name, $f->approved_at],
+                str_starts_with($first, 'diperiksa') => [$f->checked_signer ?: $f->checker?->name, $f->checked_at],
+                str_starts_with($first, 'direview') => [$f->reviewed_signer ?: $f->reviewer?->name, $f->reviewed_at],
+                $first === 'disetujui oleh' => [$f->approved_signer ?: $f->approver?->name, $f->approved_at],
                 default => [null, null],
             };
             if ($name && isset($cells[2])) {

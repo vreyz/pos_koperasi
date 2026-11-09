@@ -105,6 +105,10 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
 - Alur & otorisasi: pengajuan (`financing-create`) → diperiksa Divisi Pembiayaan (`financing-check`) → direview Kepala
   Unit Usaha (`financing-review`) → disetujui Ketua (`financing-approve`) → dicairkan Bendahara (`financing-disburse`,
   membuat jadwal cicilan mulai bulan berikutnya). Bisa ditolak dengan alasan sebelum cair.
+- **Atas nama atasan**: bila atasan tidak login, akun yang punya izin tahap itu (satu akun boleh merangkap staf dan
+  atasan, mis. role manager) mencatat persetujuan/penolakan dengan *nama pejabat* (`*_signer`, saran dari SK pengurus)
+  dan *tanggal keputusan* (`*_at`, boleh mundur, tidak boleh ke depan atau sebelum tahap sebelumnya). Akun pencatat
+  (`*_by`) dan waktu pencatatan (`*_recorded_at`) tetap disimpan; formulir cetak/Word memakai nama pejabat.
 - Cicilan dicentang lunas manual, otomatis dari potongan gaji, atau pelunasan dipercepat. Tanda macet; peringatan
   bila pegawai mutasi (`active_until`) masih punya sisa.
 - Cetak: formulir permohonan (versi pegawai/PPNPN untuk dana, versi barang), formulir kosong, bukti pencairan (dengan terbilang).

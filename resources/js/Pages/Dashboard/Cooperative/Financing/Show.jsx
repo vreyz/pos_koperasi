@@ -3,6 +3,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import Modal from "@/Components/Modal";
 import { IconAlertTriangle, IconArrowLeft, IconCash, IconCheck, IconCircleCheck, IconCircleDashed, IconFileTypeDocx, IconPencil, IconPrinter, IconTrash, IconX } from "@tabler/icons-react";
+import { usePage } from "@inertiajs/react";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, MONTHS, PageHeader, Panel, Stat, btn, inputClass, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 import { MoneyInput, PercentInput } from "@/Components/Cooperative/inputs";
@@ -12,11 +13,24 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("id-ID", { day: "nume
 const fmtMonth = (d) => { const x = new Date(d); return `${MONTHS[x.getMonth()]} ${x.getFullYear()}`; };
 const SOURCE = { manual: "manual", potong_gaji: "potong gaji", pelunasan: "pelunasan", import: "impor Excel" };
 
-export default function Show({ financing: f, typeLabel, statusLabels, steps, outstanding, otherActive, mutationWarning, wordTemplate }) {
+export default function Show({ financing: f, typeLabel, statusLabels, steps, outstanding, otherActive, mutationWarning, wordTemplate, signers = { suggestions: [], defaults: {} } }) {
     useFlashToasts();
     const { can } = useAuthorization();
+    const me = usePage().props.auth?.user?.name || "";
+    const today = new Date().toISOString().slice(0, 10);
     const [modal, setModal] = useState(null);
     const [reason, setReason] = useState("");
+    // Persetujuan/penolakan: bila atasan tidak login, akun berwenang mencatat atas nama atasan (nama + tanggal).
+    const [decision, setDecision] = useState({ step: null, label: "", signer: "", decided_at: today });
+    const openDecision = (t) => {
+        setDecision({ step: t.step, label: t.label, signer: signers.defaults?.[t.step] || me, decided_at: today });
+        setModal("decision");
+    };
+    const openReject = () => {
+        setDecision({ step: "reject", label: "Tolak pengajuan", signer: me, decided_at: today });
+        setModal("reject");
+    };
+    const signerHint = (signer) => (signer && signer.trim() && signer.trim() !== me ? `Dicatat oleh akun Anda (${me}) atas nama ${signer.trim()}.` : "Kosongkan atau isi nama Anda sendiri bila Anda yang menyetujui.");
     const [disburse, setDisburse] = useState({
         disbursed_at: new Date().toISOString().slice(0, 10),
         transferred_amount: f.type === "barang" ? f.principal - f.admin_fee : f.principal,
@@ -31,9 +45,9 @@ export default function Show({ financing: f, typeLabel, statusLabels, steps, out
 
     const timeline = [
         { label: "Pengajuan dibuat", done: true, when: f.created_at, who: null },
-        { label: steps.check.label, done: !!f.checked_at, when: f.checked_at, who: f.checker?.name, step: "check", permission: steps.check.permission, from: steps.check.from },
-        { label: steps.review.label, done: !!f.reviewed_at, when: f.reviewed_at, who: f.reviewer?.name, step: "review", permission: steps.review.permission, from: steps.review.from },
-        { label: steps.approve.label, done: !!f.approved_at, when: f.approved_at, who: f.approver?.name, step: "approve", permission: steps.approve.permission, from: steps.approve.from },
+        { label: steps.check.label, done: !!f.checked_at, when: f.checked_at, who: f.checked_signer || f.checker?.name, recorder: f.checked_signer ? f.checker?.name : null, recordedAt: f.checked_recorded_at, step: "check", permission: steps.check.permission, from: steps.check.from },
+        { label: steps.review.label, done: !!f.reviewed_at, when: f.reviewed_at, who: f.reviewed_signer || f.reviewer?.name, recorder: f.reviewed_signer ? f.reviewer?.name : null, recordedAt: f.reviewed_recorded_at, step: "review", permission: steps.review.permission, from: steps.review.from },
+        { label: steps.approve.label, done: !!f.approved_at, when: f.approved_at, who: f.approved_signer || f.approver?.name, recorder: f.approved_signer ? f.approver?.name : null, recordedAt: f.approved_recorded_at, step: "approve", permission: steps.approve.permission, from: steps.approve.from },
         { label: "Dana dicairkan (Bendahara)", done: !!f.disbursed_at, when: f.disbursed_at, who: null, disburse: true },
     ];
 
@@ -89,9 +103,12 @@ export default function Show({ financing: f, typeLabel, statusLabels, steps, out
                                     <div className="flex-1 text-sm">
                                         <div className={t.done ? "font-medium text-slate-900 dark:text-white" : "text-slate-500"}>{t.label}</div>
                                         {t.done && t.when && <div className="text-xs text-slate-500">{fmtDate(t.when)}{t.who ? ` · ${t.who}` : ""}</div>}
+                                        {t.done && t.recorder && (
+                                            <div className="text-xs text-slate-400">atas nama {t.who} · dicatat oleh {t.recorder}{t.recordedAt ? ` pada ${new Date(t.recordedAt).toLocaleString("id-ID")}` : ""}</div>
+                                        )}
                                         {actionable && (
                                             <button
-                                                onClick={() => (t.disburse ? setModal("disburse") : post("financing.advance", [f.id, t.step], {}, `${t.label}?`))}
+                                                onClick={() => (t.disburse ? setModal("disburse") : openDecision(t))}
                                                 className={btn.primary + " mt-2 py-1 text-xs"}
                                             >
                                                 <IconCheck size={14} /> {t.disburse ? "Cairkan" : "Setujui tahap ini"}
@@ -104,11 +121,11 @@ export default function Show({ financing: f, typeLabel, statusLabels, steps, out
                     </ol>
                     {f.status === "ditolak" && (
                         <p className="mx-4 mb-4 rounded-lg bg-danger-50 p-3 text-sm text-danger-700 dark:bg-danger-900/20 dark:text-danger-300">
-                            Ditolak {fmtDate(f.rejected_at)}{f.rejecter ? ` oleh ${f.rejecter.name}` : ""}: {f.rejection_reason}
+                            Ditolak {fmtDate(f.rejected_at)}{f.rejected_signer || f.rejecter ? ` oleh ${f.rejected_signer || f.rejecter.name}` : ""}{f.rejected_signer && f.rejecter ? ` (dicatat oleh ${f.rejecter.name})` : ""}: {f.rejection_reason}
                         </p>
                     )}
                     {["pengajuan", "diperiksa", "direview", "disetujui"].includes(f.status) && (can("financing-check") || can("financing-review") || can("financing-approve")) && (
-                        <div className="px-4 pb-4"><button onClick={() => setModal("reject")} className="text-sm text-danger-600 hover:underline"><IconX size={14} className="inline" /> Tolak pengajuan</button></div>
+                        <div className="px-4 pb-4"><button onClick={openReject} className="text-sm text-danger-600 hover:underline"><IconX size={14} className="inline" /> Tolak pengajuan</button></div>
                     )}
                 </Panel>
 
@@ -165,10 +182,42 @@ export default function Show({ financing: f, typeLabel, statusLabels, steps, out
             )}
 
             <Modal show={modal === "reject"} onClose={() => setModal(null)}>
-                <form onSubmit={(e) => { e.preventDefault(); post("financing.reject", f.id, { reason }); }} className="space-y-4 p-6">
+                <form onSubmit={(e) => { e.preventDefault(); post("financing.reject", f.id, { reason, signer: decision.signer === me ? "" : decision.signer, decided_at: decision.decided_at }); }} className="space-y-4 p-6">
                     <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Tolak pengajuan</h2>
                     <Field label="Alasan"><textarea rows={3} className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} required /></Field>
+                    <datalist id="financing-signers">
+                        {me && <option value={me}>akun Anda</option>}
+                        {(signers.suggestions || []).map((x) => <option key={x.name} value={x.name}>{x.position || "pengurus"}</option>)}
+                    </datalist>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Atas nama (pejabat yang memutuskan)" hint={signerHint(decision.signer)}>
+                            <input list="financing-signers" className={inputClass} value={decision.signer} onChange={(e) => setDecision({ ...decision, signer: e.target.value })} placeholder="mis. nama Ketua Koperasi" />
+                        </Field>
+                        <Field label="Tanggal keputusan" hint="Boleh tanggal lalu bila atasan sudah memutuskan sebelumnya">
+                            <input type="date" max={today} className={inputClass} value={decision.decided_at} onChange={(e) => setDecision({ ...decision, decided_at: e.target.value })} required />
+                        </Field>
+                    </div>
                     <div className="flex justify-end gap-2"><button type="button" onClick={() => setModal(null)} className={btn.secondary}>Batal</button><button type="submit" className={btn.danger}>Tolak</button></div>
+                </form>
+            </Modal>
+
+            <Modal show={modal === "decision"} onClose={() => setModal(null)}>
+                <form onSubmit={(e) => { e.preventDefault(); post("financing.advance", [f.id, decision.step], { signer: decision.signer === me ? "" : decision.signer, decided_at: decision.decided_at }); }} className="space-y-4 p-6">
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{decision.label}</h2>
+                    <p className="text-sm text-slate-500">Bila atasan tidak bisa masuk ke aplikasi, catat persetujuannya di sini atas nama beliau. Akun Anda tetap tercatat sebagai pencatat beserta waktunya.</p>
+                    <datalist id="financing-signers">
+                        {me && <option value={me}>akun Anda</option>}
+                        {(signers.suggestions || []).map((x) => <option key={x.name} value={x.name}>{x.position || "pengurus"}</option>)}
+                    </datalist>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Atas nama (pejabat yang memutuskan)" hint={signerHint(decision.signer)}>
+                            <input list="financing-signers" className={inputClass} value={decision.signer} onChange={(e) => setDecision({ ...decision, signer: e.target.value })} placeholder="mis. nama Ketua Koperasi" />
+                        </Field>
+                        <Field label="Tanggal keputusan" hint="Boleh tanggal lalu bila atasan sudah memutuskan sebelumnya">
+                            <input type="date" max={today} className={inputClass} value={decision.decided_at} onChange={(e) => setDecision({ ...decision, decided_at: e.target.value })} required />
+                        </Field>
+                    </div>
+                    <div className="flex justify-end gap-2"><button type="button" onClick={() => setModal(null)} className={btn.secondary}>Batal</button><button type="submit" className={btn.primary}><IconCheck size={16} /> Setujui</button></div>
                 </form>
             </Modal>
 

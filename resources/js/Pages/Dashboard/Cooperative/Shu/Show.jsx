@@ -135,7 +135,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                 actions={
                     <>
                         <Link href={route("shu.index")} className={btn.secondary}><IconArrowLeft size={18} /> Kembali</Link>
-                        {allocations.length > 0 && <a href={route("shu.export", period.id)} className={btn.secondary}><IconDownload size={18} /> Ekspor Excel</a>}
+                        <a href={route("shu.export", period.id)} className={btn.secondary} title={allocations.length ? "Daftar SHU per anggota beserta rincian perhitungannya" : "Belum dihitung — file berisi judul kolom saja"}><IconDownload size={18} /> Unduh Excel</a>
                         {can("shu-finalize") && !locked && period.calculated_at && <button onClick={post("shu.finalize", "Kunci SHU ini? Setelah final, pengaturan & hasil tidak bisa diubah sampai dibuka lagi.")} className={btn.secondary}><IconLock size={18} /> Kunci (final)</button>}
                         {can("shu-finalize") && locked && <button onClick={post("shu.reopen", "Buka kunci SHU ini?")} className={btn.secondary}><IconLockOpen size={18} /> Buka kunci</button>}
                         {editable && <button onClick={() => confirm(`Hapus perhitungan SHU ${period.year}?`) && router.delete(route("shu.destroy", period.id))} className={btn.secondary}><IconTrash size={18} /></button>}
@@ -450,6 +450,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                 title={`Hasil perhitungan (${allocations.length} orang)`}
                 actions={
                     <div className="flex flex-wrap gap-2">
+                        <a href={route("shu.export", period.id)} className={btn.secondary}><IconDownload size={18} /> Unduh Excel</a>
                         <Link href={route("name-links.index", { shu_year: period.year })} className={btn.secondary}><IconLink size={18} /> Pencocokan nama</Link>
                         {editable && <button onClick={() => openAdjust(null)} className={btn.secondary}><IconPlus size={18} /> Koreksi / penerima manual</button>}
                     </div>
