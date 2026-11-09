@@ -57,7 +57,7 @@ export default function Index({ employees, types, statuses, summary }) {
                         <a href={route("employees.export")} className={btn.secondary} title="Format sama dengan template impor: unggah ulang memperbarui data (kunci NIP), tidak dobel.">
                             <IconDownload size={18} /> Unduh pegawai
                         </a>
-                        <a href={route("cooperative-members.export")} className={btn.secondary} title="Anggota koperasi = pembayar iuran pokok/wajib/sukarela (otomatis).">
+                        <a href={route("cooperative-members.export")} className={btn.secondary} title="Anggota koperasi = pembayar simpanan pokok/wajib/sukarela (otomatis).">
                             <IconDownload size={18} /> Unduh anggota
                         </a>
                         {can("employees-import") && (

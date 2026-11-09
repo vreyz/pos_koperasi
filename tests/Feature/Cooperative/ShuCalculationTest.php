@@ -245,9 +245,9 @@ class ShuCalculationTest extends TestCase
         $this->assertSame(697000, $alloc[$a->id]->total_rounded);
     }
 
-    public function test_financing_portion_cannot_exceed_half_of_financing_income(): void
+    public function test_financing_portion_cannot_exceed_30_percent_of_financing_income(): void
     {
-        // 3 pegawai pinjam dana 10 jt → biaya formulir 3 × 500rb = 1,5 jt → bagian SHU pendapatan pembiayaan maks 750rb.
+        // 3 pegawai pinjam dana 10 jt → biaya formulir 3 × 500rb = 1,5 jt → bagian SHU pendapatan pembiayaan maks 30% = 450rb.
         $service = app(FinancingService::class);
         foreach (['A', 'B', 'C'] as $name) {
             $person = $this->person($name);
@@ -262,20 +262,20 @@ class ShuCalculationTest extends TestCase
         $this->assertSame(1500000, $calculator->summary($period)['financing_income']);
         $errors = $calculator->financingCapErrors($period);
         $this->assertArrayHasKey('portion_financing', $errors);
-        $this->assertStringContainsString('Isi paling banyak 7,5%', $errors['portion_financing']);
+        $this->assertStringContainsString('Isi paling banyak 4,5%', $errors['portion_financing']);
         try {
             $calculator->calculate($period);
-            $this->fail('Bagian SHU pendapatan pembiayaan 1 jt melebihi batas 750rb, seharusnya ditolak.');
+            $this->fail('Bagian SHU pendapatan pembiayaan 1 jt melebihi batas 450rb, seharusnya ditolak.');
         } catch (RuntimeException $e) {
-            $this->assertStringContainsString('melebihi 50% pendapatan pembiayaan 2025', $e->getMessage());
+            $this->assertStringContainsString('melebihi 30% pendapatan pembiayaan 2025', $e->getMessage());
         }
         $this->assertSame(0, $period->allocations()->count());
 
-        // Tepat 50% (7,5% × 10 jt = 750rb) boleh.
-        $period->update(['portion_savings' => 62.5, 'portion_financing' => 7.5]);
+        // Tepat 30% (4,5% × 10 jt = 450rb) boleh.
+        $period->update(['portion_savings' => 65.5, 'portion_financing' => 4.5]);
         $this->assertSame([], $calculator->financingCapErrors($period->fresh()));
         $calculator->calculate($period->fresh());
-        $this->assertEqualsWithDelta(750000, $period->allocations()->sum('shu_financing'), 0.05);
+        $this->assertEqualsWithDelta(450000, $period->allocations()->sum('shu_financing'), 0.05);
     }
 
     public function test_saving_shu_settings_rejects_financing_portion_above_cap(): void
@@ -289,16 +289,16 @@ class ShuCalculationTest extends TestCase
         $period = $this->period();
         $settings = [
             'total_shu' => 1100000, 'base_per_person' => 100000, 'base_requires_savings' => true, 'base_for_ppnpn' => true, 'base_mode' => 'full',
-            'portion_savings' => 50, 'portion_purchases' => 30, 'portion_financing' => 20,
+            'portion_savings' => 55, 'portion_purchases' => 30, 'portion_financing' => 15,
             'savings_types' => ['pokok', 'wajib', 'sukarela'], 'savings_period' => 'year', 'sales_source' => 'excel', 'rounding' => 'round', 'rounding_unit' => 1000,
         ];
 
-        // Biaya formulir 500rb → batas 250rb. Sisa SHU 1 jt × 20% = 200rb → boleh.
+        // Biaya formulir 500rb → batas 30% = 150rb. Sisa SHU 1 jt × 15% = 150rb → boleh.
         $this->actingAs($user)->put(route('shu.update', $period), $settings)->assertSessionHasNoErrors();
-        // 30% = 300rb > 250rb → ditolak, pengaturan lama tetap.
+        // 30% = 300rb > 150rb → ditolak, pengaturan lama tetap.
         $this->actingAs($user)->put(route('shu.update', $period), ['portion_savings' => 40, 'portion_financing' => 30] + $settings)
             ->assertSessionHasErrors('portion_financing');
-        $this->assertEquals(20, $period->fresh()->portion_financing);
+        $this->assertEquals(15, $period->fresh()->portion_financing);
     }
 
     public function test_shu_pages_excel_import_and_name_mapping(): void

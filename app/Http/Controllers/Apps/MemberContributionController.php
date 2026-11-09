@@ -82,11 +82,17 @@ class MemberContributionController extends Controller
             })->values();
         }
 
+        // Setoran per jenis (nilai positif) dan penarikan/pengembalian (nilai negatif) dipisah.
         $totals = MemberContribution::where('period_year', $year)
             ->whereIn('type', MemberContribution::SAVINGS_TYPES)
+            ->where('amount', '>', 0)
             ->selectRaw('type, SUM(amount) as total')
             ->groupBy('type')
             ->pluck('total', 'type');
+        $totals['withdrawn'] = (int) -MemberContribution::where('period_year', $year)
+            ->whereIn('type', MemberContribution::SAVINGS_TYPES)
+            ->where('amount', '<', 0)
+            ->sum('amount');
 
         return Inertia::render('Dashboard/Cooperative/Savings/Index', [
             'tab' => $tab,
@@ -205,7 +211,14 @@ class MemberContributionController extends Controller
         $preview = null;
         if ($path) {
             try {
-                $preview = $this->importService->preview($this->importService->parse($path)) + ['token' => $token];
+                $data = $this->importService->inspect($path, $this->importName($request, $token));
+                $preview = $this->importService->preview($data['rows']);
+                $preview += [
+                    'token' => $token,
+                    'file_name' => $this->importName($request, $token),
+                    'sheets' => array_map(fn ($s) => array_intersect_key($s, array_flip(['sheet', 'label', 'rows'])), $data['sheets']),
+                    'checks' => $this->importService->validate($data, $this->importService->autoMapping($preview)),
+                ];
             } catch (RuntimeException $e) {
                 $this->files->forget('savings', $token);
 
@@ -223,8 +236,38 @@ class MemberContributionController extends Controller
     {
         $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:20480']]);
         $token = $this->files->put($request->file('file'), 'savings');
+        // Nama file asli dipakai menebak jenis simpanan (mis. "SIMPANAN WAJIB PPNPN 2024-2025.xlsx").
+        $request->session()->put("savings_import_name.{$token}", $request->file('file')->getClientOriginalName());
 
         return to_route('savings.import', ['token' => $token]);
+    }
+
+    /** Validasi ulang dengan pemetaan nama terbaru (dipanggil dari layar pratinjau sebelum simpan). */
+    public function validateImport(Request $request)
+    {
+        set_time_limit(600);
+        $validated = $request->validate(['token' => ['required', 'uuid'], 'mapping' => ['array']]);
+        $path = $this->files->path('savings', $validated['token']);
+        if (! $path) {
+            return response()->json(['message' => 'File pratinjau sudah kedaluwarsa. Upload ulang.'], 410);
+        }
+        $data = $this->importService->inspect($path, $this->importName($request, $validated['token']));
+
+        return response()->json(['checks' => $this->importService->validate($data, $this->cleanMapping($validated['mapping'] ?? []))]);
+    }
+
+    private function importName(Request $request, ?string $token): string
+    {
+        return (string) $request->session()->get("savings_import_name.{$token}", '');
+    }
+
+    /** @return array<string, int|string|null> */
+    private function cleanMapping(array $raw): array
+    {
+        $mapping = collect($raw)->map(fn ($v) => $v === 'new' ? 'new' : (is_numeric($v) ? (int) $v : null))->all();
+        $validIds = Customer::employees()->whereIn('id', array_filter($mapping, 'is_int'))->pluck('id')->all();
+
+        return array_map(fn ($v) => is_int($v) && ! in_array($v, $validIds, true) ? null : $v, $mapping);
     }
 
     public function commitImport(Request $request)
@@ -239,14 +282,20 @@ class MemberContributionController extends Controller
             return to_route('savings.import')->with('error', 'File pratinjau sudah kedaluwarsa. Upload ulang.');
         }
 
-        $mapping = collect($validated['mapping'] ?? [])
-            ->map(fn ($v) => $v === 'new' ? 'new' : (is_numeric($v) ? (int) $v : null))
-            ->all();
-        $validIds = Customer::employees()->whereIn('id', array_filter($mapping, 'is_int'))->pluck('id')->all();
-        $mapping = array_map(fn ($v) => is_int($v) && ! in_array($v, $validIds, true) ? null : $v, $mapping);
+        $mapping = $this->cleanMapping($validated['mapping'] ?? []);
 
-        $summary = $this->importService->commit($this->importService->parse($path), $mapping, $request->user()->id);
+        // Validasi dulu: kesalahan (mis. total tidak cocok, pengembalian melebihi saldo) menahan penyimpanan.
+        $data = $this->importService->inspect($path, $this->importName($request, $validated['token']));
+        $checks = $this->importService->validate($data, $mapping);
+        if (ContributionImportService::hasErrors($checks)) {
+            $first = collect($checks)->firstWhere('level', 'error');
+
+            return to_route('savings.import', ['token' => $validated['token']])->with('error', 'Belum disimpan — validasi menemukan kesalahan: '.$first['title']);
+        }
+
+        $summary = $this->importService->commit($data['rows'], $mapping, $request->user()->id);
         $this->files->forget('savings', $validated['token']);
+        $request->session()->forget("savings_import_name.{$validated['token']}");
 
         return to_route('savings.index')->with('success', "Import simpanan selesai: {$summary['saved']} catatan disimpan, {$summary['created_employees']} pegawai baru, {$summary['skipped_names']} nama dilewati.");
     }
@@ -269,13 +318,13 @@ class MemberContributionController extends Controller
             ->get()
             ->map(fn (Customer $c) => [
                 $c->nip, $c->name, $c->employee_type, $c->employment_status,
-                (int) $c->pokok_total, (int) $c->wajib_total, (int) $c->sukarela_total,
-                (int) $c->pokok_total + (int) $c->wajib_total + (int) $c->sukarela_total,
+                (int) $c->pokok_total, (int) $c->wajib_total, (int) $c->sukarela_total, (int) -$c->withdrawn_total,
+                (int) $c->pokok_total + (int) $c->wajib_total + (int) $c->sukarela_total + (int) $c->withdrawn_total,
                 (int) $c->savings_balance,
             ])->all();
 
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Status', 'Pokok '.$year, 'Wajib '.$year, 'Sukarela '.$year, 'Total Simpanan '.$year, 'Saldo Simpanan s.d. '.$year],
+            ['NIP', 'Nama', 'Jenis', 'Status', 'Pokok '.$year, 'Wajib '.$year, 'Sukarela '.$year, 'Penarikan '.$year, 'Total Simpanan '.$year.' (setor − tarik)', 'Saldo Simpanan s.d. '.$year],
             $rows,
             ['A' => '@'],
         ), "rekap-simpanan-{$year}.xlsx");
@@ -316,9 +365,11 @@ class MemberContributionController extends Controller
     private function recapQuery(int $year)
     {
         $query = Customer::employees()->select(['id', 'name', 'nip', 'employee_type', 'employment_status']);
+        // Kolom per jenis = setoran saja; penarikan/pengembalian (nilai negatif) di kolom sendiri.
         foreach (MemberContribution::SAVINGS_TYPES as $type) {
-            $query->withSum(["contributions as {$type}_total" => fn ($q) => $q->where('type', $type)->where('period_year', $year)], 'amount');
+            $query->withSum(["contributions as {$type}_total" => fn ($q) => $q->where('type', $type)->where('period_year', $year)->where('amount', '>', 0)], 'amount');
         }
+        $query->withSum(['contributions as withdrawn_total' => fn ($q) => $q->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('period_year', $year)->where('amount', '<', 0)], 'amount');
 
         return $query->withSum(['contributions as savings_balance' => fn ($q) => $q
             ->whereIn('type', MemberContribution::SAVINGS_TYPES)

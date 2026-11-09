@@ -211,6 +211,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('savings/import', [MemberContributionController::class, 'import'])->middleware('permission:savings-import')->name('savings.import');
     Route::get('savings/import/template', [MemberContributionController::class, 'template'])->middleware('permission:savings-import')->name('savings.import.template');
     Route::post('savings/import/preview', [MemberContributionController::class, 'previewImport'])->middleware('permission:savings-import')->name('savings.import.preview');
+    Route::post('savings/import/validate', [MemberContributionController::class, 'validateImport'])->middleware('permission:savings-import')->name('savings.import.validate');
     Route::post('savings/import/commit', [MemberContributionController::class, 'commitImport'])->middleware('permission:savings-import')->name('savings.import.commit');
     Route::post('savings', [MemberContributionController::class, 'store'])->middleware('permission:savings-create')->name('savings.store');
     Route::post('savings/generate', [MemberContributionController::class, 'generate'])->middleware('permission:savings-create')->name('savings.generate');

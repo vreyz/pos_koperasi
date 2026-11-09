@@ -33,12 +33,23 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
   (tanda NIP dibulatkan Excel karena disimpan sebagai angka).
 
 ### Koperasi → Simpanan Anggota (`savings.*`)
-- Rekap per anggota per tahun (pokok, wajib, sukarela, angsuran, saldo simpanan) dan riwayat.
+- Rekap per anggota per tahun: kolom Pokok, Wajib, Sukarela = **setoran** tahun itu; kolom **Penarikan** =
+  pengembalian/tarik simpanan (catatan bernilai negatif); Total = setoran − penarikan; Saldo s.d. tahun itu.
 - Setor / tarik manual (penarikan dibatasi saldo jenis simpanan tersebut).
 - **Generate potongan bulanan** wajib/pokok untuk pegawai berstatus AKTIF (pokok hanya sekali per orang).
-- **Import Excel** format sheet "Master" (header bertingkat didukung): Nama Pegawai, Wajib, Pokok, Sukarela,
-  Angsuran Koperasi, Bulan, Tahun; NIP opsional. Nama yang belum cocok dipetakan di layar
-  (saran nama mirip, atau buat pegawai baru). Import ulang periode yang sama menimpa, tidak dobel.
+- **Import Excel** — format dikenali otomatis per sheet (sheet lain, mis. daftar gaji/rekening, dilewati):
+  1. Sheet "Master" (header bertingkat didukung): Nama Pegawai, Wajib, Pokok, Sukarela, Angsuran Koperasi,
+     Bulan, Tahun; NIP opsional. Juga file hasil tombol Data (kolom Total Pokok/Wajib/Sukarela).
+  2. Rekap bulanan per nama (kolom JAN s.d. DES, mis. rekap simpanan PPNPN): tahun dari baris judul
+     ("Periode : 2025") atau nama sheet; jenis simpanan dari judul/nama sheet/nama file (bawaan wajib).
+  3. Pengembalian simpanan: Nama, Tanggal, Pengembalian Wajib/Pokok/Sukarela → catatan negatif di bulan tanggal itu.
+  Nama yang belum cocok dipetakan di layar (saran nama mirip, atau buat pegawai baru; keterangan "PPNPN" di nama
+  diabaikan saat mencocokkan). Import ulang menimpa catatan import lama di periode & jenis yang sama, tidak dobel
+  (setoran mengganti setoran, pengembalian mengganti pengembalian).
+- **Validasi sebelum simpan** (`ContributionImportService::validate`, tombol *Validasi ulang* setelah mengubah pilihan
+  nama): total per bulan vs baris Jumlah di file, jenis & tahun sama di dua sheet, periode di masa depan, pengembalian
+  melebihi saldo → **kesalahan** (simpan ditolak, juga di server). Nama belum dipilih, pegawai bukan AKTIF tapi menyetor,
+  nilai tidak lazim, catatan manual di bulan yang sama (bisa dobel), penerima pengembalian masih AKTIF → **peringatan**.
 
 ### Koperasi → SHU (`shu.*`)
 - Satu perhitungan per **tahun buku Y** (dibagikan di Y+1), pengaturan disalin dari tahun sebelumnya.
@@ -54,12 +65,12 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
 
 1. **Hanya pegawai aktif di tahun Y** yang ikut: masa aktif (`active_from`–`active_until` di Data Pegawai,
    kosong = aktif) mencakup tahun Y. Non-pegawai tidak dapat walau belanja. Pengecualian tidak dapat apa pun.
-2. Penerima harus punya simpanan/iuran, pembelian, atau angsuran pinjaman di Y.
+2. Penerima harus punya simpanan, pembelian, atau angsuran pinjaman di Y.
 3. **Base SHU** (nominal bisa diganti):
    - *Siapa*: hanya pembayar simpanan (default) **atau** semua pegawai aktif yang ikut.
    - *PPNPN dapat base?* default **ya**, bisa dimatikan.
    - *Besaran*: penuh per orang **atau** proporsional bulan membayar (base × bulan ÷ 12).
-   - Pegawai yang belanja tapi tidak iuran: dapat jasa pembelian, tanpa base (bila base hanya untuk pembayar).
+   - Pegawai yang belanja tapi tidak menyimpan: dapat jasa pembelian, tanpa base (bila base hanya untuk pembayar).
 4. **SHU Pengurus Koperasi**: nominal **per orang per bulan bertugas**; bulan bertugas tiap pengurus
    dicentang (Jan–Des) karena susunan pengurus bisa berganti di tengah tahun. SHU pengurus = nominal × jumlah
    bulan dicentang, dipotong dari SHU lebih dulu.
@@ -71,7 +82,7 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
    - Belanja: POS (`paid`/`unpaid`, dikurangi retur `completed`) atau import Excel.
    - Pendapatan pembiayaan (satu porsi, `portion_financing`): per pegawai = **biaya formulir** pembiayaan dana yang
      dicairkan di Y + **biaya lain** pembiayaan barang yang dicairkan di Y + **bagi hasil** dari cicilan barang yang dibayar di Y.
-     Bagian ini dalam rupiah paling banyak **50% dari total pendapatan pembiayaan koperasi** di Y (dicek saat simpan & hitung).
+     Bagian ini dalam rupiah paling banyak **30% dari total pendapatan pembiayaan koperasi** di Y (dicek saat simpan & hitung).
    - Cicilan/angsuran tidak dihitung. Kolom lama `portion_loans`, `portion_financing_dana`, `portion_financing_barang`
      tidak dipakai lagi (nilainya dipindah ke `portion_financing`).
 6. Pembulatan: terdekat / ke atas / ke bawah / tidak, dengan kelipatan Rp 100–10.000.
@@ -110,7 +121,7 @@ nama simpanan hanya bisa dipindahkan ke pegawai lain.
 
 - Rekap potongan gaji per pegawai per tahun/bulan: Simpanan Koperasi (Pinjaman, Wajib, Pokok, Sukarela), Angsuran
   Koperasi, Potong Gaji Koperasi (`member_contributions` jenis `pinjaman`, `wajib`, `pokok`, `sukarela`, `angsuran`, `pg`).
-  Iuran untuk SHU tetap pokok + wajib + sukarela.
+  Simpanan untuk SHU tetap pokok + wajib + sukarela.
 - Impor bertahap (`DeductionImportService`): unggah → pilih sheet & baris judul (tebakan otomatis, judul bertingkat
   boleh) → cocokkan kolom → cocokkan nama (NIP/alias/nama persis; yang mirip ≥ 90 diisi otomatis) → pratinjau.
   Per pegawai × jenis × bulan: **sama** dilewati, **baru** disimpan, **beda** hanya bila dicentang (total bulan itu =
@@ -148,7 +159,7 @@ Semua file unduhan bisa diedit lalu diunggah ulang; unggah ulang **memperbarui**
 | Data | Unduh | Unggah ulang (kunci pencocokan) |
 |------|-------|---------------------------------|
 | Pegawai | Data Pegawai → Unduh pegawai | Impor Excel pegawai (NIP; beda → konfirmasi) |
-| Anggota | Data Pegawai → Unduh anggota | — (anggota otomatis dari pembayar iuran) |
+| Anggota | Data Pegawai → Unduh anggota | — (anggota otomatis dari pembayar simpanan) |
 | Simpanan | Simpanan → Data {tahun} (kolom `Total Pokok/Wajib/Sukarela`) | Impor Excel simpanan: nilai = total bulan itu; catatan import disesuaikan dengan selisih terhadap catatan manual/tunai |
 | Pembiayaan | Pembiayaan Dana/Barang → Unduh Excel | Impor Excel pembiayaan (jenis + pegawai + nominal + tanggal cair) |
 | Pengurus | Pengurus Koperasi → Unduh Excel | Upload SK |

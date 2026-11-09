@@ -25,14 +25,14 @@ use RuntimeException;
  *  - Sisa dibagi ke jasa simpanan / pembelian / pendapatan pembiayaan sesuai porsi.
  *    Pendapatan pembiayaan = biaya formulir pembiayaan dana + bagi hasil & biaya lain pembiayaan
  *    barang per pegawai (bukan cicilan/angsuran). Bagian SHU pendapatan pembiayaan (dalam rupiah)
- *    paling banyak 50% dari pendapatan pembiayaan koperasi di tahun Y, supaya tidak membagi lebih dari yang didapat.
+ *    paling banyak 30% dari pendapatan pembiayaan koperasi di tahun Y, supaya tidak membagi lebih dari yang didapat.
  */
 class ShuCalculator
 {
     public const PURCHASE_STATUSES = ['paid', 'unpaid'];
 
     /** Batas bagian SHU pendapatan pembiayaan terhadap pendapatan pembiayaan koperasi. */
-    public const FINANCING_SHU_MAX_SHARE = 0.5;
+    public const FINANCING_SHU_MAX_SHARE = 0.3;
 
     public function __construct(private readonly FinancingService $financings) {}
 
@@ -164,20 +164,20 @@ class ShuCalculator
             'purchase_total' => array_sum($data['purchases']),
             'purchase_buyers' => count($data['purchases']),
             'financing_total' => array_sum($data['financing']),
-            // Pendapatan koperasi dari semua pembiayaan di tahun Y (dasar batas 50% bagian SHU pendapatan pembiayaan).
+            // Pendapatan koperasi dari semua pembiayaan di tahun Y (dasar batas 30% bagian SHU pendapatan pembiayaan).
             'financing_dana_income' => $danaIncome = $this->financingIncome('dana', $period->year),
             'financing_barang_income' => $barangIncome = $this->financingIncome('barang', $period->year),
             'financing_income' => $danaIncome + $barangIncome,
             'financing_max_share' => self::FINANCING_SHU_MAX_SHARE,
             'adjustment_total' => (int) $adjustments->sum('amount'),
             'board_total' => array_sum($this->boardBonuses($period)),
-            // Pegawai aktif yang belanja di tahun Y tapi tidak tercatat iuran di tahun Y (bahan pertimbangan pengecualian).
+            // Pegawai aktif yang belanja di tahun Y tapi tidak tercatat simpanan di tahun Y (bahan pertimbangan pengecualian).
             'buyers_without_dues' => collect($data['purchases'])->diffKeys($payers)->map(fn ($amount, $id) => ['customer_id' => $id, 'amount' => $amount])->values()->all(),
         ];
     }
 
     /**
-     * Bagian SHU pendapatan pembiayaan (rupiah) yang melebihi 50% pendapatan pembiayaan koperasi (dana + barang).
+     * Bagian SHU pendapatan pembiayaan (rupiah) yang melebihi 30% pendapatan pembiayaan koperasi (dana + barang).
      * Tanpa $remainder, sisa SHU dihitung dari pengaturan periode (dipakai saat menyimpan pengaturan).
      *
      * @return array<string, string> kolom porsi => pesan
@@ -201,7 +201,7 @@ class ShuCalculator
         }
         $maxPercent = $remainder > 0 ? floor($cap / $remainder * 10000) / 100 : 0;
 
-        return ['portion_financing' => "Bagian SHU Pendapatan Pembiayaan {$period->portion_financing}% = {$this->rupiah((int) round($pool))} melebihi 50% pendapatan pembiayaan {$period->year} "
+        return ['portion_financing' => "Bagian SHU Pendapatan Pembiayaan {$period->portion_financing}% = {$this->rupiah((int) round($pool))} melebihi ".(self::FINANCING_SHU_MAX_SHARE * 100)."% pendapatan pembiayaan {$period->year} "
             ."(biaya formulir + bagi hasil + biaya lain {$this->rupiah($income)}, maksimal {$this->rupiah((int) floor($cap))}). Isi paling banyak ".str_replace('.', ',', (string) $maxPercent).'%.'];
     }
 

@@ -51,15 +51,15 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
     const boardTotal = (form.board_members || []).reduce((sum, m) => sum + Number(form.board_amount || 0) * m.months.length, 0);
     const boardPerMonth = MONTH_SHORT.map((_, i) => (form.board_members || []).filter((m) => m.customer_id && m.months.includes(i + 1)).length);
     const remainder = Number(form.total_shu || 0) - stats.base_total - boardTotal - stats.adjustment_total;
-    // Bagian SHU pendapatan pembiayaan (rupiah) paling banyak 50% pendapatan pembiayaan koperasi (dana + barang) di tahun buku.
+    // Bagian SHU pendapatan pembiayaan (rupiah) paling banyak 30% pendapatan pembiayaan koperasi (dana + barang) di tahun buku.
     const financingCap = (() => {
         const income = Number(stats.financing_income || 0);
-        const cap = income * Number(stats.financing_max_share ?? 0.5);
+        const cap = income * Number(stats.financing_max_share ?? 0.3);
         const pool = (Math.max(remainder, 0) * Number(form.portion_financing || 0)) / 100;
         const maxPercent = remainder > 0 ? Math.floor((cap / remainder) * 10000) / 100 : 0;
         return { income, cap, pool, maxPercent: maxPercent.toLocaleString("id-ID"), over: pool > cap + 0.5 };
     })();
-    const capError = financingCap.over ? `${rupiah(financingCap.pool)} melebihi 50% pendapatan pembiayaan (${rupiah(financingCap.cap)}). Maks ${financingCap.maxPercent}%.` : null;
+    const capError = financingCap.over ? `${rupiah(financingCap.pool)} melebihi ${Math.round(Number(stats.financing_max_share ?? 0.3) * 100)}% pendapatan pembiayaan (${rupiah(financingCap.cap)}). Maks ${financingCap.maxPercent}%.` : null;
     const employeeById = useMemo(() => Object.fromEntries(employees.map((e) => [e.id, e])), [employees]);
     const empOptions = useMemo(() => employeeOptions(employees), [employees]);
     const dirty = SETTING_KEYS.some((k) => JSON.stringify(form[k]) !== JSON.stringify(period[k] ?? empty(k)));
@@ -83,14 +83,14 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
             ),
         },
         { key: "type", label: "Jenis", filter: "select", options: ["PNS", "PPPK", "PPNPN", "LAINNYA"].map((v) => ({ value: v, label: v })), value: (a) => a.customer?.employee_type || "" },
-        money("savings_amount", "Iuran", "savings_share"),
+        money("savings_amount", "Simpanan", "savings_share"),
         money("purchase_amount", "Belanja", "purchase_share"),
         ...(period.portion_financing > 0 ? [money("financing_amount", "Pend. pembiayaan", "financing_share")] : []),
         money("base_amount", "SHU dasar", null, {
             render: (a) => <>{rupiah(a.base_amount)}{period.base_mode === "monthly" && <div className="text-xs text-slate-500">{a.months_paid} bln</div>}{adjustmentByCustomer[a.customer_id]?.base_override != null && <div className="text-xs text-warning-700">manual</div>}</>,
         }),
         ...(stats.board_total > 0 ? [money("board_amount", "SHU Pengurus Koperasi")] : []),
-        money("shu_savings", "SHU iuran"),
+        money("shu_savings", "SHU simpanan"),
         money("shu_purchases", "SHU belanja"),
         ...(period.portion_financing > 0 ? [money("shu_financing", "SHU pembiayaan")] : []),
         money("adjustment_amount", "Koreksi", null, {
@@ -139,24 +139,24 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                 <Field label="Jumlah SHU yang dibagi" error={errors.total_shu} tip="Total uang SHU tahun buku ini yang akan dibagikan ke anggota (sesuai keputusan RAT). Semua bagian di bawah diambil dari angka ini.">
                                     <MoneyInput value={form.total_shu} onChange={(v) => setForm({ ...form, total_shu: v })} />
                                 </Field>
-                                <Field label="SHU dasar per orang" error={errors.base_per_person} tip="Nominal yang sama untuk setiap penerima SHU dasar, sebelum sisa SHU dibagi berdasarkan iuran, belanja, dan pembiayaan." hint={`Pengaturan tersimpan: ${stats.base_recipients} orang dapat SHU dasar → total ${rupiah(stats.base_total)}`}>
+                                <Field label="SHU dasar per orang" error={errors.base_per_person} tip="Nominal yang sama untuk setiap penerima SHU dasar, sebelum sisa SHU dibagi berdasarkan simpanan, belanja, dan pembiayaan." hint={`Pengaturan tersimpan: ${stats.base_recipients} orang dapat SHU dasar → total ${rupiah(stats.base_total)}`}>
                                     <MoneyInput value={form.base_per_person} onChange={(v) => setForm({ ...form, base_per_person: v })} />
                                 </Field>
                             </div>
                             <div className="grid gap-4 sm:grid-cols-3">
-                                <Field label="Siapa dapat SHU dasar" error={errors.base_requires_savings} tip="Hanya pembayar iuran: anggota yang membayar pokok/wajib/sukarela di tahun buku. Semua pegawai aktif yang ikut: termasuk yang hanya belanja atau ikut pembiayaan tanpa iuran." hint={form.base_requires_savings ? "Belanja tanpa iuran tetap dapat bagian Belanja Toko, tanpa SHU dasar." : "Siapa pun yang ikut (iuran/belanja/pembiayaan) dapat SHU dasar."}>
+                                <Field label="Siapa dapat SHU dasar" error={errors.base_requires_savings} tip="Hanya pembayar simpanan: anggota yang membayar pokok/wajib/sukarela di tahun buku. Semua pegawai aktif yang ikut: termasuk yang hanya belanja atau ikut pembiayaan tanpa simpanan." hint={form.base_requires_savings ? "Belanja tanpa simpanan tetap dapat bagian Belanja Toko, tanpa SHU dasar." : "Siapa pun yang ikut (simpanan/belanja/pembiayaan) dapat SHU dasar."}>
                                     <select className={inputClass} value={form.base_requires_savings ? "1" : "0"} onChange={(e) => setForm({ ...form, base_requires_savings: e.target.value === "1" })}>
-                                        <option value="1">Hanya yang membayar simpanan/iuran</option>
+                                        <option value="1">Hanya yang membayar simpanan</option>
                                         <option value="0">Semua pegawai aktif yang ikut</option>
                                     </select>
                                 </Field>
-                                <Field label="PPNPN dapat SHU dasar?" error={errors.base_for_ppnpn} tip="Ya: PPNPN diperlakukan sama seperti pegawai lain untuk SHU dasar (tetap mengikuti aturan siapa yang dapat SHU dasar). Tidak: PPNPN hanya dapat bagian iuran/belanja/pembiayaan.">
+                                <Field label="PPNPN dapat SHU dasar?" error={errors.base_for_ppnpn} tip="Ya: PPNPN diperlakukan sama seperti pegawai lain untuk SHU dasar (tetap mengikuti aturan siapa yang dapat SHU dasar). Tidak: PPNPN hanya dapat bagian simpanan/belanja/pembiayaan.">
                                     <select className={inputClass} value={form.base_for_ppnpn ? "1" : "0"} onChange={(e) => setForm({ ...form, base_for_ppnpn: e.target.value === "1" })}>
                                         <option value="1">Ya, PPNPN dapat SHU dasar</option>
                                         <option value="0">Tidak</option>
                                     </select>
                                 </Field>
-                                <Field label="Besaran SHU dasar" error={errors.base_mode} tip="Penuh: setiap penerima dapat nominal penuh. Proporsional: nominal × (jumlah bulan membayar iuran ÷ 12), cocok untuk yang masuk/keluar di tengah tahun.">
+                                <Field label="Besaran SHU dasar" error={errors.base_mode} tip="Penuh: setiap penerima dapat nominal penuh. Proporsional: nominal × (jumlah bulan membayar simpanan ÷ 12), cocok untuk yang masuk/keluar di tengah tahun.">
                                     <select className={inputClass} value={form.base_mode} onChange={(e) => setForm({ ...form, base_mode: e.target.value })}>
                                         <option value="full">Penuh per orang</option>
                                         <option value="monthly">Proporsional bulan membayar (÷12)</option>
@@ -227,20 +227,20 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     <span className="text-slate-500"> · jasa usaha (belanja + pembiayaan) {businessTotal}%</span>
                                 </p>
                                 <div className="grid gap-4 sm:grid-cols-3">
-                                    <Field label="Iuran Koperasi" error={errors.portion_savings} hint="pokok + wajib + sukarela" tip="Bagian ini dibagi sebanding jumlah iuran (simpanan pokok + wajib + sukarela) tiap anggota dibanding total iuran semua anggota.">
+                                    <Field label="Simpanan Koperasi" error={errors.portion_savings} hint="pokok + wajib + sukarela" tip="Bagian ini dibagi sebanding jumlah simpanan (pokok + wajib + sukarela) tiap anggota dibanding total simpanan semua anggota.">
                                         <PercentInput value={form.portion_savings} onChange={(v) => setForm({ ...form, portion_savings: v })} />
                                     </Field>
                                     <Field label="Belanja Toko" error={errors.portion_purchases} hint="total belanja" tip="Bagian ini dibagi sebanding total belanja tiap pegawai di toko koperasi (POS atau impor Excel) dibanding total belanja semua pegawai.">
                                         <PercentInput value={form.portion_purchases} onChange={(v) => setForm({ ...form, portion_purchases: v })} />
                                     </Field>
-                                    <Field label="Pendapatan Pembiayaan" error={errors.portion_financing || capError} hint={`biaya formulir + bagi hasil + biaya lain ${rupiah(financingCap.income)} · maks ${financingCap.maxPercent}%`} tip="Bagian ini dibagi sebanding pendapatan koperasi dari pembiayaan tiap pegawai di tahun buku: biaya formulir pembiayaan dana + bagi hasil pembiayaan barang (dari cicilan yang dibayar) + biaya lain saat pencairan. Cicilan pokoknya tidak dihitung. Dalam rupiah tidak boleh melebihi 50% total pendapatan pembiayaan koperasi di tahun buku ini.">
+                                    <Field label="Pendapatan Pembiayaan" error={errors.portion_financing || capError} hint={`biaya formulir + bagi hasil + biaya lain ${rupiah(financingCap.income)} · maks ${financingCap.maxPercent}%`} tip="Bagian ini dibagi sebanding pendapatan koperasi dari pembiayaan tiap pegawai di tahun buku: biaya formulir pembiayaan dana + bagi hasil pembiayaan barang (dari cicilan yang dibayar) + biaya lain saat pencairan. Cicilan pokoknya tidak dihitung. Dalam rupiah tidak boleh melebihi 30% total pendapatan pembiayaan koperasi di tahun buku ini.">
                                         <PercentInput value={form.portion_financing} onChange={(v) => setForm({ ...form, portion_financing: v })} />
                                     </Field>
                                 </div>
                                 {remainder < 0 && <p className="mt-1 text-sm text-danger-600">SHU dasar + SHU pengurus koperasi + koreksi melebihi SHU yang dibagi.</p>}
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="Iuran yang dihitung" error={errors.savings_types} tip="Jenis iuran yang dijumlahkan untuk bagian Iuran Koperasi. Normalnya ketiganya dicentang.">
+                                <Field label="Simpanan yang dihitung" error={errors.savings_types} tip="Jenis simpanan yang dijumlahkan untuk bagian Simpanan Koperasi. Normalnya ketiganya dicentang.">
                                     <div className="flex flex-wrap gap-3 pt-1">
                                         {["pokok", "wajib", "sukarela"].map((t) => (
                                             <label key={t} className="flex items-center gap-1 text-sm">
@@ -249,7 +249,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                         ))}
                                     </div>
                                 </Field>
-                                <Field label="Periode iuran" error={errors.savings_period} tip="Tahun buku saja: hanya iuran yang dibayar di tahun buku. Sejak awal: saldo iuran yang terkumpul sejak awal menjadi anggota s.d. tahun buku (yang lebih lama jadi anggota mendapat lebih).">
+                                <Field label="Periode simpanan" error={errors.savings_period} tip="Tahun buku saja: hanya simpanan yang dibayar di tahun buku. Sejak awal: saldo simpanan yang terkumpul sejak awal menjadi anggota s.d. tahun buku (yang lebih lama jadi anggota mendapat lebih).">
                                     <select className={inputClass} value={form.savings_period} onChange={(e) => setForm({ ...form, savings_period: e.target.value })}>
                                         <option value="year">Selama tahun buku {period.year} saja</option>
                                         <option value="all_time">Sejak awal s.d. {period.year}</option>
@@ -280,8 +280,8 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     {buyersWithoutDues.length > 0 && (
                                         <div>
                                             <p className="mb-2 font-medium text-warning-800 dark:text-warning-300">
-                                                Belanja di {period.year} tetapi tidak tercatat iuran di {period.year} ({buyersWithoutDues.length} orang)
-                                                <Tip text="Pegawai aktif yang namanya ada di data belanja tahun ini tetapi tidak ada di data iuran tahun ini. Mereka tetap mendapat bagian Belanja Toko (tanpa SHU dasar bila SHU dasar hanya untuk pembayar iuran). Kecualikan bila tidak berhak, atau cocokkan namanya di menu Pencocokan Nama bila ternyata salah ejaan." />
+                                                Belanja di {period.year} tetapi tidak tercatat simpanan di {period.year} ({buyersWithoutDues.length} orang)
+                                                <Tip text="Pegawai aktif yang namanya ada di data belanja tahun ini tetapi tidak ada di data simpanan tahun ini. Mereka tetap mendapat bagian Belanja Toko (tanpa SHU dasar bila SHU dasar hanya untuk pembayar simpanan). Kecualikan bila tidak berhak, atau cocokkan namanya di menu Pencocokan Nama bila ternyata salah ejaan." />
                                             </p>
                                             <div className="flex flex-wrap gap-2">
                                                 {buyersWithoutDues.map((b) => {
@@ -445,7 +445,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                 {adjust && (
                     <form onSubmit={saveAdjust} className="space-y-4 p-6">
                         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Koreksi manual SHU</h2>
-                        <p className="text-sm text-slate-500">Dipotong dari SHU yang dibagi sebelum bagian iuran/belanja/pembiayaan dihitung. Kosongkan kedua nilai untuk menghapus koreksi.</p>
+                        <p className="text-sm text-slate-500">Dipotong dari SHU yang dibagi sebelum bagian simpanan/belanja/pembiayaan dihitung. Kosongkan kedua nilai untuk menghapus koreksi.</p>
                         <Field label="Pegawai">
                             <SearchSelect required options={empOptions} value={adjust.customer_id} onChange={(v) => { const id = Number(v); const a = adjustmentByCustomer[id]; setAdjust({ customer_id: id, base_override: a?.base_override ?? "", amount: a?.amount || "", note: a?.note || "" }); }} placeholder="Cari pegawai…" />
                         </Field>

@@ -23,7 +23,9 @@ export default function Index({ tab, year, years, filters, recap, history, total
     const [gen, setGen] = useState({ type: "wajib", period_year: now.getFullYear(), period_month: now.getMonth() + 1, amount: 100000, employee_types: ["PNS", "PPPK"] });
 
     const go = (changes) => router.get(route("savings.index"), { tab, year, ...filters, ...changes }, { preserveState: true, replace: true });
-    const savingsTotal = ["pokok", "wajib", "sukarela"].reduce((s, t) => s + Number(totals[t] || 0), 0);
+    const savingsTotal = ["pokok", "wajib", "sukarela"].reduce((s, t) => s + Number(totals[t] || 0), 0) - Number(totals.withdrawn || 0);
+    const deposits = (r) => Number(r.pokok_total || 0) + Number(r.wajib_total || 0) + Number(r.sukarela_total || 0);
+    const withdrawn = (r) => -Number(r.withdrawn_total || 0);
     const num = (v) => (v ? Math.round(v).toLocaleString("id-ID") : "");
     const num0 = (v) => Math.round(Number(v || 0)).toLocaleString("id-ID");
     const typeOptions = Object.entries(typeLabels).map(([value, label]) => ({ value, label }));
@@ -111,11 +113,12 @@ export default function Index({ tab, year, years, filters, recap, history, total
         },
         { key: "employee_type", label: "Jenis", filter: "select", options: ["PNS", "PPPK", "PPNPN", "LAINNYA"].map((v) => ({ value: v, label: v })), value: (r) => r.employee_type, render: (r) => <Badge>{r.employee_type}</Badge> },
         { key: "employment_status", label: "Status", filter: "select", options: statusOptions, value: (r) => r.employment_status || "" },
-        // Urutan seperti sheet potongan gaji: Wajib, Pokok, Sukarela (nilai tahun yang dipilih; 0 ditampilkan jelas).
-        { key: "wajib", label: `Wajib ${year}`, align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num0(r.wajib_total) },
+        // Urutan simpanan: Pokok, Wajib, Sukarela = setoran tahun yang dipilih; Penarikan = pengembalian/tarik (pengurang).
         { key: "pokok", label: `Pokok ${year}`, align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0), render: (r) => num0(r.pokok_total) },
+        { key: "wajib", label: `Wajib ${year}`, align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num0(r.wajib_total) },
         { key: "sukarela", label: `Sukarela ${year}`, align: "right", filter: "number", value: (r) => Number(r.sukarela_total || 0), render: (r) => num0(r.sukarela_total) },
-        { key: "year_total", label: `Total ${year}`, align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0) + Number(r.wajib_total || 0) + Number(r.sukarela_total || 0), render: (r) => num0(Number(r.pokok_total || 0) + Number(r.wajib_total || 0) + Number(r.sukarela_total || 0)) },
+        { key: "withdrawn", label: `Penarikan ${year}`, align: "right", filter: "number", value: withdrawn, render: (r) => (withdrawn(r) ? <span className="text-danger-600 dark:text-danger-400">−{num0(withdrawn(r))}</span> : num0(0)) },
+        { key: "year_total", label: `Total ${year}`, align: "right", filter: "number", value: (r) => deposits(r) - withdrawn(r), render: (r) => num0(deposits(r) - withdrawn(r)) },
         { key: "balance", label: `Saldo s.d. ${year}`, align: "right", filter: "number", value: (r) => Number(r.savings_balance || 0), render: (r) => <span className="font-semibold">{num(r.savings_balance)}</span> },
     ];
     const initialHistoryFilters = filters.customer_id ? { name: employees.find((e) => e.id === filters.customer_id)?.name || "" } : {};
@@ -154,12 +157,13 @@ export default function Index({ tab, year, years, filters, recap, history, total
                 ))}
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
+            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-6">
                 <Stat label="Anggota membayar" value={payers} helper={`membayar simpanan di ${year}`} />
                 <Stat label="Pokok" value={rupiah(totals.pokok)} />
                 <Stat label="Wajib" value={rupiah(totals.wajib)} />
                 <Stat label="Sukarela" value={rupiah(totals.sukarela)} />
-                <Stat label="Total simpanan" value={rupiah(savingsTotal)} />
+                <Stat label="Penarikan" value={rupiah(totals.withdrawn)} helper="pengembalian / tarik simpanan" />
+                <Stat label="Total simpanan" value={rupiah(savingsTotal)} helper="setoran − penarikan" />
             </div>
 
             <Panel
@@ -191,7 +195,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
                         columns={recapColumns}
                         initialSort={{ key: "name", dir: "asc" }}
                         emptyText={`Belum ada simpanan di tahun ${year}.`}
-                        footer={sumFooter(recapColumns, ["wajib", "pokok", "sukarela", "year_total", "balance"])}
+                        footer={sumFooter(recapColumns, ["pokok", "wajib", "sukarela", "withdrawn", "year_total", "balance"])}
                     />
                 ) : (
                     <SortableTable
