@@ -156,7 +156,7 @@ class FinancingController extends Controller
     public function update(Request $request, Financing $financing)
     {
         abort_unless(in_array($financing->status, ['pengajuan', 'diperiksa', 'direview', 'disetujui'], true), 403);
-        [$data] = $this->validated($request, $financing->type);
+        [$data] = $this->validated($request, $financing->type, $financing);
         $financing->update($data);
 
         return to_route('financing.show', $financing)->with('success', 'Data pembiayaan diperbarui.');
@@ -406,11 +406,19 @@ class FinancingController extends Controller
         return $mapping;
     }
 
-    private function validated(Request $request, string $type): array
+    /** Nomor otomatis berikutnya untuk tanggal permohonan tertentu (form mengisi nomor langsung, ikut tanggal). */
+    public function nextNumber(Request $request, string $type)
+    {
+        $date = $request->validate(['date' => ['nullable', 'date']])['date'] ?? null;
+
+        return response()->json(['number' => $this->service->nextNumber($type, $date)]);
+    }
+
+    private function validated(Request $request, string $type, ?Financing $current = null): array
     {
         $data = $request->validate([
             'customer_id' => ['required', Rule::exists('customers', 'id')->whereNotNull('employee_type')],
-            'number' => ['nullable', 'string', 'max:100'],
+            'number' => ['nullable', 'string', 'max:100', Rule::unique('financings', 'number')->where('type', $type)->ignore($current?->id)],
             'applied_at' => ['nullable', 'date'],
             'item_name' => [$type === 'barang' ? 'required' : 'nullable', 'string', 'max:255'],
             'principal' => ['required', 'integer', 'min:1'],

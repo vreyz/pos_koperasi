@@ -71,6 +71,15 @@ class FinancingTest extends TestCase
         $this->assertSame(['07/KOP/FPD/2025', '08/KOP/FPD/X/2025', '09/KOP/FPD/XI/2025', '01/KOP/FPD/I/2026'],
             Financing::where('type', 'dana')->orderBy('id')->pluck('number')->all());
         $this->assertSame('01/KOP/FPB/X/2025', Financing::where('type', 'barang')->value('number'));
+
+        // Form langsung terisi nomor otomatis; ganti tanggal → nomor ikut (bulan romawi & urutan tahun itu).
+        $this->actingAs($creator)->get(route('financing.create', 'dana'))->assertInertia(fn (Assert $page) => $page->has('nextNumber'));
+        $this->actingAs($creator)->getJson(route('financing.next-number', ['type' => 'dana', 'date' => '2025-12-01']))
+            ->assertOk()->assertJson(['number' => '10/KOP/FPD/XII/2025']);
+        // Nomor yang sudah dipakai ditolak.
+        $this->actingAs($creator)->post(route('financing.store', 'dana'), [
+            'customer_id' => $budi->id, 'principal' => 5000000, 'tenor' => 12, 'applied_at' => '2025-12-01', 'number' => '08/KOP/FPD/X/2025',
+        ])->assertSessionHasErrors('number');
     }
 
     public function test_settings_are_separate_per_type_and_coop_identity_comes_from_profile_and_sk(): void

@@ -8,7 +8,7 @@ import { MoneyInput, PercentInput, SearchSelect, employeeOptions } from "@/Compo
 export default function Form({ type, typeLabel, financing, employees, settings, preselect, nextNumber }) {
     const [form, setForm] = useState({
         customer_id: financing?.customer_id || preselect || "",
-        number: financing?.number || "",
+        number: financing?.number || nextNumber || "",
         applied_at: financing?.applied_at || new Date().toISOString().slice(0, 10),
         item_name: financing?.item_name || "",
         principal: financing?.principal || (type === "dana" ? 5000000 : ""),
@@ -24,6 +24,18 @@ export default function Form({ type, typeLabel, financing, employees, settings, 
         notes: financing?.notes || "",
     });
     const [errors, setErrors] = useState({});
+    // Nomor otomatis langsung terisi dan ikut berubah bila tanggal permohonan diganti (bulan romawi & urutan per tahun),
+    // selama nomornya tidak diketik manual.
+    const [numberAuto, setNumberAuto] = useState(!financing);
+    const fetchNumber = async (date) => {
+        try {
+            const { data } = await window.axios.get(route("financing.next-number", type), { params: { date } });
+            setForm((f) => ({ ...f, number: data.number }));
+            setNumberAuto(true);
+        } catch {
+            // biarkan nomor yang ada
+        }
+    };
     const [saving, setSaving] = useState(false);
     const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
     const empOptions = useMemo(() => employeeOptions(employees), [employees]);
@@ -71,11 +83,31 @@ export default function Form({ type, typeLabel, financing, employees, settings, 
                             <Field label="Pemohon (pegawai)" error={errors.customer_id}>
                                 <SearchSelect required options={empOptions} value={form.customer_id} onChange={(v) => setForm({ ...form, customer_id: v })} placeholder="Cari nama / NIP…" />
                             </Field>
-                            <Field label="Nomor formulir" error={errors.number} hint={financing ? null : `Kosongkan untuk nomor otomatis: ${nextNumber}`}>
-                                <input className={inputClass} value={form.number} onChange={set("number")} placeholder={nextNumber || ""} />
+                            <Field
+                                label="Nomor formulir"
+                                error={errors.number}
+                                hint={
+                                    financing ? null : numberAuto ? (
+                                        "Nomor otomatis berikutnya (ikut tanggal permohonan). Boleh diubah."
+                                    ) : (
+                                        <button type="button" className="text-primary-600 hover:underline dark:text-primary-300" onClick={() => fetchNumber(form.applied_at)}>
+                                            Pakai nomor otomatis lagi
+                                        </button>
+                                    )
+                                }
+                            >
+                                <input className={inputClass} value={form.number} onChange={(e) => { setNumberAuto(false); setForm({ ...form, number: e.target.value }); }} required />
                             </Field>
                             <Field label="Tanggal permohonan" error={errors.applied_at}>
-                                <input type="date" className={inputClass} value={form.applied_at} onChange={set("applied_at")} />
+                                <input
+                                    type="date"
+                                    className={inputClass}
+                                    value={form.applied_at}
+                                    onChange={(e) => {
+                                        setForm({ ...form, applied_at: e.target.value });
+                                        if (numberAuto && e.target.value) fetchNumber(e.target.value);
+                                    }}
+                                />
                             </Field>
                             {type === "barang" && (
                                 <Field label="Nama barang" error={errors.item_name}>

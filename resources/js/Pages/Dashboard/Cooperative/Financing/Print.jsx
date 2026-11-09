@@ -1,10 +1,56 @@
 import React from "react";
 import { Head } from "@inertiajs/react";
 
+/*
+ * Formulir cetak pembiayaan (A4). Ukuran & jarak memakai CSS sendiri (mm/pt) di bawah, bukan kelas spasi Tailwind,
+ * supaya tidak ikut tampilan padat aplikasi: Arial 11 pt, margin halaman 20 mm, jarak antarbagian seragam.
+ * Tanpa titik-titik: isian langsung terisi data; pada formulir kosong diberi garis tipis untuk ditulis tangan.
+ */
 const rupiah = (v) => "Rp " + Math.round(Number(v || 0)).toLocaleString("id-ID");
-const DOTS = "………………………………………";
 const FEE_UNIT = 5000000; // biaya formulir per Rp 5 jt pembiayaan
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 
+const CSS = `
+@page { size: A4; margin: 20mm; }
+.fp-sheet { background: #fff; width: 210mm; min-height: 297mm; margin: 0 auto 16px; padding: 20mm; box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; color: #000; }
+.fp-sheet * { box-sizing: border-box; }
+.fp-sheet p { margin: 0; }
+.fp-title { text-align: center; font-size: 12pt; font-weight: bold; text-decoration: underline; margin: 0; }
+.fp-subtitle { text-align: center; font-size: 12pt; font-weight: bold; margin: 0; }
+.fp-center { text-align: center; }
+.fp-gap { height: 4mm; }
+.fp-gap-s { height: 2mm; }
+.fp-fields { width: 100%; border-collapse: collapse; }
+.fp-fields td { padding: 0.6mm 0; vertical-align: top; }
+.fp-fields td.l { width: 58mm; }
+.fp-fields td.c { width: 5mm; }
+.fp-blank { display: inline-block; min-width: 70mm; border-bottom: 0.3pt solid #555; height: 4.2mm; vertical-align: bottom; }
+.fp-blank.s { min-width: 25mm; }
+.fp-list { margin: 0; padding: 0; list-style: none; }
+.fp-list > li { display: grid; grid-template-columns: 7mm 1fr; margin-top: 1.5mm; }
+.fp-list > li:first-child { margin-top: 0; }
+.fp-sublist { margin: 0; padding: 0; list-style: none; }
+.fp-sublist > li { display: grid; grid-template-columns: 6mm 1fr; }
+.fp-check { margin-right: 6mm; white-space: nowrap; }
+.fp-signs { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12mm; text-align: center; }
+.fp-signs.three { grid-template-columns: 1fr 1fr 1fr; column-gap: 6mm; }
+.fp-nowrap { white-space: nowrap; }
+.fp-sign-space { height: 25mm; display: flex; align-items: center; justify-content: center; font-size: 8pt; color: #777; }
+.fp-sign-name { font-weight: bold; text-decoration: underline; min-height: 4.5mm; }
+.fp-approval { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.fp-approval th, .fp-approval td { border: 0.6pt solid #000; padding: 1.2mm 1.5mm; vertical-align: middle; }
+.fp-approval th { font-weight: bold; text-align: center; }
+.fp-approval td.row { height: 15mm; }
+@media print {
+  .fp-sheet { width: auto; min-height: auto; margin: 0; padding: 0; break-after: page; }
+  .fp-sheet:last-child { break-after: auto; }
+  .fp-toolbar { display: none !important; }
+}
+`;
+
+const longDate = (d) => (d ? new Date(d).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "");
+const longDay = (d) => (d ? new Date(d).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "");
 export function terbilang(n) {
     const w = ["", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas"];
     n = Math.floor(Math.abs(Number(n) || 0));
@@ -18,151 +64,205 @@ export function terbilang(n) {
     if (n < 1e9) return terbilang(Math.floor(n / 1e6)) + " juta " + terbilang(n % 1e6);
     return terbilang(Math.floor(n / 1e9)) + " miliar " + terbilang(n % 1e9);
 }
-const words = (n) => {
-    const t = terbilang(n).replace(/\s+/g, " ").trim();
-    return "#" + t.charAt(0).toUpperCase() + t.slice(1).replace(/\b\w/g, (c) => c.toUpperCase()) + " Rupiah#";
-};
-const longDate = (d) => (d ? new Date(d).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : DOTS);
+// "#Sepuluh Juta Rupiah#": huruf besar di awal setiap kata saja.
+const words = (n) => "#" + terbilang(n).replace(/\s+/g, " ").trim().replace(/(^|\s)\S/g, (c) => c.toUpperCase()) + " Rupiah#";
 
-function Row({ label, value }) {
+/** Nilai isian: langsung data; kosong → garis tipis (formulir kosong untuk ditulis tangan). */
+const V = ({ v, short }) => (v || v === 0 ? <>{v}</> : <span className={`fp-blank${short ? " s" : ""}`} />);
+
+function Fields({ rows }) {
     return (
-        <tr>
-            <td className="w-56 py-1 align-top">{label}</td>
-            <td className="w-4 py-1 align-top">:</td>
-            <td className="py-1">{value || DOTS}</td>
-        </tr>
+        <table className="fp-fields"><tbody>
+            {rows.map(([label, value]) => (
+                <tr key={label}><td className="l">{label}</td><td className="c">:</td><td><V v={value} /></td></tr>
+            ))}
+        </tbody></table>
     );
 }
 
-function Approval({ f, settings }) {
-    const cells = [
-        ["Diperiksa oleh", "Divisi Pembiayaan", f?.checked_signer || f?.checker?.name, f?.checked_at],
-        ["Direview dan Disetujui oleh", "Kepala Unit Usaha", f?.reviewed_signer || f?.reviewer?.name || settings.coop_business_head, f?.reviewed_at],
-        ["Disetujui oleh", "Ketua Koperasi", f?.approved_signer || f?.approver?.name || settings.coop_chair, f?.approved_at],
-    ];
+function Header({ title, number, code, appliedAt }) {
+    const d = appliedAt ? new Date(appliedAt) : new Date();
     return (
-        <table className="mt-4 w-full border-collapse text-xs">
-            <thead>
-                <tr><th colSpan={5} className="border border-black p-1">Kolom Persetujuan Permohonan</th></tr>
-                <tr>{["Jabatan", "Pengurus", "Nama Pengurus", "Tanda Tangan Pengurus", "Tanggal"].map((h) => <th key={h} className="border border-black p-1">{h}</th>)}</tr>
-            </thead>
-            <tbody>
-                {cells.map(([jabatan, pengurus, nama, tgl]) => (
-                    <tr key={jabatan} className="h-12">
-                        <td className="border border-black p-1">{jabatan}</td>
-                        <td className="border border-black p-1">{pengurus}</td>
-                        <td className="border border-black p-1">{nama || ""}</td>
-                        <td className="border border-black p-1"></td>
-                        <td className="border border-black p-1">{tgl ? new Date(tgl).toLocaleDateString("id-ID") : ""}</td>
-                    </tr>
-                ))}
-                <tr className="h-12"><td className="border border-black p-1">Alasan</td><td colSpan={4} className="border border-black p-1">{f?.rejection_reason || ""}</td></tr>
-            </tbody>
-        </table>
+        <>
+            <p className="fp-title">{title}</p>
+            <p className="fp-center">
+                Nomor : {number || <><span className="fp-blank s" />/KOP/{code}/{ROMAN[d.getMonth()]}/{d.getFullYear()}</>}
+            </p>
+            <div className="fp-gap" />
+            <p>Yth. Ketua Koperasi</p>
+            <p>di tempat</p>
+            <div className="fp-gap" />
+            <p>Dengan hormat,</p>
+            <p>Yang bertanda tangan di bawah ini:</p>
+            <div className="fp-gap-s" />
+        </>
     );
 }
 
-function Signatures({ settings, customer }) {
+function Applicant({ f }) {
+    const c = f?.customer;
     return (
-        <div className="mt-8 grid grid-cols-2 gap-8 text-center text-sm">
+        <Fields
+            rows={[
+                ["Nama", c?.name],
+                ["NIP", c?.nip],
+                ["Jabatan / Peringkat Jabatan", c && [c.position, c.grade].filter(Boolean).join(" / ")],
+                ["Bidang / Seksi", c?.work_unit],
+                ["Nama Bank", f?.bank_name],
+                ["Nomor Rekening", f?.bank_account],
+                ["Nomor Telepon", f?.phone],
+                ["Nama Keluarga", f?.family_name],
+                ["Status Keluarga", f?.family_relation],
+                ["Nomor Telepon Keluarga", f?.family_phone],
+            ]}
+        />
+    );
+}
+
+/** Tiga tanda tangan sebaris (Keluarga · Atasan Langsung · Pemohon) supaya halaman 1 muat satu lembar A4. */
+function Signatures({ f, settings }) {
+    const c = f?.customer;
+    return (
+        <div className="fp-signs three">
             <div>
                 <p>&nbsp;</p>
-                <p>Keluarga/Suami/Istri</p>
-                <p>Pemohon,</p>
-                <div className="my-6 text-xs text-gray-500">Meterai Rp10.000</div>
-                <p>{DOTS}</p>
+                <p>Menyetujui,</p>
+                <p>Keluarga ({f?.family_relation || "Suami/Istri"})</p>
+                <div className="fp-sign-space" />
+                <p className="fp-sign-name"><V v={f?.family_name} short /></p>
             </div>
             <div>
-                <p>{settings.coop_city}, {DOTS}</p>
+                <p>&nbsp;</p>
+                <p>Mengetahui,</p>
+                <p>Atasan Langsung</p>
+                <div className="fp-sign-space" />
+                <p className="fp-sign-name"><span className="fp-blank s" /></p>
+                <p>NIP <span className="fp-blank s" /></p>
+            </div>
+            <div>
+                <p className="fp-nowrap">{settings.coop_city}, {f?.applied_at ? longDate(f.applied_at) : <span className="fp-blank s" />}</p>
                 <p>&nbsp;</p>
                 <p>Pemohon,</p>
-                <div className="my-6 text-xs text-gray-500">Meterai Rp10.000</div>
-                <p className="font-semibold underline">{customer?.name || DOTS}</p>
-                <p>NIP {customer?.nip || DOTS}</p>
-            </div>
-            <div className="col-span-2">
-                <p>Mengetahui :</p>
-                <p>Atasan Langsung,</p>
-                <div className="h-16" />
-                <p>{DOTS}</p>
-                <p>NIP {DOTS}</p>
+                <div className="fp-sign-space">Meterai Rp10.000</div>
+                <p className="fp-sign-name"><V v={c?.name} short /></p>
+                <p>NIP <V v={c?.nip} short /></p>
             </div>
         </div>
     );
 }
 
+function Approval({ f, settings }) {
+    const rows = [
+        ["Diperiksa oleh", "Divisi Pembiayaan", f?.checked_signer || f?.checker?.name, f?.checked_at],
+        ["Direview dan disetujui oleh", "Kepala Unit Usaha", f?.reviewed_signer || f?.reviewer?.name || settings.coop_business_head, f?.reviewed_at],
+        ["Disetujui oleh", "Ketua Koperasi", f?.approved_signer || f?.approver?.name || settings.coop_chair, f?.approved_at],
+    ];
+    return (
+        <table className="fp-approval">
+            <colgroup><col style={{ width: "24%" }} /><col style={{ width: "18%" }} /><col style={{ width: "24%" }} /><col style={{ width: "20%" }} /><col style={{ width: "14%" }} /></colgroup>
+            <thead>
+                <tr><th colSpan={5}>Kolom Persetujuan Permohonan</th></tr>
+                <tr>{["Jabatan", "Pengurus", "Nama Pengurus", "Tanda Tangan", "Tanggal"].map((h) => <th key={h}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+                {rows.map(([jabatan, pengurus, nama, tgl]) => (
+                    <tr key={jabatan}>
+                        <td className="row">{jabatan}</td>
+                        <td>{pengurus}</td>
+                        <td>{nama || ""}</td>
+                        <td />
+                        <td className="fp-center">{tgl ? new Date(tgl).toLocaleDateString("id-ID") : ""}</td>
+                    </tr>
+                ))}
+                <tr><td className="row">Alasan (bila ditolak)</td><td colSpan={4}>{f?.rejection_reason || ""}</td></tr>
+            </tbody>
+        </table>
+    );
+}
+
+function Terms({ items }) {
+    return (
+        <ol className="fp-list">
+            {items.filter(Boolean).map((item, i) => (
+                <li key={i}><span>{i + 1}.</span><div>{item}</div></li>
+            ))}
+        </ol>
+    );
+}
+
+function Sub({ items }) {
+    return (
+        <ol className="fp-sublist">
+            {items.map((item, i) => <li key={i}><span>{"abcdefgh"[i]}.</span><div>{item}</div></li>)}
+        </ol>
+    );
+}
+
 function DanaForm({ f, settings, ppnpn }) {
-    const c = f?.customer;
     const max = Number(ppnpn ? settings.financing_max_ppnpn : settings.financing_max_pegawai);
     const options = [5000000, 10000000, 15000000].filter((v) => v <= max);
     const fee = Number(ppnpn ? settings.financing_fee_ppnpn : settings.financing_fee_pegawai);
-    const year = new Date(f?.applied_at || Date.now()).getFullYear();
+    const bank = settings.coop_bank || "rekening Koperasi";
+    const contact = (ppnpn ? settings.coop_contact_ppnpn : settings.coop_contact_pegawai) || "Bendahara Koperasi";
+    const payWays = <Sub items={[`transfer bank ke rekening ${bank};`, `menyampaikan konfirmasi berupa bukti pembayaran melalui ${contact}.`]} />;
     return (
         <>
-            <section className="page">
-                <h1 className="text-center text-base font-bold underline">PERMOHONAN FASILITAS PEMBIAYAAN DANA</h1>
-                <p className="mb-4 text-center">Nomor : {f?.number || `          /KOP/FPD/${year}`}</p>
-                <p>Yth. Ketua Koperasi<br />Di tempat</p>
-                <p className="mt-3">Dengan hormat,<br />Yang bertanda tangan di bawah ini :</p>
-                <table className="mt-2 w-full text-sm"><tbody>
-                    <Row label="Nama / NIP" value={c && `${c.name}${c.nip ? ` / ${c.nip}` : ""}`} />
-                    <Row label="Jabatan / Peringkat Jabatan" value={c && [c.position, c.grade].filter(Boolean).join(" / ")} />
-                    <Row label="Bidang / Seksi" value={c?.work_unit} />
-                    <Row label="Nama Bank" value={f?.bank_name} />
-                    <Row label="Nomor Rekening" value={f?.bank_account} />
-                    <Row label="Nomor Telepon" value={f?.phone} />
-                    <Row label="Nama Keluarga" value={f?.family_name} />
-                    <Row label="Status Keluarga" value={f?.family_relation} />
-                    <Row label="Nomor Telepon Keluarga" value={f?.family_phone} />
-                </tbody></table>
-                <p className="mt-3">dengan ini mengajukan permohonan Fasilitas Pembiayaan Dana Koperasi sebagai berikut :</p>
-                <ol className="ml-5 mt-2 list-decimal space-y-2 text-sm">
-                    <li>
-                        <table className="w-full"><tbody>
-                            <tr><td className="w-52">Jumlah Pembiayaan</td><td className="w-4">:</td><td>{options.map((v) => <span key={v} className="mr-5">{f ? (f.principal === v ? "☑" : "☐") : "☐"} {rupiah(v)}</span>)}</td></tr>
-                            <tr><td>Jangka Waktu Pembiayaan</td><td>:</td><td>{f?.tenor || "……….."} bulan</td></tr>
-                        </tbody></table>
-                    </li>
-                    <li>Menyetujui syarat dan ketentuan sebagaimana tercantum dalam Lampiran yang tidak terpisahkan dari formulir Fasilitas Pembiayaan Dana ini.</li>
-                    <li>Telah menyerahkan surat pernyataan kesediaan untuk melakukan penyelesaian kewajiban kepada Koperasi.</li>
-                </ol>
-                <Signatures settings={settings} customer={c} />
+            <section className="fp-sheet">
+                <Header title="PERMOHONAN FASILITAS PEMBIAYAAN DANA" number={f?.number} code="FPD" appliedAt={f?.applied_at} />
+                <Applicant f={f} />
+                <div className="fp-gap" />
+                <p>dengan ini mengajukan permohonan Fasilitas Pembiayaan Dana Koperasi sebagai berikut:</p>
+                <div className="fp-gap-s" />
+                <Terms
+                    items={[
+                        <table className="fp-fields" key="t"><tbody>
+                            <tr><td className="l" style={{ width: "51mm" }}>Jumlah Pembiayaan</td><td className="c">:</td><td>{options.map((v) => <span key={v} className="fp-check">{f && f.principal === v ? "☑" : "☐"} {rupiah(v)}</span>)}</td></tr>
+                            <tr><td className="l" style={{ width: "51mm" }}>Jangka Waktu Pembiayaan</td><td className="c">:</td><td>{f?.tenor ? `${f.tenor} bulan` : <><span className="fp-blank s" /> bulan</>}</td></tr>
+                        </tbody></table>,
+                        "Menyetujui syarat dan ketentuan sebagaimana tercantum dalam Lampiran yang tidak terpisahkan dari formulir Fasilitas Pembiayaan Dana ini.",
+                        "Telah menyerahkan surat pernyataan kesediaan untuk melakukan penyelesaian kewajiban kepada Koperasi.",
+                    ]}
+                />
+                <div className="fp-gap" />
+                <Signatures f={f} settings={settings} />
             </section>
 
-            <section className="page">
-                <h2 className="text-center font-bold">SYARAT DAN KETENTUAN<br />PERMOHONAN FASILITAS PEMBIAYAAN DANA</h2>
-                <ol className="ml-5 mt-4 list-decimal space-y-1 text-sm">
-                    <li>Fasilitas Pembiayaan Dana diberikan sehubungan dengan penyerahan sejumlah uang sebagai pinjaman;</li>
-                    <li>Pembiayaan dana dilakukan oleh Koperasi kepada Pemohon;</li>
-                    {ppnpn ? (
+            <section className="fp-sheet">
+                <p className="fp-subtitle">SYARAT DAN KETENTUAN</p>
+                <p className="fp-subtitle">PERMOHONAN FASILITAS PEMBIAYAAN DANA</p>
+                <div className="fp-gap" />
+                <Terms
+                    items={[
+                        "Fasilitas Pembiayaan Dana diberikan sehubungan dengan penyerahan sejumlah uang sebagai pinjaman;",
+                        "Pembiayaan dana dilakukan oleh Koperasi kepada Pemohon;",
+                        ...(ppnpn
+                            ? [
+                                  "Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;",
+                                  <>Biaya formulir sebesar {rupiah(fee)} per {rupiah(FEE_UNIT)} pembiayaan, dibayarkan setelah berkas permohonan disetujui oleh Tim Pembiayaan Koperasi dan sebelum pencairan dana, melalui:{payWays}</>,
+                                  "Fasilitas Pembiayaan Dana dapat diberikan kepada Pemohon setelah melakukan pembayaran biaya sebagaimana dimaksud pada angka 4;",
+                                  `Fasilitas Pembiayaan Dana diberikan setinggi-tingginya sebesar ${rupiah(max)};`,
+                              ]
+                            : [
+                                  <>Biaya formulir sebesar {rupiah(fee)} per {rupiah(FEE_UNIT)} pembiayaan, dapat dibayarkan secara:{payWays}</>,
+                                  `Fasilitas Pembiayaan Dana diberikan setinggi-tingginya sebesar ${rupiah(max)};`,
+                                  "Fasilitas Pembiayaan Dana dapat diberikan kepada Pemohon setelah melakukan pembayaran biaya formulir sebagaimana dimaksud pada angka 3;",
+                                  "Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;",
+                              ]),
+                        `Pembayaran kembali pembiayaan dapat dilakukan secara angsuran pada bulan berikutnya dengan jangka waktu pembayaran 1 s.d. ${settings.financing_tenor_dana_max} bulan setelah dana diterima oleh Pemohon;`,
+                        `Pembayaran angsuran pengembalian Fasilitas Pembiayaan Dana dilakukan melalui mekanisme autodebet pada rekening pembayaran penghasilan Pemohon${ppnpn ? "; apabila tidak berhasil, Pemohon wajib melakukan transfer ke rekening yang sudah ditentukan dan berkoordinasi dengan Bendahara" : ""};`,
                         <>
-                            <li>Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;</li>
-                            <li>Biaya formulir sebesar {rupiah(fee)} per {rupiah(FEE_UNIT)} pembiayaan, dibayarkan setelah berkas permohonan disetujui oleh Tim Pembiayaan Koperasi dan sebelum pencairan dana, melalui:
-                                <ol className="ml-5 list-[lower-alpha]"><li>transfer bank ke rekening {settings.coop_bank || "...................................."};</li><li>menyampaikan konfirmasi berupa bukti pembayaran melalui {settings.coop_contact_ppnpn || "...................................."}.</li></ol>
-                            </li>
-                            <li>Fasilitas Pembiayaan Dana dapat diberikan kepada Pemohon setelah melakukan pembayaran biaya sebagaimana dimaksud pada poin 4;</li>
-                            <li>Fasilitas Pembiayaan Dana diberikan setinggi-tingginya sebesar {rupiah(max)};</li>
-                        </>
-                    ) : (
-                        <>
-                            <li>Biaya formulir sebesar {rupiah(fee)} per {rupiah(FEE_UNIT)} pembiayaan, dapat dibayarkan secara:
-                                <ol className="ml-5 list-[lower-alpha]"><li>transfer bank ke rekening {settings.coop_bank || "...................................."};</li><li>menyampaikan konfirmasi berupa bukti pembayaran melalui {settings.coop_contact_pegawai || "...................................."}.</li></ol>
-                            </li>
-                            <li>Fasilitas Pembiayaan Dana diberikan setinggi-tingginya sebesar {rupiah(max)};</li>
-                            <li>Fasilitas Pembiayaan Dana dapat diberikan kepada Pemohon setelah melakukan pembayaran biaya formulir sebagaimana dimaksud pada poin 3;</li>
-                            <li>Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;</li>
-                        </>
-                    )}
-                    <li>Pembayaran Kembali pembiayaan dapat dilakukan secara angsuran pada bulan berikutnya dengan jangka waktu pembayaran dari 1 bulan s.d. {settings.financing_tenor_dana_max} bulan setelah dana diterima oleh pemohon;</li>
-                    <li>Pembayaran angsuran pengembalian Fasilitas Pembiayaan Dana dilakukan melalui mekanisme autodebet pada rekening pembayaran penghasilan Pemohon{ppnpn ? "; apabila tidak berhasil maka Pemohon diwajibkan untuk melakukan transfer ke rekening yang sudah ditentukan dan berkoordinasi dengan bendahara" : ""};</li>
-                    <li>Dalam hal keanggotaan koperasi Pemohon berakhir disebabkan:
-                        <ol className="ml-5 list-[lower-alpha]">
-                            <li>Mutasi keluar (pindah tugas), sisa angsuran pembayaran wajib dilunasi sebelum Pemohon pindah tugas;</li>
-                            <li>Selain mutasi keluar, sisa angsuran pembayaran wajib dilunasi sebelum Pemohon keluar dari keanggotaan {settings.coop_name || "Koperasi"};</li>
-                        </ol>
-                    </li>
-                    <li>Pelunasan Fasilitas Pembiayaan Dana dapat dilakukan sebelum jangka waktu pembayaran yang disepakati berakhir.</li>
-                </ol>
+                            Dalam hal keanggotaan koperasi Pemohon berakhir disebabkan:
+                            <Sub
+                                items={[
+                                    "mutasi keluar (pindah tugas), sisa angsuran pembayaran wajib dilunasi sebelum Pemohon pindah tugas;",
+                                    `selain mutasi keluar, sisa angsuran pembayaran wajib dilunasi sebelum Pemohon keluar dari keanggotaan ${settings.coop_name || "Koperasi"};`,
+                                ]}
+                            />
+                        </>,
+                        "Pelunasan Fasilitas Pembiayaan Dana dapat dilakukan sebelum jangka waktu pembayaran yang disepakati berakhir.",
+                    ]}
+                />
+                <div className="fp-gap" />
                 <Approval f={f} settings={settings} />
             </section>
         </>
@@ -170,54 +270,49 @@ function DanaForm({ f, settings, ppnpn }) {
 }
 
 function BarangForm({ f, settings }) {
-    const c = f?.customer;
-    const year = new Date(f?.applied_at || Date.now()).getFullYear();
     return (
         <>
-            <section className="page">
-                <h1 className="text-center text-base font-bold underline">PERMOHONAN FASILITAS PEMBIAYAAN BARANG</h1>
-                <p className="mb-4 text-center">Nomor : {f?.number || `          /KOP/FPB/${year}`}</p>
-                <p>Yth. Ketua Koperasi<br />Di tempat</p>
-                <p className="mt-3">Dengan hormat,<br />Yang bertanda tangan di bawah ini :</p>
-                <table className="mt-2 w-full text-sm"><tbody>
-                    <Row label="Nama / NIP" value={c && `${c.name}${c.nip ? ` / ${c.nip}` : ""}`} />
-                    <Row label="Jabatan / Peringkat Jabatan" value={c && [c.position, c.grade].filter(Boolean).join(" / ")} />
-                    <Row label="Bidang / Seksi" value={c?.work_unit} />
-                    <Row label="Nama Bank" value={f?.bank_name} />
-                    <Row label="Nomor Rekening" value={f?.bank_account} />
-                    <Row label="Nomor Telepon" value={f?.phone} />
-                    <Row label="Nama Keluarga" value={f?.family_name} />
-                    <Row label="Status Keluarga" value={f?.family_relation} />
-                    <Row label="Nomor Telepon Keluarga" value={f?.family_phone} />
-                </tbody></table>
-                <p className="mt-3">dengan ini mengajukan permohonan Fasilitas Pembiayaan Barang Koperasi sebagai berikut :</p>
-                <ol className="ml-5 mt-2 list-decimal space-y-2 text-sm">
-                    <li>
-                        <table className="w-full"><tbody>
-                            <tr><td className="w-52">Nama / jenis barang</td><td className="w-4">:</td><td>{f?.item_name || DOTS}</td></tr>
-                            <tr><td>Harga barang</td><td>:</td><td>{f ? rupiah(f.principal) : DOTS}</td></tr>
-                            <tr><td>Bagi hasil ({f?.margin_percent ?? settings.financing_margin_barang}%)</td><td>:</td><td>{f ? rupiah(f.margin_amount) : DOTS}</td></tr>
-                            <tr><td>Jangka waktu</td><td>:</td><td>{f?.tenor || "……….."} bulan</td></tr>
-                            <tr><td>Angsuran per bulan</td><td>:</td><td>{f ? rupiah(f.installment) : DOTS}</td></tr>
-                        </tbody></table>
-                    </li>
-                    <li>Menyetujui syarat dan ketentuan sebagaimana tercantum dalam Lampiran yang tidak terpisahkan dari formulir Fasilitas Pembiayaan Barang ini.</li>
-                    <li>Telah menyerahkan surat pernyataan kesediaan untuk melakukan penyelesaian kewajiban kepada Koperasi.</li>
-                </ol>
-                <Signatures settings={settings} customer={c} />
+            <section className="fp-sheet">
+                <Header title="PERMOHONAN FASILITAS PEMBIAYAAN BARANG" number={f?.number} code="FPB" appliedAt={f?.applied_at} />
+                <Applicant f={f} />
+                <div className="fp-gap" />
+                <p>dengan ini mengajukan permohonan Fasilitas Pembiayaan Barang Koperasi sebagai berikut:</p>
+                <div className="fp-gap-s" />
+                <Terms
+                    items={[
+                        <table className="fp-fields" key="t"><tbody>
+                            {[
+                                ["Nama / jenis barang", f?.item_name],
+                                ["Harga barang", f ? rupiah(f.principal) : null],
+                                [`Bagi hasil (${f?.margin_percent ?? settings.financing_margin_barang}%)`, f ? rupiah(f.margin_amount) : null],
+                                ["Jangka waktu", f?.tenor ? `${f.tenor} bulan` : null],
+                                ["Angsuran per bulan", f ? rupiah(f.installment) : null],
+                            ].map(([l, v]) => <tr key={l}><td className="l" style={{ width: "51mm" }}>{l}</td><td className="c">:</td><td><V v={v} /></td></tr>)}
+                        </tbody></table>,
+                        "Menyetujui syarat dan ketentuan sebagaimana tercantum dalam Lampiran yang tidak terpisahkan dari formulir Fasilitas Pembiayaan Barang ini.",
+                        "Telah menyerahkan surat pernyataan kesediaan untuk melakukan penyelesaian kewajiban kepada Koperasi.",
+                    ]}
+                />
+                <div className="fp-gap" />
+                <Signatures f={f} settings={settings} />
             </section>
-            <section className="page">
-                <h2 className="text-center font-bold">SYARAT DAN KETENTUAN<br />PERMOHONAN FASILITAS PEMBIAYAAN BARANG</h2>
-                <ol className="ml-5 mt-4 list-decimal space-y-1 text-sm">
-                    <li>Fasilitas Pembiayaan Barang diberikan dalam bentuk pembelian barang oleh Koperasi untuk Pemohon yang dibayar kembali secara angsuran;</li>
-                    <li>Harga yang wajib dibayar Pemohon adalah harga barang ditambah bagi hasil sebesar {settings.financing_margin_barang}% dari harga barang;</li>
-                    <li>Biaya lain sebesar {settings.financing_admin_barang}% dari harga barang dipotong pada saat pencairan;</li>
-                    <li>Pembayaran kembali dilakukan secara angsuran mulai bulan berikutnya selama {settings.financing_tenor_barang} bulan, atau lebih cepat sesuai kesepakatan;</li>
-                    <li>Pembayaran angsuran dilakukan melalui mekanisme autodebet pada rekening pembayaran penghasilan Pemohon;</li>
-                    <li>Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;</li>
-                    <li>Dalam hal Pemohon mutasi atau keluar dari keanggotaan {settings.coop_name || "Koperasi"}, sisa angsuran wajib dilunasi sebelum Pemohon pindah tugas/keluar;</li>
-                    <li>Pelunasan dapat dilakukan sebelum jangka waktu pembayaran yang disepakati berakhir.</li>
-                </ol>
+            <section className="fp-sheet">
+                <p className="fp-subtitle">SYARAT DAN KETENTUAN</p>
+                <p className="fp-subtitle">PERMOHONAN FASILITAS PEMBIAYAAN BARANG</p>
+                <div className="fp-gap" />
+                <Terms
+                    items={[
+                        "Fasilitas Pembiayaan Barang diberikan dalam bentuk pembelian barang oleh Koperasi untuk Pemohon yang dibayar kembali secara angsuran;",
+                        `Harga yang wajib dibayar Pemohon adalah harga barang ditambah bagi hasil sebesar ${settings.financing_margin_barang}% dari harga barang;`,
+                        `Biaya lain sebesar ${settings.financing_admin_barang}% dari harga barang dipotong pada saat pencairan;`,
+                        `Pembayaran kembali dilakukan secara angsuran mulai bulan berikutnya selama ${settings.financing_tenor_barang} bulan, atau lebih cepat sesuai kesepakatan;`,
+                        "Pembayaran angsuran dilakukan melalui mekanisme autodebet pada rekening pembayaran penghasilan Pemohon;",
+                        "Melampirkan pindaian berwarna KTP dan Kartu Keluarga terbaru Pemohon;",
+                        `Dalam hal Pemohon mutasi atau keluar dari keanggotaan ${settings.coop_name || "Koperasi"}, sisa angsuran wajib dilunasi sebelum Pemohon pindah tugas/keluar;`,
+                        "Pelunasan dapat dilakukan sebelum jangka waktu pembayaran yang disepakati berakhir.",
+                    ]}
+                />
+                <div className="fp-gap" />
                 <Approval f={f} settings={settings} />
             </section>
         </>
@@ -226,23 +321,41 @@ function BarangForm({ f, settings }) {
 
 function Disbursement({ f, settings }) {
     const c = f.customer;
+    const kind = f.type === "barang" ? "Pembiayaan Barang" : "Pembiayaan Dana";
     return (
-        <section className="page">
-            <h1 className="text-center text-base font-bold underline">BUKTI PENCAIRAN {f.type === "barang" ? "PEMBIAYAAN BARANG" : "DANA"}</h1>
-            <p className="mb-6 text-center">{settings.coop_name}</p>
-            <table className="w-full text-sm"><tbody>
-                <Row label="Nomor formulir" value={f.number} />
-                <Row label="Tanggal" value={longDate(f.disbursed_at)} />
-                <Row label="Jumlah" value={rupiah(f.transferred_amount ?? f.principal)} />
-                <Row label="Terbilang" value={words(f.transferred_amount ?? f.principal)} />
-                <Row label="Keperluan" value={`Pencairan ${f.type === "barang" ? "Pembiayaan Barang" : "Dana"} dalam rangka Permohonan ${f.type === "barang" ? `Pembiayaan Barang (${f.item_name})` : "Pembiayaan Dana"} a.n. ${c.name}`} />
-                <Row label="Pembayaran" value={f.bank_name ? `transfer ke ${f.bank_name} No Rek. ${f.bank_account || DOTS} a.n. ${c.name}` : null} />
-                <Row label="Nilai pembiayaan" value={`${rupiah(f.principal)}${f.margin_amount ? ` + bagi hasil ${rupiah(f.margin_amount)}` : ""}, ${f.tenor} × ${rupiah(f.installment)}`} />
-                <Row label={f.type === "barang" ? "Biaya lain" : "Biaya formulir"} value={rupiah(f.admin_fee)} />
-            </tbody></table>
-            <div className="mt-12 grid grid-cols-2 gap-8 text-center text-sm">
-                <div><p>Menyetujui,</p><p>Ketua Koperasi</p><div className="h-20" /><p className="font-semibold underline">{f.approved_signer || f.approver?.name || settings.coop_chair || DOTS}</p></div>
-                <div><p>{settings.coop_city}, {longDate(f.disbursed_at)}</p><p>Penerima,</p><div className="h-20" /><p className="font-semibold underline">{c.name}</p></div>
+        <section className="fp-sheet">
+            <p className="fp-title">BUKTI PENCAIRAN {f.type === "barang" ? "PEMBIAYAAN BARANG" : "DANA"}</p>
+            <p className="fp-center">{settings.coop_name}</p>
+            <div className="fp-gap" />
+            <Fields
+                rows={[
+                    ["Nomor formulir", f.number],
+                    ["Tanggal", longDay(f.disbursed_at)],
+                    ["Jumlah", rupiah(f.transferred_amount ?? f.principal)],
+                    ["Terbilang", words(f.transferred_amount ?? f.principal)],
+                    ["Keperluan", `Pencairan ${kind}${f.type === "barang" && f.item_name ? ` (${f.item_name})` : ""} a.n. ${c.name}`],
+                    ["Pembayaran", f.bank_name ? `Transfer ke ${f.bank_name} No. Rek. ${f.bank_account || "-"} a.n. ${c.name}` : null],
+                    ["Nilai pembiayaan", `${rupiah(f.principal)}${f.margin_amount ? ` + bagi hasil ${rupiah(f.margin_amount)}` : ""}, ${f.tenor} × ${rupiah(f.installment)}`],
+                    [f.type === "barang" ? "Biaya lain" : "Biaya formulir", rupiah(f.admin_fee)],
+                ]}
+            />
+            <div className="fp-gap" />
+            <div className="fp-gap" />
+            <div className="fp-signs">
+                <div>
+                    <p>&nbsp;</p>
+                    <p>Menyetujui,</p>
+                    <p>Ketua Koperasi</p>
+                    <div className="fp-sign-space" />
+                    <p className="fp-sign-name"><V v={f.approved_signer || f.approver?.name || settings.coop_chair} /></p>
+                </div>
+                <div>
+                    <p>{settings.coop_city}, {longDate(f.disbursed_at)}</p>
+                    <p>Penerima,</p>
+                    <p>&nbsp;</p>
+                    <div className="fp-sign-space" />
+                    <p className="fp-sign-name">{c.name}</p>
+                </div>
             </div>
         </section>
     );
@@ -250,12 +363,12 @@ function Disbursement({ f, settings }) {
 
 export default function Print({ doc, type, financing, settings: rules, coop = {}, ppnpn }) {
     // Identitas koperasi dari Profil Toko & SK Pengurus (bukan isian terpisah).
-    const settings = { ...rules, coop_name: coop.name, coop_city: coop.city || DOTS, coop_chair: coop.chair, coop_business_head: coop.business_head };
+    const settings = { ...rules, coop_name: coop.name, coop_city: coop.city || "", coop_chair: coop.chair, coop_business_head: coop.business_head };
     return (
-        <div className="light-surface min-h-screen bg-gray-100 py-6 text-black print:bg-white print:py-0">
+        <div className="light-surface min-h-screen bg-gray-200 py-6 text-black print:bg-white print:py-0">
             <Head title={doc === "pencairan" ? "Bukti Pencairan" : "Formulir Pembiayaan"} />
-            <style>{`@page { size: A4; margin: 18mm 16mm; } .page { background: white; width: 210mm; min-height: 297mm; margin: 0 auto 16px; padding: 18mm 16mm; font-family: "Times New Roman", serif; font-size: 12pt; line-height: 1.4; } @media print { .page { width: auto; min-height: auto; margin: 0; padding: 0; break-after: page; } }`}</style>
-            <div className="mx-auto mb-4 flex max-w-[210mm] justify-end gap-2 print:hidden">
+            <style>{CSS}</style>
+            <div className="fp-toolbar mx-auto mb-4 flex max-w-[210mm] justify-end gap-2 print:hidden">
                 <button onClick={() => window.close()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">Tutup</button>
                 <button onClick={() => window.print()} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white">Cetak / simpan PDF</button>
             </div>

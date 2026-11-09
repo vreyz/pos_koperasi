@@ -242,6 +242,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('financing/item/{financing}/print/{doc}', [FinancingController::class, 'print'])->middleware('permission:financing-access')->name('financing.print');
     Route::get('financing/{type}/blank-form', [FinancingController::class, 'blankForm'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.blank-form');
     Route::get('financing/{type}', [FinancingController::class, 'index'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.index');
+    Route::get('financing/{type}/next-number', [FinancingController::class, 'nextNumber'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.next-number');
     Route::get('financing/{type}/create', [FinancingController::class, 'create'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.create');
     Route::post('financing/{type}', [FinancingController::class, 'store'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.store');
 
