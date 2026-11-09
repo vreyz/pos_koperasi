@@ -38,7 +38,12 @@ function Check({ check }) {
     );
 }
 
-export default function Import({ preview, employees }) {
+// Pratinjau baru (file lain) = state baru: pilihan nama & hasil validasi tidak terbawa dari file sebelumnya.
+export default function Import(props) {
+    return <ImportPage key={props.preview?.token || "upload"} {...props} />;
+}
+
+function ImportPage({ preview, employees }) {
     useFlashToasts();
     const upload = useForm({ file: null });
     const [onlyUnmatched, setOnlyUnmatched] = useState(true);

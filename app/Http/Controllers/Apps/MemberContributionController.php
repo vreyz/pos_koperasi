@@ -228,7 +228,7 @@ class MemberContributionController extends Controller
 
         return Inertia::render('Dashboard/Cooperative/Savings/Import', [
             'preview' => $preview,
-            'employees' => $path ? Customer::employees()->orderBy('name')->get(['id', 'name', 'nip']) : [],
+            'employees' => $path ? Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type', 'employment_status']) : [],
         ]);
     }
 
