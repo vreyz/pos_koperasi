@@ -166,7 +166,25 @@ class ShuController extends Controller
         }
         $shu->save();
 
-        return back()->with('success', 'Pengaturan SHU disimpan. Klik "Hitung SHU" untuk memperbarui hasil.');
+        return $this->recalculate($shu, 'Pengaturan SHU disimpan');
+    }
+
+    /**
+     * Hitung ulang SHU setelah perubahan (pengaturan, koreksi, pencocokan/impor penjualan) — tanpa tombol "Hitung SHU".
+     * SHU final tidak dihitung ulang.
+     */
+    private function recalculate(ShuPeriod $shu, string $done)
+    {
+        if ($shu->isFinal()) {
+            return back()->with('success', "{$done}.");
+        }
+        try {
+            $result = $this->calculator->calculate($shu->fresh());
+        } catch (RuntimeException $e) {
+            return back()->with('error', "{$done}, tetapi SHU belum bisa dihitung: ".$e->getMessage());
+        }
+
+        return back()->with('success', "{$done} dan SHU {$shu->year} dihitung ulang: {$result['recipients']} penerima ({$result['base_recipients']} dapat SHU dasar).");
     }
 
     public function calculate(ShuPeriod $shu)
@@ -197,18 +215,18 @@ class ShuController extends Controller
         if ($data['base_override'] === null && $data['amount'] === 0) {
             $shu->adjustments()->where('customer_id', $data['customer_id'])->delete();
 
-            return back()->with('success', 'Koreksi dihapus. Klik "Hitung SHU" untuk memperbarui hasil.');
+            return $this->recalculate($shu, 'Koreksi dihapus');
         }
 
         $shu->adjustments()->updateOrCreate(['customer_id' => $data['customer_id']], $data);
 
-        return back()->with('success', 'Koreksi disimpan. Klik "Hitung SHU" untuk memperbarui hasil.');
+        return $this->recalculate($shu, 'Koreksi disimpan');
     }
 
     public function finalize(ShuPeriod $shu)
     {
         if (! $shu->calculated_at) {
-            return back()->with('error', 'Hitung SHU dulu sebelum dikunci.');
+            return back()->with('error', 'SHU belum dihitung. Klik "Simpan dan Kalkulasi Ulang" dulu sebelum dikunci.');
         }
         $shu->update(['status' => 'final', 'finalized_at' => now()]);
 
@@ -326,7 +344,17 @@ class ShuController extends Controller
         $this->files->forget('sales', $validated['token']);
         $request->session()->forget("sales_import_name.{$validated['token']}");
 
-        return to_route('shu.show', $shu)->with('success', 'Penjualan Excel diimport: '.number_format($result['rows'], 0, ',', '.').' baris, total Rp '.number_format($result['total'], 0, ',', '.').". {$result['unmatched_names']} nama belum cocok dengan pegawai.");
+        $message = 'Penjualan Excel diimport: '.number_format($result['rows'], 0, ',', '.').' baris, total Rp '.number_format($result['total'], 0, ',', '.')." ({$result['unmatched_names']} nama bukan pegawai/belum cocok)";
+        if ($shu->sales_source === 'excel' && ! $shu->isFinal()) {
+            try {
+                $calc = $this->calculator->calculate($shu->fresh());
+                $message .= " — SHU {$shu->year} dihitung ulang: {$calc['recipients']} penerima.";
+            } catch (RuntimeException $e) {
+                return to_route('shu.show', $shu)->with('error', $message.', tetapi SHU belum bisa dihitung: '.$e->getMessage());
+            }
+        }
+
+        return to_route('shu.show', $shu)->with('success', $message);
     }
 
     /**
@@ -356,7 +384,7 @@ class ShuController extends Controller
         ]);
         $count = $this->salesImport->mapName($shu->year, $data['buyer_name'], (int) $data['customer_id']);
 
-        return back()->with('success', "\"{$data['buyer_name']}\" dipetakan ({$count} baris). Nama ini otomatis cocok di import berikutnya.");
+        return $this->recalculate($shu, "\"{$data['buyer_name']}\" dipetakan ({$count} baris), otomatis cocok di impor berikutnya,");
     }
 
     public function export(ShuPeriod $shu)

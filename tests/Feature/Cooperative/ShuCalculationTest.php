@@ -375,7 +375,11 @@ class ShuCalculationTest extends TestCase
         $this->actingAs($user)->post(route('shu.sales-import', $period), ['file' => $this->upload($path)])->assertSessionHas('success');
         $this->assertSame(25000, (int) ExternalSale::where('year', 2025)->sum('amount'));
 
-        $this->actingAs($user)->post(route('shu.sales-map', $period), ['buyer_name' => 'BUDI', 'customer_id' => $budi->id]);
+        // Mencocokkan nama (seperti simpan pengaturan/koreksi) langsung menghitung ulang SHU, tanpa tombol "Hitung SHU".
+        $this->actingAs($user)->post(route('shu.sales-map', $period), ['buyer_name' => 'BUDI', 'customer_id' => $budi->id])
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'dihitung ulang'));
+        $this->assertNotNull($period->fresh()->calculated_at);
+        $this->assertSame(1, $period->allocations()->count());
         $this->actingAs($user)->post(route('shu.calculate', $period))->assertSessionHas('success');
 
         $this->actingAs($user)->get(route('shu.show', $period))

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import { IconArrowLeft, IconCalculator, IconCoins, IconDownload, IconLock, IconLockOpen, IconLink, IconPencil, IconPlus, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
+import { IconArrowLeft, IconCalculator, IconChevronRight, IconCoins, IconDownload, IconLock, IconLockOpen, IconLink, IconPencil, IconPlus, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
 import Modal from "@/Components/Modal";
 import SortableTable from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
@@ -103,7 +103,14 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
 
     const save = (e) => {
         e.preventDefault();
-        router.put(route("shu.update", period.id), form, { preserveScroll: true, onError: setErrors, onSuccess: () => setErrors({}) });
+        router.put(route("shu.update", period.id), form, {
+            preserveScroll: true,
+            onError: setErrors,
+            onSuccess: () => {
+                setErrors({});
+                setTimeout(() => document.getElementById("hasil-shu")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+            },
+        });
     };
     const post = (name, confirmText) => () => {
         if (confirmText && !confirm(confirmText)) return;
@@ -123,7 +130,6 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                     <>
                         <Link href={route("shu.index")} className={btn.secondary}><IconArrowLeft size={18} /> Kembali</Link>
                         {allocations.length > 0 && <a href={route("shu.export", period.id)} className={btn.secondary}><IconDownload size={18} /> Ekspor Excel</a>}
-                        {editable && <button onClick={post("shu.calculate")} disabled={dirty} title={dirty ? "Simpan pengaturan dulu" : ""} className={btn.primary}><IconCalculator size={18} /> Hitung SHU</button>}
                         {can("shu-finalize") && !locked && period.calculated_at && <button onClick={post("shu.finalize", "Kunci SHU ini? Setelah final, pengaturan & hasil tidak bisa diubah sampai dibuka lagi.")} className={btn.secondary}><IconLock size={18} /> Kunci (final)</button>}
                         {can("shu-finalize") && locked && <button onClick={post("shu.reopen", "Buka kunci SHU ini?")} className={btn.secondary}><IconLockOpen size={18} /> Buka kunci</button>}
                         {editable && <button onClick={() => confirm(`Hapus perhitungan SHU ${period.year}?`) && router.delete(route("shu.destroy", period.id))} className={btn.secondary}><IconTrash size={18} /></button>}
@@ -171,6 +177,13 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     <span className="pb-2 text-sm text-slate-500">Total SHU pengurus koperasi: {rupiah(boardTotal)}</span>
                                 </div>
                                 <div className="space-y-3">
+                                    <details className="group rounded-lg border border-slate-200 dark:border-slate-700">
+                                    <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60">
+                                        <IconChevronRight size={16} className="transition-transform group-open:rotate-90" />
+                                        Daftar pengurus koperasi ({(form.board_members || []).filter((m) => m.customer_id).length} orang) — klik untuk {""}
+                                        <span className="group-open:hidden">buka</span><span className="hidden group-open:inline">tutup</span>
+                                    </summary>
+                                    <div className="space-y-3 border-t border-slate-200 p-3 dark:border-slate-700">
                                     {(form.board_members || []).map((m, i) => (
                                         <div key={i} className="space-y-1">
                                             <div className="flex flex-wrap items-center gap-2">
@@ -204,6 +217,8 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                             Jumlah pengurus per bulan: {MONTH_SHORT.map((label, k) => `${label} ${boardPerMonth[k]}`).join(" · ")}
                                         </p>
                                     )}
+                                    </div>
+                                    </details>
                                     {editable && (
                                         <div className="flex flex-wrap items-center gap-4">
                                             <button type="button" onClick={() => setForm({ ...form, board_members: [...(form.board_members || []), { customer_id: "", months: MONTH_SHORT.map((_, k) => k + 1) }] })} className="text-sm text-primary-600 hover:underline">+ Tambah pengurus</button>
@@ -338,7 +353,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                         {editable && (
                             <div className="flex items-center justify-end gap-3">
                                 {dirty && <span className="text-sm text-warning-700">Ada perubahan yang belum disimpan.</span>}
-                                <button type="submit" className={btn.primary} disabled={!dirty}>Simpan pengaturan</button>
+                                <button type="submit" className={btn.primary} title="Simpan pengaturan, hitung ulang SHU dengan data terbaru, lalu tampilkan daftar SHU"><IconCalculator size={18} /> Simpan dan Kalkulasi Ulang</button>
                             </div>
                         )}
                     </form>
@@ -367,6 +382,12 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                     )}
                     <p className="px-4 pb-4 text-xs text-slate-500">Kolom: TGL BELANJA, NAMA PEGAWAI (atau "Nama Final"), TOTAL HARGA per baris barang — mis. rekap "Penjualan {period.year}" (Sheet1). Setelah upload, isi file divalidasi dan nama dicocokkan dulu; data baru disimpan (menimpa data Excel {period.year} sebelumnya) setelah Anda klik Simpan.</p>
                     {unmatched.length > 0 && (
+                        <details className="group border-t border-slate-200 dark:border-slate-800">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60">
+                            <IconChevronRight size={16} className="transition-transform group-open:rotate-90" />
+                            Nama pembeli belum cocok dengan pegawai ({unmatched.length} nama, {rupiah(unmatched.reduce((s, u) => s + Number(u.total || 0), 0))}) — klik untuk {""}
+                            <span className="group-open:hidden">buka</span><span className="hidden group-open:inline">tutup</span>
+                        </summary>
                         <div className="overflow-x-auto border-t border-slate-200 dark:border-slate-800">
                             <table className="w-full">
                                 <thead className="bg-slate-50 dark:bg-slate-950">
@@ -396,11 +417,12 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                             </table>
                             <p className="p-4 text-xs text-slate-500">Nama non-pegawai (mis. UMUM, KANTOR) cukup dibiarkan — tidak mendapat SHU.</p>
                         </div>
+                        </details>
                     )}
                 </Panel>
             )}
 
-            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div id="hasil-shu" className="mb-4 grid scroll-mt-4 grid-cols-2 gap-3 md:grid-cols-4">
                 <Stat label="Penerima SHU" value={allocations.length} helper={`${stats.active} pegawai aktif · ${stats.base_recipients} dapat SHU dasar`} />
                 <Stat label="Belanja toko" value={rupiah(stats.purchase_total)} helper={`${stats.purchase_buyers} pembeli · sumber ${period.sales_source === "excel" ? "Excel" : "POS"} · pendapatan pembiayaan pegawai ${rupiah(stats.financing_total)}`} />
                 <Stat label="Total terbagi" value={rupiah(stats.distributed)} helper={period.total_shu ? `dari ${rupiah(period.total_shu)}` : ""} />
@@ -422,7 +444,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                     rowKey={(a) => a.id}
                     columns={resultColumns}
                     initialSort={{ key: "total_rounded", dir: "desc" }}
-                    emptyText="Belum dihitung. Isi pengaturan, simpan, lalu klik “Hitung SHU”."
+                    emptyText="Belum dihitung. Isi pengaturan lalu klik “Simpan dan Kalkulasi Ulang”."
                     footer={(list) => (
                         <tr>
                             {resultColumns.map((c, i) => (
