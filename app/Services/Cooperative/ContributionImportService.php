@@ -218,8 +218,10 @@ class ContributionImportService
             }
         }
         if ($skipped) {
-            $checks[] = $this->check('warning', count($skipped).' nama belum dipilih pegawainya, datanya tidak disimpan ('.$rupiah(array_sum($skipped)).').',
-                array_map(fn ($n, $v) => "{$n} — {$rupiah($v)}", array_keys($skipped), $skipped));
+            // 'names' = kunci nama ternormalisasi: layar validasi menampilkan pilihan pegawai langsung per nama.
+            $checks[] = $this->check('warning', count($skipped).' nama belum dipilih pegawainya, datanya tidak disimpan ('.$rupiah(array_sum($skipped)).'). Pilih pegawainya di bawah, atau tambahkan dulu di Data Pegawai bila belum ada.',
+                array_map(fn ($n, $v) => "{$n} — {$rupiah($v)}", array_keys($skipped), $skipped))
+                + ['names' => array_values(array_unique(array_map([NameMatcher::class, 'normalize'], array_keys($skipped))))];
         }
         if ($created) {
             $checks[] = $this->check('info', count($created).' nama akan dibuat sebagai pegawai baru (jenis LAINNYA, status TIDAK DI DAFTAR PEGAWAI).', array_keys($created));
@@ -305,7 +307,7 @@ class ContributionImportService
      */
     public function commit(array $parsed, array $mapping, ?int $userId): array
     {
-        $summary = ['saved' => 0, 'skipped_names' => 0, 'created_employees' => 0];
+        $summary = ['saved' => 0, 'skipped_names' => 0, 'skipped_amount' => 0, 'created_employees' => 0];
 
         DB::transaction(function () use ($parsed, $mapping, $userId, &$summary) {
             $resolved = [];
@@ -341,10 +343,12 @@ class ContributionImportService
 
                 $customerId = $resolved[$key];
                 if (! $customerId) {
+                    $summary['skipped_amount'] += abs(array_sum($row['amounts']) + array_sum($row['totals'] ?? []));
+
                     continue;
                 }
 
-                $sign = ($row['kind'] ?? 'deposit') === 'withdrawal' ? '<' : '>';
+                $sign =($row['kind'] ?? 'deposit') === 'withdrawal' ? '<' : '>';
                 $periods[$sign][$row['year']][$row['month']][$customerId] = true;
                 foreach ([...array_keys($row['amounts']), ...array_keys($row['totals'] ?? [])] as $type) {
                     $types[$sign][$type] = true;

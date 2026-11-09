@@ -12,8 +12,8 @@ const LEVELS = {
     ok: { icon: IconCircleCheck, label: "OK", box: "border-success-200 bg-success-50 text-success-800 dark:border-success-900/60 dark:bg-success-950/40 dark:text-success-200" },
 };
 
-function Check({ check }) {
-    const [open, setOpen] = useState(check.level === "error");
+function Check({ check, picker }) {
+    const [open, setOpen] = useState(check.level === "error" || Boolean(check.names?.length));
     const level = LEVELS[check.level] || LEVELS.info;
     const Icon = level.icon;
     return (
@@ -27,7 +27,12 @@ function Check({ check }) {
                             {open ? "sembunyikan" : `lihat rincian (${check.details.length})`}
                         </button>
                     )}
-                    {open && check.details.length > 0 && (
+                    {open && check.names?.length > 0 && picker && (
+                        <div className="mt-2 space-y-1.5">
+                            {check.names.map((key) => picker(key))}
+                        </div>
+                    )}
+                    {open && !check.names?.length && check.details.length > 0 && (
                         <ul className="mt-1 max-h-60 list-disc overflow-y-auto pl-5 text-xs opacity-90">
                             {check.details.map((d, i) => <li key={i}>{d}</li>)}
                         </ul>
@@ -97,6 +102,31 @@ function ImportPage({ preview, employees }) {
 
     const saveBlocked = saving || stale || errorCount > 0;
 
+    // Pilihan pegawai langsung di panel validasi (nama yang belum dipilih); sama dengan kolom Pegawai di tabel bawah.
+    const byKey = useMemo(() => Object.fromEntries((preview?.names || []).map((n) => [n.key, n])), [preview]);
+    const namePicker = (key) => {
+        const n = byKey[key];
+        if (!n) return null;
+        return (
+            <div key={key} className="flex flex-wrap items-center gap-2 rounded-md bg-white/60 px-2 py-1.5 text-slate-800 dark:bg-slate-950/40 dark:text-slate-200">
+                <div className="min-w-[12rem] flex-1">
+                    <div className="font-medium">{n.name}</div>
+                    <div className="text-xs opacity-75">{n.first} s.d. {n.last} · {n.total ? rupiah(n.total) : ""}{n.withdrawn ? ` pengembalian −${rupiah(n.withdrawn)}` : ""}</div>
+                    {n.suggestions.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                            {n.suggestions.map((s) => (
+                                <button key={s.id} type="button" onClick={() => setMapping({ ...mapping, [key]: String(s.id) })} className="rounded border border-slate-300 px-1.5 py-0.5 hover:bg-primary-50 dark:border-slate-700 dark:hover:bg-primary-900/30">
+                                    {s.name} <span className="opacity-60">{s.score}%</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <SearchSelect className="w-80" options={empOptions} extra={[{ value: "", label: "— lewati —" }, { value: "new", label: "+ Buat pegawai baru dengan nama ini" }]} value={mapping[key] || ""} onChange={(v) => setMapping({ ...mapping, [key]: String(v) })} />
+            </div>
+        );
+    };
+
     return (
         <>
             <Head title="Impor Simpanan" />
@@ -141,7 +171,7 @@ function ImportPage({ preview, employees }) {
                                     Pilihan nama berubah. Klik <b>Validasi ulang</b> sebelum menyimpan.
                                 </div>
                             )}
-                            {checks.map((c, i) => <Check key={`${c.level}-${i}-${c.title}`} check={c} />)}
+                            {checks.map((c, i) => <Check key={`${c.level}-${i}-${c.title}`} check={c} picker={namePicker} />)}
                         </div>
                     </Panel>
 

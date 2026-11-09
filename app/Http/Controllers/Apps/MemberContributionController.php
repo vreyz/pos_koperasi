@@ -297,7 +297,7 @@ class MemberContributionController extends Controller
         $this->files->forget('savings', $validated['token']);
         $request->session()->forget("savings_import_name.{$validated['token']}");
 
-        return to_route('savings.index')->with('success', "Import simpanan selesai: {$summary['saved']} catatan disimpan, {$summary['created_employees']} pegawai baru, {$summary['skipped_names']} nama dilewati.");
+        return to_route('savings.index')->with('success', "Import simpanan selesai: {$summary['saved']} catatan disimpan, {$summary['created_employees']} pegawai baru, {$summary['skipped_names']} nama dilewati".($summary['skipped_amount'] ? ' (Rp '.number_format($summary['skipped_amount'], 0, ',', '.').' tidak disimpan — pilih pegawainya lalu impor ulang, tidak dobel)' : '').'.');
     }
 
     public function template()
