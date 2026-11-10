@@ -392,6 +392,28 @@ class ShuCalculationTest extends TestCase
         $this->assertSame(0, ExternalSale::where('year', 2025)->count());
     }
 
+    public function test_saving_settings_accepts_board_member_without_months(): void
+    {
+        // Pengurus tanpa simpanan setahun: layar mengosongkan bulannya; simpan tetap berhasil dan langsung dihitung.
+        $user = User::factory()->create();
+        $user->givePermissionTo(['shu-access', 'shu-manage']);
+        $a = $this->person('A');
+        $this->pay($a, 'wajib', 2025, [1], 100000);
+        $ketua = $this->person('Ketua Tanpa Simpanan');
+        $period = $this->period();
+
+        $this->actingAs($user)->put(route('shu.update', $period), [
+            'total_shu' => 1000000, 'base_per_person' => 0, 'base_requires_savings' => true, 'base_for_ppnpn' => true, 'base_mode' => 'full',
+            'board_amount' => 50000, 'board_members' => [['customer_id' => $ketua->id, 'months' => []]],
+            'portion_savings' => 100, 'portion_purchases' => 0, 'portion_financing' => 0,
+            'savings_types' => ['pokok', 'wajib', 'sukarela'], 'savings_period' => 'year', 'sales_source' => 'excel', 'rounding' => 'round', 'rounding_unit' => 1000,
+        ])->assertSessionHasNoErrors()->assertSessionHas('success', fn ($m) => str_contains($m, 'dihitung ulang'));
+
+        $this->assertSame([], $period->fresh()->board_members[0]['months']);
+        $this->assertNotNull($period->fresh()->calculated_at);
+        $this->assertSame(0, (int) $period->allocations()->sum('board_amount'));
+    }
+
     public function test_shu_pages_excel_import_and_name_mapping(): void
     {
         $user = User::factory()->create();

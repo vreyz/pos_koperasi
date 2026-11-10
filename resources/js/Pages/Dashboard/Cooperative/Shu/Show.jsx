@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Head, Link, router, useForm } from "@inertiajs/react";
+import { Head, Link, router, useForm, usePage } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { IconArrowLeft, IconCalculator, IconChevronRight, IconCoins, IconDownload, IconLock, IconLockOpen, IconLink, IconPencil, IconPlus, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
 import Modal from "@/Components/Modal";
@@ -112,17 +112,36 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
     const shownAlloc = allocView.shown;
     const fNote = allocView.filtered ? " · sesuai saringan" : "";
 
+    // Simpan + hitung ulang. Error validasi (termasuk yang tidak punya kolom sendiri, mis. baris pengurus) dan error
+    // perhitungan ditampilkan di kotak dekat tombol simpan; hanya bila berhasil halaman turun ke daftar SHU.
+    const [calcError, setCalcError] = useState(null);
+    const showErrorBox = () => setTimeout(() => document.getElementById("shu-save-errors")?.scrollIntoView({ behavior: "smooth", block: "center" }), 150);
     const save = (e) => {
         e.preventDefault();
+        setCalcError(null);
         router.put(route("shu.update", period.id), form, {
             preserveScroll: true,
-            onError: setErrors,
-            onSuccess: () => {
+            onError: (errs) => {
+                setErrors(errs);
+                showErrorBox();
+            },
+            onSuccess: (page) => {
                 setErrors({});
-                setTimeout(() => document.getElementById("hasil-shu")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+                const error = page.props.flash?.error;
+                if (error) {
+                    setCalcError(error);
+                    showErrorBox();
+                } else {
+                    setTimeout(() => document.getElementById("hasil-shu")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+                }
             },
         });
     };
+    const boardName = (i) => employeeById[Number(form.board_members?.[i]?.customer_id)]?.name;
+    const errorList = Object.entries(errors).map(([key, message]) => {
+        const row = key.match(/^board_members\.(\d+)\./);
+        return row ? `Pengurus baris ${Number(row[1]) + 1}${boardName(row[1]) ? ` (${boardName(row[1])})` : ""}: ${message}` : message;
+    });
     const post = (name, confirmText) => () => {
         if (confirmText && !confirm(confirmText)) return;
         router.post(route(name, period.id), {}, { preserveScroll: true });
@@ -366,6 +385,15 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                 )}
                             </Field>
                         </fieldset>
+                        {(errorList.length > 0 || calcError) && (
+                            <div id="shu-save-errors" className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-sm text-danger-800 dark:border-danger-900/60 dark:bg-danger-950/40 dark:text-danger-200">
+                                <p className="font-semibold">{errorList.length > 0 ? "Belum tersimpan — perbaiki dulu:" : "Pengaturan tersimpan, tetapi SHU belum bisa dihitung:"}</p>
+                                <ul className="mt-1 list-disc pl-5">
+                                    {errorList.map((m, i) => <li key={i}>{m}</li>)}
+                                    {calcError && <li>{calcError}</li>}
+                                </ul>
+                            </div>
+                        )}
                         {editable && (
                             <div className="flex items-center justify-end gap-3">
                                 {dirty && <span className="text-sm text-warning-700">Ada perubahan yang belum disimpan.</span>}

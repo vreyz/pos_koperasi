@@ -134,7 +134,8 @@ class ShuController extends Controller
             'board_amount' => ['nullable', 'integer', 'min:0'],
             'board_members' => ['nullable', 'array'],
             'board_members.*.customer_id' => ['required', 'integer', 'exists:customers,id'],
-            'board_members.*.months' => ['required', 'array', 'min:1'],
+            // Boleh kosong: pengurus yang tidak membayar simpanan sepanjang tahun otomatis tanpa bulan (SHU pengurus Rp 0).
+            'board_members.*.months' => ['present', 'array'],
             'board_members.*.months.*' => ['integer', 'between:1,12'],
             'portion_savings' => ['required', 'numeric', 'min:0', 'max:100'],
             'portion_purchases' => ['required', 'numeric', 'min:0', 'max:100'],
