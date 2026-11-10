@@ -205,6 +205,29 @@ class ShuCalculationTest extends TestCase
             ->where('buyersWithoutDues.0.customer_id', $a->id));
     }
 
+    public function test_withdrawal_in_the_year_does_not_reduce_shu_and_board_needs_dues(): void
+    {
+        $a = $this->person('A');
+        $b = $this->person('B');
+        $ketua = $this->person('Ketua Tanpa Iuran');
+        $this->pay($a, 'wajib', 2025, [1, 2], 100000);
+        $this->pay($b, 'wajib', 2025, [1, 2], 100000);
+        // A mutasi: simpanan diambil di tahun yang sama (catatan negatif) — tidak mengurangi hak SHU 2025.
+        MemberContribution::create(['customer_id' => $a->id, 'type' => 'wajib', 'period_year' => 2025, 'period_month' => 3, 'amount' => -200000, 'source' => 'tunai']);
+
+        $period = $this->period(['total_shu' => 1000000, 'base_per_person' => 0, 'portion_savings' => 100, 'portion_purchases' => 0,
+            'board_amount' => 50000, 'board_members' => [['customer_id' => $ketua->id, 'months' => range(1, 12)]]]);
+        app(ShuCalculator::class)->calculate($period);
+        $alloc = $period->allocations()->get()->keyBy('customer_id');
+
+        $this->assertEqualsWithDelta($alloc[$a->id]->total, $alloc[$b->id]->total, 0.01);
+        $this->assertEqualsWithDelta(500000, $alloc[$a->id]->total, 0.01);
+        // Pengurus tanpa iuran di 2025 tidak mendapat SHU pengurus (SHU tidak dipotong untuknya).
+        $this->assertArrayNotHasKey($ketua->id, $alloc->all());
+        $this->assertSame([$ketua->id], app(ShuCalculator::class)->boardWithoutSavings($period));
+        $this->assertSame(0, app(ShuCalculator::class)->summary($period)['board_total']);
+    }
+
     public function test_pos_source_and_financing_income_portions_ignore_installments(): void
     {
         $cashier = User::factory()->create();

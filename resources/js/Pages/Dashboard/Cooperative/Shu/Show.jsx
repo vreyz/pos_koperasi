@@ -14,7 +14,7 @@ const boardMonths = (m) => (Array.isArray(m.months) ? m.months : Array.from({ le
 
 const SETTING_KEYS = ["total_shu", "base_per_person", "base_requires_savings", "base_for_ppnpn", "base_mode", "board_amount", "board_members", "portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang", "savings_types", "savings_period", "sales_source", "rounding", "rounding_unit", "excluded_customer_ids"];
 
-export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [], boardFromDecrees = [], nonEmployeeBuyers = [] }) {
+export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [], boardFromDecrees = [], nonEmployeeBuyers = [], savingsPayerIds = [] }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const locked = period.status === "final";
@@ -48,7 +48,10 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
 
     const portionTotal = ["portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
     const businessTotal = ["portion_purchases", "portion_financing_dana", "portion_financing_barang"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
-    const boardTotal = (form.board_members || []).reduce((sum, m) => sum + Number(form.board_amount || 0) * m.months.length, 0);
+    // Pengurus tanpa Iuran Koperasi di tahun buku tidak mendapat SHU pengurus.
+    const payers = useMemo(() => new Set(savingsPayerIds.map(Number)), [savingsPayerIds]);
+    const noSavings = { has: (id) => Boolean(id) && !payers.has(Number(id)) };
+    const boardTotal = (form.board_members || []).reduce((sum, m) => sum + (noSavings.has(Number(m.customer_id)) ? 0 : Number(form.board_amount || 0) * m.months.length), 0);
     const boardPerMonth = MONTH_SHORT.map((_, i) => (form.board_members || []).filter((m) => m.customer_id && m.months.includes(i + 1)).length);
     const remainder = Number(form.total_shu || 0) - stats.base_total - boardTotal - stats.adjustment_total;
     // Bagian SHU pembiayaan (rupiah) paling banyak 50% pendapatan koperasi dari pembiayaan itu di tahun buku.
@@ -180,7 +183,11 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <SearchSelect className="min-w-[16rem] flex-1" options={empOptions} value={m.customer_id} onChange={(v) => setBoard(i, { customer_id: Number(v) })} placeholder="Cari pengurus…" disabled={!editable} />
                                                 {positionById[m.customer_id] && <Badge color="blue">{positionById[m.customer_id]}</Badge>}
+                                                {noSavings.has(Number(m.customer_id)) ? (
+                                                    <span className="text-xs font-medium text-danger-600">Tidak diperhitungkan — tidak membayar Iuran Koperasi di {period.year}</span>
+                                                ) : (
                                                 <span className="text-xs text-slate-500">{m.months.length} bulan × {rupiah(form.board_amount || 0)} = <b>{rupiah(Number(form.board_amount || 0) * m.months.length)}</b></span>
+                                                )}
                                                 {editable && <button type="button" onClick={() => setForm({ ...form, board_members: form.board_members.filter((_, j) => j !== i) })} className="text-danger-600" title="Hapus"><IconX size={16} /></button>}
                                             </div>
                                             <div className="flex flex-wrap gap-1">

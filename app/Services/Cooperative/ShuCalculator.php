@@ -245,12 +245,14 @@ class ShuCalculator
             ->map(fn ($v) => (int) $v)
             ->all();
 
+        // Penarikan simpanan di tahun Y (mis. diambil saat mutasi) tidak mengurangi hak SHU tahun Y:
+        // hanya setoran yang dihitung; penarikan tahun-tahun sebelumnya tetap mengurangi saldo (mode sejak awal).
         $savings = ($months === [] || $savingsTypes === []) ? [] : MemberContribution::query()
             ->whereIn('type', $savingsTypes)
             ->whereIn('customer_id', array_keys($months))
             ->when($period->savings_period === 'all_time', fn ($q) => $q->where('period_year', '<=', $year), fn ($q) => $q->where('period_year', $year))
             ->groupBy('customer_id')
-            ->selectRaw('customer_id, SUM(amount) as total')
+            ->selectRaw('customer_id, SUM(CASE WHEN amount > 0 OR period_year < ? THEN amount ELSE 0 END) as total', [$year])
             ->pluck('total', 'customer_id')
             ->map(fn ($v) => (int) $v)
             ->filter(fn ($v) => $v > 0)
@@ -297,15 +299,33 @@ class ShuCalculator
     public function boardBonuses(ShuPeriod $period): array
     {
         $bonuses = [];
+        $withoutSavings = array_flip($this->boardWithoutSavings($period));
         foreach ($period->board_members ?? [] as $member) {
             $id = (int) ($member['customer_id'] ?? 0);
             $months = count(self::boardMonths($member));
-            if ($id && $period->board_amount > 0 && $months > 0) {
+            if ($id && ! isset($withoutSavings[$id]) && $period->board_amount > 0 && $months > 0) {
                 $bonuses[$id] = ($bonuses[$id] ?? 0) + $period->board_amount * $months;
             }
         }
 
         return $bonuses;
+    }
+
+    /**
+     * Pengurus yang tidak membayar Iuran Koperasi (pokok/wajib/sukarela) di tahun buku: tidak mendapat SHU pengurus.
+     *
+     * @return list<int>
+     */
+    public function boardWithoutSavings(ShuPeriod $period): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map(fn ($m) => (int) ($m['customer_id'] ?? 0), $period->board_members ?? []))));
+        if ($ids === []) {
+            return [];
+        }
+        $payers = MemberContribution::where('period_year', $period->year)->whereIn('type', MemberContribution::SAVINGS_TYPES)
+            ->where('amount', '>', 0)->whereIn('customer_id', $ids)->distinct()->pluck('customer_id')->map(fn ($v) => (int) $v)->all();
+
+        return array_values(array_diff($ids, $payers));
     }
 
     /**
