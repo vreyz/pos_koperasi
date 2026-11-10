@@ -268,13 +268,12 @@ class MemberContributionController extends Controller
             ->get()
             ->map(fn (Customer $c) => [
                 $c->nip, $c->name, $c->employee_type, $c->employment_status,
-                (int) $c->pokok_total, (int) $c->wajib_total, (int) $c->sukarela_total,
-                (int) $c->pokok_total + (int) $c->wajib_total + (int) $c->sukarela_total,
-                (int) $c->savings_balance,
+                (int) $c->opening_balance, (int) $c->wajib_total, (int) $c->pokok_total, (int) $c->sukarela_total,
+                (int) $c->withdrawal_total, (int) $c->savings_balance,
             ])->all();
 
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Status', 'Pokok '.$year, 'Wajib '.$year, 'Sukarela '.$year, 'Total Simpanan '.$year, 'Saldo Simpanan s.d. '.$year],
+            ['NIP', 'Nama', 'Jenis', 'Status', 'Saldo s.d. '.($year - 1), 'Wajib '.$year, 'Pokok '.$year, 'Sukarela '.$year, 'Penarikan '.$year, 'Saldo Akhir '.$year],
             $rows,
             ['A' => '@'],
         ), "rekap-simpanan-{$year}.xlsx");
@@ -314,14 +313,18 @@ class MemberContributionController extends Controller
 
     private function recapQuery(int $year)
     {
+        // Saldo s.d. tahun lalu + setoran tahun berjalan (per jenis) + penarikan = saldo akhir tahun berjalan.
         $query = Customer::employees()->select(['id', 'name', 'nip', 'employee_type', 'employment_status']);
         foreach (MemberContribution::SAVINGS_TYPES as $type) {
-            $query->withSum(["contributions as {$type}_total" => fn ($q) => $q->where('type', $type)->where('period_year', $year)], 'amount');
+            $query->withSum(["contributions as {$type}_total" => fn ($q) => $q->where('type', $type)->where('period_year', $year)->where('amount', '>', 0)], 'amount');
         }
 
-        return $query->withSum(['contributions as savings_balance' => fn ($q) => $q
-            ->whereIn('type', MemberContribution::SAVINGS_TYPES)
-            ->where('period_year', '<=', $year)], 'amount');
+        return $query
+            ->withSum(['contributions as opening_balance' => fn ($q) => $q->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('period_year', '<', $year)], 'amount')
+            ->withSum(['contributions as withdrawal_total' => fn ($q) => $q->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('period_year', $year)->where('amount', '<', 0)], 'amount')
+            ->withSum(['contributions as savings_balance' => fn ($q) => $q
+                ->whereIn('type', MemberContribution::SAVINGS_TYPES)
+                ->where('period_year', '<=', $year)], 'amount');
     }
 
     /**
