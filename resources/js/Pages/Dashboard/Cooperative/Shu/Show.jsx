@@ -14,19 +14,22 @@ const boardMonths = (m) => (Array.isArray(m.months) ? m.months : Array.from({ le
 
 const SETTING_KEYS = ["total_shu", "base_per_person", "base_requires_savings", "base_for_ppnpn", "base_mode", "board_amount", "board_members", "portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang", "savings_types", "savings_period", "sales_source", "rounding", "rounding_unit", "excluded_customer_ids"];
 
-export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [], boardFromDecrees = [], nonEmployeeBuyers = [] }) {
+export default function Show({ period, allocations, adjustments, rules, stats, unmatched, employees, typeLabels, buyersWithoutDues = [], boardFromDecrees = [], nonEmployeeBuyers = [], paidMonths = {} }) {
     useFlashToasts();
     const { can } = useAuthorization();
     const locked = period.status === "final";
     const editable = can("shu-manage") && !locked;
     const empty = (k) => (k.endsWith("ids") || k === "board_members" ? [] : "");
+    // Bulan pengurus tanpa iuran (pindah/pensiun) otomatis tidak dicentang dan tidak dihitung.
+    const paidOf = (id) => (id ? (paidMonths[id] || []).map(Number) : []);
+    const onlyPaid = (m) => (m.customer_id ? { ...m, months: m.months.filter((k) => paidOf(m.customer_id).includes(k)) } : m);
     const [form, setForm] = useState(() => {
         const initial = Object.fromEntries(SETTING_KEYS.map((k) => [k, period[k] ?? empty(k)]));
-        return { ...initial, board_members: initial.board_members.map((m) => ({ ...m, months: boardMonths(m) })) };
+        return { ...initial, board_members: initial.board_members.map((m) => onlyPaid({ ...m, months: boardMonths(m) })) };
     });
-    const setBoard = (i, patch) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+    const setBoard = (i, patch) => setForm({ ...form, board_members: form.board_members.map((x, j) => (j === i ? onlyPaid({ ...x, ...patch }) : x)) });
     const positionById = useMemo(() => Object.fromEntries(boardFromDecrees.map((m) => [m.customer_id, m.position])), [boardFromDecrees]);
-    const loadBoardFromDecrees = () => setForm({ ...form, board_members: boardFromDecrees.map((m) => ({ customer_id: m.customer_id, months: m.months })) });
+    const loadBoardFromDecrees = () => setForm({ ...form, board_members: boardFromDecrees.map((m) => onlyPaid({ customer_id: m.customer_id, months: m.months })) });
     const toggleMonth = (i, month) => {
         const months = form.board_members[i].months;
         setBoard(i, { months: months.includes(month) ? months.filter((x) => x !== month) : [...months, month].sort((a, b) => a - b) });
@@ -48,7 +51,9 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
 
     const portionTotal = ["portion_savings", "portion_purchases", "portion_financing_dana", "portion_financing_barang"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
     const businessTotal = ["portion_purchases", "portion_financing_dana", "portion_financing_barang"].reduce((sum, k) => sum + Number(form[k] || 0), 0);
-    const boardTotal = (form.board_members || []).reduce((sum, m) => sum + Number(form.board_amount || 0) * m.months.length, 0);
+    // Pengurus tanpa Iuran Koperasi di tahun buku tidak mendapat SHU pengurus.
+    const noSavings = { has: (id) => Boolean(id) && paidOf(id).length === 0 };
+    const boardTotal = (form.board_members || []).reduce((sum, m) => sum + (noSavings.has(Number(m.customer_id)) ? 0 : Number(form.board_amount || 0) * m.months.length), 0);
     const boardPerMonth = MONTH_SHORT.map((_, i) => (form.board_members || []).filter((m) => m.customer_id && m.months.includes(i + 1)).length);
     const remainder = Number(form.total_shu || 0) - stats.base_total - boardTotal - stats.adjustment_total;
     // Bagian SHU pembiayaan (rupiah) paling banyak 50% pendapatan koperasi dari pembiayaan itu di tahun buku.
@@ -180,7 +185,11 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <SearchSelect className="min-w-[16rem] flex-1" options={empOptions} value={m.customer_id} onChange={(v) => setBoard(i, { customer_id: Number(v) })} placeholder="Cari pengurus…" disabled={!editable} />
                                                 {positionById[m.customer_id] && <Badge color="blue">{positionById[m.customer_id]}</Badge>}
-                                                <span className="text-xs text-slate-500">{m.months.length} bulan × {rupiah(form.board_amount || 0)} = <b>{rupiah(Number(form.board_amount || 0) * m.months.length)}</b></span>
+                                                {noSavings.has(Number(m.customer_id)) ? (
+                                                    <span className="text-xs font-medium text-danger-600">Tidak diperhitungkan — tidak membayar Iuran Koperasi di {period.year}</span>
+                                                ) : (
+                                                <span className="text-xs text-slate-500">{m.months.length} bulan{m.customer_id && paidOf(m.customer_id).length < 12 ? ` (beriuran ${paidOf(m.customer_id).length} bulan)` : ""} × {rupiah(form.board_amount || 0)} = <b>{rupiah(Number(form.board_amount || 0) * m.months.length)}</b></span>
+                                                )}
                                                 {editable && <button type="button" onClick={() => setForm({ ...form, board_members: form.board_members.filter((_, j) => j !== i) })} className="text-danger-600" title="Hapus"><IconX size={16} /></button>}
                                             </div>
                                             <div className="flex flex-wrap gap-1">
@@ -188,16 +197,17 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                                     <button
                                                         type="button"
                                                         key={label}
-                                                        disabled={!editable}
+                                                        disabled={!editable || (m.customer_id && !paidOf(m.customer_id).includes(k + 1))}
+                                                        title={m.customer_id && !paidOf(m.customer_id).includes(k + 1) ? "Tidak membayar iuran bulan ini (pindah/pensiun): tidak dihitung" : undefined}
                                                         onClick={() => toggleMonth(i, k + 1)}
-                                                        className={`w-11 rounded-md border py-0.5 text-xs ${m.months.includes(k + 1) ? "border-primary-500 bg-primary-500 text-white" : "border-slate-200 text-slate-500 dark:border-slate-700"}`}
+                                                        className={`w-11 rounded-md border py-0.5 text-xs ${m.months.includes(k + 1) ? "border-primary-500 bg-primary-500 text-white" : m.customer_id && !paidOf(m.customer_id).includes(k + 1) ? "cursor-not-allowed border-slate-100 text-slate-300 line-through dark:border-slate-800 dark:text-slate-600" : "border-slate-200 text-slate-500 dark:border-slate-700"}`}
                                                     >
                                                         {label}
                                                     </button>
                                                 ))}
                                                 {editable && (
-                                                    <button type="button" onClick={() => setBoard(i, { months: m.months.length === 12 ? [] : MONTH_SHORT.map((_, k) => k + 1) })} className="ml-1 text-xs text-primary-600 hover:underline">
-                                                        {m.months.length === 12 ? "Kosongkan" : "Setahun penuh"}
+                                                    <button type="button" onClick={() => setBoard(i, { months: m.months.length > 0 ? [] : MONTH_SHORT.map((_, k) => k + 1) })} className="ml-1 text-xs text-primary-600 hover:underline">
+                                                        {m.months.length > 0 ? "Kosongkan" : "Semua bulan beriuran"}
                                                     </button>
                                                 )}
                                             </div>

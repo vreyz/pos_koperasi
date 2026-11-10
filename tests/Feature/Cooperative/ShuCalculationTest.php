@@ -172,8 +172,8 @@ class ShuCalculationTest extends TestCase
     {
         $a = $this->person('A');
         $ketua = $this->person('Ketua');
-        $this->pay($a, 'wajib', 2025, [1], 100000);
-        $this->pay($ketua, 'wajib', 2025, [1], 100000);
+        $this->pay($a, 'wajib', 2025, [7, 8, 9, 10, 11, 12], 100000);
+        $this->pay($ketua, 'wajib', 2025, [7, 8, 9, 10, 11, 12], 100000);
 
         $period = $this->period(['total_shu' => 1300000, 'base_per_person' => 0, 'portion_savings' => 100, 'portion_purchases' => 0,
             'board_amount' => 50000, 'board_members' => [['customer_id' => $ketua->id, 'months' => [7, 8, 9, 10, 11, 12]]]]);
@@ -203,6 +203,47 @@ class ShuCalculationTest extends TestCase
         $this->actingAs($admin)->get(route('shu.show', $period))->assertInertia(fn (Assert $page) => $page
             ->where('nonEmployeeBuyers', [['name' => 'Umum', 'amount' => 70000], ['name' => 'Tukang Pijat', 'amount' => 20000]])
             ->where('buyersWithoutDues.0.customer_id', $a->id));
+    }
+
+    public function test_withdrawal_in_the_year_does_not_reduce_shu_and_board_needs_dues(): void
+    {
+        $a = $this->person('A');
+        $b = $this->person('B');
+        $ketua = $this->person('Ketua Tanpa Iuran');
+        $this->pay($a, 'wajib', 2025, [1, 2], 100000);
+        $this->pay($b, 'wajib', 2025, [1, 2], 100000);
+        // A mutasi: simpanan diambil di tahun yang sama (catatan negatif) — tidak mengurangi hak SHU 2025.
+        MemberContribution::create(['customer_id' => $a->id, 'type' => 'wajib', 'period_year' => 2025, 'period_month' => 3, 'amount' => -200000, 'source' => 'tunai']);
+
+        $period = $this->period(['total_shu' => 1000000, 'base_per_person' => 0, 'portion_savings' => 100, 'portion_purchases' => 0,
+            'board_amount' => 50000, 'board_members' => [['customer_id' => $ketua->id, 'months' => range(1, 12)]]]);
+        app(ShuCalculator::class)->calculate($period);
+        $alloc = $period->allocations()->get()->keyBy('customer_id');
+
+        $this->assertEqualsWithDelta($alloc[$a->id]->total, $alloc[$b->id]->total, 0.01);
+        $this->assertEqualsWithDelta(500000, $alloc[$a->id]->total, 0.01);
+        // Pengurus tanpa iuran di 2025 tidak mendapat SHU pengurus (SHU tidak dipotong untuknya).
+        $this->assertArrayNotHasKey($ketua->id, $alloc->all());
+        $this->assertSame([$ketua->id], app(ShuCalculator::class)->boardWithoutSavings($period));
+        $this->assertSame(0, app(ShuCalculator::class)->summary($period)['board_total']);
+    }
+
+    public function test_board_months_without_dues_are_not_counted(): void
+    {
+        $bendahara = $this->person('Bendahara Pensiun Juni');
+        $this->pay($bendahara, 'wajib', 2025, [1, 2, 3, 4, 5, 6], 100000); // pensiun/pindah: iuran berhenti Juli
+
+        $period = $this->period(['total_shu' => 1000000, 'base_per_person' => 0, 'portion_savings' => 100, 'portion_purchases' => 0,
+            'board_amount' => 50000, 'board_members' => [['customer_id' => $bendahara->id, 'months' => range(1, 12)]]]);
+        $calculator = app(ShuCalculator::class);
+        $calculator->calculate($period);
+
+        $this->assertSame(300000, $period->allocations()->where('customer_id', $bendahara->id)->value('board_amount')); // 6 bulan, bukan 12
+        $this->assertSame([1, 2, 3, 4, 5, 6], $calculator->paidMonths(2025, [$bendahara->id])[$bendahara->id]);
+
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('shu-access');
+        $this->actingAs($admin)->get(route('shu.show', $period))->assertInertia(fn (Assert $page) => $page->where("paidMonths.{$bendahara->id}", [1, 2, 3, 4, 5, 6]));
     }
 
     public function test_pos_source_and_financing_income_portions_ignore_installments(): void
