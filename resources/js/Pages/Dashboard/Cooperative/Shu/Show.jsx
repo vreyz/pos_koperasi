@@ -215,7 +215,7 @@ export default function Show({ period, allocations, adjustments, rules, stats, u
                                     </summary>
                                     <div className="space-y-3 border-t border-slate-200 p-3 dark:border-slate-700">
                                     {(form.board_members || []).map((m, i) => (
-                                        <div key={i} className="space-y-1">
+                                        <div key={i} className="space-y-1" data-field={`board_members.${i}`} data-label={`Pengurus baris ${i + 1}${employeeById[Number(m.customer_id)]?.name ? ` (${employeeById[Number(m.customer_id)].name})` : ""}`}>
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <SearchSelect className="min-w-[16rem] flex-1" options={empOptions} value={m.customer_id} onChange={(v) => setBoard(i, { customer_id: Number(v) })} placeholder="Cari pengurus…" disabled={!editable} />
                                                 {positionById[m.customer_id] && <Badge color="blue">{positionById[m.customer_id]}</Badge>}

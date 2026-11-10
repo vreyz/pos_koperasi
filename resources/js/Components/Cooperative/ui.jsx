@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { usePage } from "@inertiajs/react";
 import toast from "react-hot-toast";
+import { showErrorPopup } from "@/Utils/errorPopup";
 
 export const rupiah = (value = 0) =>
     "Rp " + Math.round(Number(value || 0)).toLocaleString("id-ID");
@@ -14,7 +15,8 @@ export function useFlashToasts() {
     const { flash } = usePage().props;
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
-        if (flash?.error) toast.error(flash.error);
+        // Error fatal (gagal simpan/hitung di server): popup yang harus ditutup, bukan toast yang cepat hilang.
+        if (flash?.error) showErrorPopup(flash.error, "Gagal");
     }, [flash]);
 }
 
@@ -95,7 +97,7 @@ export function Tip({ text }) {
 
 export function Field({ label, error, hint, tip, children }) {
     return (
-        <label className="block">
+        <label className="block" data-label={typeof label === "string" ? label : undefined}>
             <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}<Tip text={tip} /></span>
             {children}
             {hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
