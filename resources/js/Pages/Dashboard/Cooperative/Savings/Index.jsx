@@ -115,13 +115,14 @@ export default function Index({ tab, year, years, filters, recap, history, total
         },
         { key: "employee_type", label: "Jenis", filter: "select", options: ["PNS", "PPPK", "PPNPN", "LAINNYA"].map((v) => ({ value: v, label: v })), value: (r) => r.employee_type, render: (r) => <Badge>{r.employee_type}</Badge> },
         { key: "employment_status", label: "Status", filter: "select", options: statusOptions, value: (r) => r.employment_status || "" },
-        // Urutan simpanan: Pokok, Wajib, Sukarela = setoran tahun yang dipilih; Penarikan = pengembalian/tarik (pengurang).
+        // Saldo s.d. tahun lalu + setoran tahun berjalan (Pokok, Wajib, Sukarela) − penarikan = saldo akhir.
+        // Semua Tahun: tanpa saldo awal, saldo = total semua tahun.
+        ...(allYears ? [] : [{ key: "opening", label: `Saldo s.d. ${year - 1}`, align: "right", filter: "number", value: (r) => Number(r.opening_balance || 0), render: (r) => num0(r.opening_balance) }]),
         { key: "pokok", label: `Pokok${yl}`, align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0), render: (r) => num0(r.pokok_total) },
         { key: "wajib", label: `Wajib${yl}`, align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num0(r.wajib_total) },
         { key: "sukarela", label: `Sukarela${yl}`, align: "right", filter: "number", value: (r) => Number(r.sukarela_total || 0), render: (r) => num0(r.sukarela_total) },
         { key: "withdrawn", label: `Penarikan${yl}`, align: "right", filter: "number", value: withdrawn, render: (r) => (withdrawn(r) ? <span className="text-danger-600 dark:text-danger-400">−{num0(withdrawn(r))}</span> : num0(0)) },
-        { key: "year_total", label: `Total${yl}`, align: "right", filter: "number", value: (r) => deposits(r) - withdrawn(r), render: (r) => num0(deposits(r) - withdrawn(r)) },
-        { key: "balance", label: allYears ? "Saldo" : `Saldo s.d. ${year}`, align: "right", filter: "number", value: (r) => Number(r.savings_balance || 0), render: (r) => <span className="font-semibold">{num(r.savings_balance)}</span> },
+        { key: "balance", label: allYears ? "Saldo" : `Saldo Akhir ${year}`, align: "right", filter: "number", value: (r) => Number(r.savings_balance || 0), render: (r) => <span className="font-semibold">{num0(r.savings_balance)}</span> },
     ];
     const initialHistoryFilters = filters.customer_id ? { name: employees.find((e) => e.id === filters.customer_id)?.name || "" } : {};
 
@@ -235,7 +236,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
                         initialSort={{ key: "name", dir: "asc" }}
                         onFilter={recapView.onFilter}
                         emptyText={`Belum ada simpanan di ${allYears ? "semua tahun" : `tahun ${year}`}.`}
-                        footer={sumFooter(recapColumns, ["pokok", "wajib", "sukarela", "withdrawn", "year_total", "balance"])}
+                        footer={sumFooter(recapColumns, ["opening", "pokok", "wajib", "sukarela", "withdrawn", "balance"])}
                     />
                 ) : (
                     <SortableTable

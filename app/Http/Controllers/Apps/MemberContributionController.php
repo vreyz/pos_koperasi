@@ -322,13 +322,21 @@ class MemberContributionController extends Controller
             ->get()
             ->map(fn (Customer $c) => [
                 $c->nip, $c->name, $c->employee_type, $c->employment_status,
+                ...($year ? [(int) $c->opening_balance] : []),
                 (int) $c->pokok_total, (int) $c->wajib_total, (int) $c->sukarela_total, (int) -$c->withdrawn_total,
-                (int) $c->pokok_total + (int) $c->wajib_total + (int) $c->sukarela_total + (int) $c->withdrawn_total,
                 (int) $c->savings_balance,
             ])->all();
 
+        // Saldo s.d. tahun lalu + setoran tahun berjalan − penarikan = saldo akhir (semua tahun: tanpa saldo awal).
+        $headers = ['NIP', 'Nama', 'Jenis', 'Status'];
+        if ($year) {
+            $headers[] = 'Saldo s.d. '.($year - 1);
+        }
+        $suffix = $year ? ' '.$year : '';
+        $headers = [...$headers, 'Pokok'.$suffix, 'Wajib'.$suffix, 'Sukarela'.$suffix, 'Penarikan'.$suffix, $year ? 'Saldo Akhir '.$year : 'Saldo'];
+
         return Excel::download(new ArrayExport(
-            array_map(fn ($h) => trim(str_replace('{y}', $year ? (string) $year : '', $h)), ['NIP', 'Nama', 'Jenis', 'Status', 'Pokok {y}', 'Wajib {y}', 'Sukarela {y}', 'Penarikan {y}', 'Total Simpanan {y} (setor − tarik)', $year ? 'Saldo Simpanan s.d. {y}' : 'Saldo Simpanan']),
+            $headers,
             $rows,
             ['A' => '@'],
         ), 'rekap-simpanan-'.($year ?? 'semua-tahun').'.xlsx');
@@ -369,6 +377,7 @@ class MemberContributionController extends Controller
     /** @param  int|null  $year  null = semua tahun */
     private function recapQuery(?int $year)
     {
+        // Saldo s.d. tahun lalu + setoran tahun berjalan (per jenis) + penarikan = saldo akhir tahun berjalan.
         $query = Customer::employees()->select(['id', 'name', 'nip', 'employee_type', 'employment_status']);
         $inYear = fn ($q) => $q->when($year, fn ($q) => $q->where('period_year', $year));
         // Kolom per jenis = setoran saja; penarikan/pengembalian (nilai negatif) di kolom sendiri.
@@ -377,9 +386,11 @@ class MemberContributionController extends Controller
         }
         $query->withSum(['contributions as withdrawn_total' => fn ($q) => $inYear($q->whereIn('type', MemberContribution::SAVINGS_TYPES))->where('amount', '<', 0)], 'amount');
 
-        return $query->withSum(['contributions as savings_balance' => fn ($q) => $q
-            ->whereIn('type', MemberContribution::SAVINGS_TYPES)
-            ->when($year, fn ($q) => $q->where('period_year', '<=', $year))], 'amount');
+        return $query
+            ->when($year, fn ($q) => $q->withSum(['contributions as opening_balance' => fn ($c) => $c->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('period_year', '<', $year)], 'amount'))
+            ->withSum(['contributions as savings_balance' => fn ($q) => $q
+                ->whereIn('type', MemberContribution::SAVINGS_TYPES)
+                ->when($year, fn ($q) => $q->where('period_year', '<=', $year))], 'amount');
     }
 
     /**

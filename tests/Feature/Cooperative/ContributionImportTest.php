@@ -110,6 +110,24 @@ class ContributionImportTest extends TestCase
                 ->missing('totals.angsuran')->missing('typeLabels.angsuran'));
     }
 
+    public function test_recap_shows_opening_balance_deposits_withdrawals_and_closing_balance(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('savings-access');
+        $a = Customer::create(['name' => 'A', 'employee_type' => 'PNS', 'employment_status' => 'MUTASI', 'no_telp' => 0, 'address' => '']);
+        MemberContribution::create(['customer_id' => $a->id, 'type' => 'pokok', 'period_year' => 2024, 'period_month' => 1, 'amount' => 50000]);
+        MemberContribution::create(['customer_id' => $a->id, 'type' => 'wajib', 'period_year' => 2024, 'period_month' => 1, 'amount' => 1200000]);
+        MemberContribution::create(['customer_id' => $a->id, 'type' => 'wajib', 'period_year' => 2025, 'period_month' => 1, 'amount' => 300000]);
+        MemberContribution::create(['customer_id' => $a->id, 'type' => 'wajib', 'period_year' => 2025, 'period_month' => 6, 'amount' => -1000000, 'source' => 'tunai']); // diambil saat mutasi
+
+        $this->actingAs($user)->get(route('savings.index', ['year' => 2025]))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('recap.0.opening_balance', 1250000)
+                ->where('recap.0.wajib_total', 300000)
+                ->where('recap.0.withdrawn_total', -1000000)
+                ->where('recap.0.savings_balance', 550000));
+    }
+
     public function test_manual_withdrawal_cannot_exceed_balance_and_generate_skips_existing(): void
     {
         $user = User::factory()->create();

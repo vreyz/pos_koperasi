@@ -63,6 +63,8 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
 
 ## Aturan SHU (semua bisa diatur per tahun buku)
 
+- Penarikan simpanan di tahun Y (mis. diambil saat mutasi) **tidak mengurangi** hak SHU tahun Y: dasar iuran = setoran.
+
 1. **Hanya pegawai aktif di tahun Y** yang ikut: masa aktif (`active_from`–`active_until` di Data Pegawai,
    kosong = aktif) mencakup tahun Y. Non-pegawai tidak dapat walau belanja. Pengecualian tidak dapat apa pun.
 2. Penerima harus punya simpanan, pembelian, atau angsuran pinjaman di Y.
@@ -71,7 +73,9 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
    - *PPNPN dapat base?* default **ya**, bisa dimatikan.
    - *Besaran*: penuh per orang **atau** proporsional bulan membayar (base × bulan ÷ 12).
    - Pegawai yang belanja tapi tidak menyimpan: dapat jasa pembelian, tanpa base (bila base hanya untuk pembayar).
-4. **SHU Pengurus Koperasi**: nominal **per orang per bulan bertugas**; bulan bertugas tiap pengurus
+4. **SHU Pengurus Koperasi** hanya untuk pengurus yang membayar Simpanan Koperasi di tahun Y, dan hanya untuk bulan yang
+   dibayar simpanannya (bulan tanpa simpanan karena pindah/pensiun otomatis tidak dicentang). Yang tidak membayar sama sekali
+   ditandai merah "tidak diperhitungkan" di halaman SHU. Nominal **per orang per bulan bertugas**; bulan bertugas tiap pengurus
    dicentang (Jan–Des) karena susunan pengurus bisa berganti di tengah tahun. SHU pengurus = nominal × jumlah
    bulan dicentang, dipotong dari SHU lebih dulu.
 5. **Koreksi manual per orang** (base pengganti, tambahan/pengurangan nominal, mis. SHU pengurus koperasi) disimpan
