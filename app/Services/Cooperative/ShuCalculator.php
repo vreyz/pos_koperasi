@@ -299,16 +299,36 @@ class ShuCalculator
     public function boardBonuses(ShuPeriod $period): array
     {
         $bonuses = [];
-        $withoutSavings = array_flip($this->boardWithoutSavings($period));
+        $paid = $this->paidMonths($period->year, array_map(fn ($m) => (int) ($m['customer_id'] ?? 0), $period->board_members ?? []));
         foreach ($period->board_members ?? [] as $member) {
             $id = (int) ($member['customer_id'] ?? 0);
-            $months = count(self::boardMonths($member));
-            if ($id && ! isset($withoutSavings[$id]) && $period->board_amount > 0 && $months > 0) {
+            // Bulan tanpa iuran (pindah/pensiun) tidak dihitung walaupun dicentang.
+            $months = count(array_intersect(self::boardMonths($member), $paid[$id] ?? []));
+            if ($id && $period->board_amount > 0 && $months > 0) {
                 $bonuses[$id] = ($bonuses[$id] ?? 0) + $period->board_amount * $months;
             }
         }
 
         return $bonuses;
+    }
+
+    /**
+     * Bulan (1-12) tiap pegawai membayar Iuran Koperasi (setoran pokok/wajib/sukarela) di tahun itu.
+     *
+     * @param  list<int>|null  $ids
+     * @return array<int, list<int>>
+     */
+    public function paidMonths(int $year, ?array $ids = null): array
+    {
+        $result = [];
+        MemberContribution::where('period_year', $year)->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('amount', '>', 0)
+            ->when($ids !== null, fn ($q) => $q->whereIn('customer_id', array_filter($ids)))
+            ->distinct()->orderBy('period_month')->get(['customer_id', 'period_month'])
+            ->each(function ($r) use (&$result) {
+                $result[(int) $r->customer_id][] = (int) $r->period_month;
+            });
+
+        return $result;
     }
 
     /**

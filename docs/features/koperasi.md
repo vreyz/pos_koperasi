@@ -62,7 +62,7 @@ Transaksi POS memakai `transactions.customer_id`, jadi belanja pegawai di kasir 
    - *PPNPN dapat base?* default **ya**, bisa dimatikan.
    - *Besaran*: penuh per orang **atau** proporsional bulan membayar (base × bulan ÷ 12).
    - Pegawai yang belanja tapi tidak iuran: dapat jasa pembelian, tanpa base (bila base hanya untuk pembayar).
-4. **SHU Pengurus Koperasi** hanya untuk pengurus yang membayar Iuran Koperasi di tahun Y (yang tidak, ditandai merah
+4. **SHU Pengurus Koperasi** hanya untuk pengurus yang membayar Iuran Koperasi di tahun Y, dan hanya untuk bulan yang dibayar iurannya (bulan tanpa iuran karena pindah/pensiun otomatis tidak dicentang). Yang tidak membayar sama sekali ditandai merah
    "tidak diperhitungkan" di halaman SHU). Nominal **per orang per bulan bertugas**; bulan bertugas tiap pengurus
    dicentang (Jan–Des) karena susunan pengurus bisa berganti di tengah tahun. SHU pengurus = nominal × jumlah
    bulan dicentang, dipotong dari SHU lebih dulu.

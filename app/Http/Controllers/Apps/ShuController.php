@@ -112,9 +112,8 @@ class ShuController extends Controller
             'employees' => Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type']),
             'typeLabels' => MemberContribution::TYPE_LABELS,
             'boardFromDecrees' => app(BoardService::class)->membersForYear($shu->year),
-            // Pembayar Iuran Koperasi di tahun buku: pengurus di luar daftar ini tidak mendapat SHU pengurus.
-            'savingsPayerIds' => MemberContribution::where('period_year', $shu->year)->whereIn('type', MemberContribution::SAVINGS_TYPES)
-                ->where('amount', '>', 0)->distinct()->pluck('customer_id'),
+            // Bulan membayar Iuran Koperasi per pegawai: bulan pengurus tanpa iuran tidak dihitung.
+            'paidMonths' => (object) $this->calculator->paidMonths($shu->year),
             'nonEmployeeBuyers' => $this->nonEmployeeBuyers($shu, $unmatched),
         ]);
     }
@@ -349,7 +348,8 @@ class ShuController extends Controller
         $boardOut = array_flip($this->calculator->boardWithoutSavings($period));
         $boardEligible = array_filter($period->board_members ?? [], fn ($m) => ! isset($boardOut[(int) ($m['customer_id'] ?? 0)]));
         $boardCount = count($boardEligible);
-        $boardMonths = array_sum(array_map(fn ($m) => count(ShuCalculator::boardMonths($m)), $boardEligible));
+        $paid = $this->calculator->paidMonths($y, array_map(fn ($m) => (int) ($m['customer_id'] ?? 0), $boardEligible));
+        $boardMonths = array_sum(array_map(fn ($m) => count(array_intersect(ShuCalculator::boardMonths($m), $paid[(int) ($m['customer_id'] ?? 0)] ?? [])), $boardEligible));
 
         return array_values(array_filter([
             "SHU ini untuk tahun buku {$y} dan dibagikan pada tahun ".($y + 1).'.',
@@ -360,7 +360,7 @@ class ShuController extends Controller
                 .($period->base_requires_savings ? " untuk anggota yang membayar Iuran Koperasi (pokok/wajib/sukarela) di tahun {$y}." : ' untuk semua pegawai aktif yang ikut (iuran, belanja, atau pembiayaan).')
                 .($period->base_for_ppnpn ? ' PPNPN juga mendapat SHU dasar.' : ' PPNPN tidak mendapat SHU dasar.'),
             $period->base_requires_savings ? 'Pegawai yang berbelanja tetapi tidak membayar iuran tetap mendapat bagian Belanja Toko, tanpa SHU dasar.' : null,
-            $boardCount > 0 && $period->board_amount > 0 ? "SHU Pengurus Koperasi {$rupiah($period->board_amount)} per orang per bulan bertugas ({$boardCount} pengurus, total {$boardMonths} orang-bulan = {$rupiah($period->board_amount * $boardMonths)}), dipotong dari SHU lebih dulu." : null,
+            $boardCount > 0 && $period->board_amount > 0 ? "SHU Pengurus Koperasi {$rupiah($period->board_amount)} per orang per bulan bertugas yang dibayar iurannya; bulan tanpa iuran (pindah/pensiun) tidak dihitung ({$boardCount} pengurus, total {$boardMonths} orang-bulan = {$rupiah($period->board_amount * $boardMonths)}), dipotong dari SHU lebih dulu." : null,
             $boardOut !== [] ? count($boardOut)." pengurus tidak membayar Iuran Koperasi di tahun {$y}, sehingga tidak mendapat SHU Pengurus Koperasi." : null,
             $adjustments > 0 ? "{$adjustments} koreksi manual (SHU dasar pengganti / tambahan nominal) diterapkan dan dipotong dari SHU lebih dulu." : null,
             'Sisa SHU (setelah SHU dasar, SHU pengurus koperasi, dan koreksi) dibagi: '.$period->portion_savings.'% Iuran Koperasi, '.$period->portion_purchases.'% Belanja Toko, '.$period->portion_financing_dana.'% Pembiayaan Dana, '.$period->portion_financing_barang.'% Pembiayaan Barang (total 100%).',

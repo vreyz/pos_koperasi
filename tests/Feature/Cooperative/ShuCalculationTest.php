@@ -172,8 +172,8 @@ class ShuCalculationTest extends TestCase
     {
         $a = $this->person('A');
         $ketua = $this->person('Ketua');
-        $this->pay($a, 'wajib', 2025, [1], 100000);
-        $this->pay($ketua, 'wajib', 2025, [1], 100000);
+        $this->pay($a, 'wajib', 2025, [7, 8, 9, 10, 11, 12], 100000);
+        $this->pay($ketua, 'wajib', 2025, [7, 8, 9, 10, 11, 12], 100000);
 
         $period = $this->period(['total_shu' => 1300000, 'base_per_person' => 0, 'portion_savings' => 100, 'portion_purchases' => 0,
             'board_amount' => 50000, 'board_members' => [['customer_id' => $ketua->id, 'months' => [7, 8, 9, 10, 11, 12]]]]);
@@ -226,6 +226,24 @@ class ShuCalculationTest extends TestCase
         $this->assertArrayNotHasKey($ketua->id, $alloc->all());
         $this->assertSame([$ketua->id], app(ShuCalculator::class)->boardWithoutSavings($period));
         $this->assertSame(0, app(ShuCalculator::class)->summary($period)['board_total']);
+    }
+
+    public function test_board_months_without_dues_are_not_counted(): void
+    {
+        $bendahara = $this->person('Bendahara Pensiun Juni');
+        $this->pay($bendahara, 'wajib', 2025, [1, 2, 3, 4, 5, 6], 100000); // pensiun/pindah: iuran berhenti Juli
+
+        $period = $this->period(['total_shu' => 1000000, 'base_per_person' => 0, 'portion_savings' => 100, 'portion_purchases' => 0,
+            'board_amount' => 50000, 'board_members' => [['customer_id' => $bendahara->id, 'months' => range(1, 12)]]]);
+        $calculator = app(ShuCalculator::class);
+        $calculator->calculate($period);
+
+        $this->assertSame(300000, $period->allocations()->where('customer_id', $bendahara->id)->value('board_amount')); // 6 bulan, bukan 12
+        $this->assertSame([1, 2, 3, 4, 5, 6], $calculator->paidMonths(2025, [$bendahara->id])[$bendahara->id]);
+
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('shu-access');
+        $this->actingAs($admin)->get(route('shu.show', $period))->assertInertia(fn (Assert $page) => $page->where("paidMonths.{$bendahara->id}", [1, 2, 3, 4, 5, 6]));
     }
 
     public function test_pos_source_and_financing_income_portions_ignore_installments(): void
