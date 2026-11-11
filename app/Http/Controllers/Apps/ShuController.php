@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Apps;
 
 use App\Exports\ArrayExport;
+use App\Exports\ShuExport;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\ExternalSale;
@@ -412,16 +413,12 @@ class ShuController extends Controller
             round($a->shu_purchases),
             round($a->shu_financing),
             $a->adjustment_amount,
-            $a->adjustment_note,
             round($a->total),
             $a->total_rounded,
         ])->all();
 
-        return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Status', 'Simpanan Koperasi', 'Porsi Simpanan (%)', 'Belanja Toko', 'Porsi Belanja (%)', 'Pembiayaan Dana (biaya formulir)', 'Pembiayaan Barang (bagi hasil + biaya lain)', 'Pendapatan Pembiayaan', 'Porsi Pendapatan Pembiayaan (%)', 'Bulan Bayar', 'SHU Dasar', 'SHU Pengurus Koperasi', 'SHU Simpanan', 'SHU Belanja', 'SHU Pendapatan Pembiayaan', 'Koreksi', 'Catatan Koreksi', 'Total SHU', 'Total Dibulatkan'],
-            $rows,
-            ['A' => '@'],
-        ), "shu-{$shu->year}.xlsx");
+        // Header dua baris berwarna (DATA PEGAWAI · DASAR PERHITUNGAN · PERHITUNGAN SHU), lihat ShuExport::GROUPS.
+        return Excel::download(new ShuExport($rows, "SHU {$shu->year}"), "shu-{$shu->year}.xlsx");
     }
 
     /**
