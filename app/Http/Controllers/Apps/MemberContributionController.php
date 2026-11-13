@@ -25,7 +25,10 @@ class MemberContributionController extends Controller
     public function index(Request $request)
     {
         $years = $this->years();
-        $year = (int) $request->query('year', $years[0] ?? now()->year);
+        // year=all → semua tahun (rekap = jumlah semua tahun, riwayat = satu baris per nama per jenis per tahun).
+        $yearParam = (string) $request->query('year', (string) ($years[0] ?? now()->year));
+        $year = $yearParam === 'all' ? null : (int) $yearParam;
+        $inYear = fn ($q) => $q->when($year, fn ($q) => $q->where('period_year', $year));
         $tab = $request->query('tab') === 'history' ? 'history' : 'recap';
         $customerId = $request->integer('customer_id') ?: null;
 
@@ -34,23 +37,23 @@ class MemberContributionController extends Controller
 
         if ($tab === 'recap') {
             $recap = $this->recapQuery($year)
-                ->when(! $request->boolean('all'), fn ($q) => $q->whereHas('contributions', fn ($c) => $c->where('period_year', $year)->whereIn('type', MemberContribution::SAVINGS_TYPES)))
+                ->when(! $request->boolean('all'), fn ($q) => $q->whereHas('contributions', fn ($c) => $inYear($c)->whereIn('type', MemberContribution::SAVINGS_TYPES)))
                 ->orderBy('name')
                 ->get();
         } else {
             // Satu baris per pegawai per jenis, kolom bulan Jan–Des; daftar catatan per bulan untuk dilihat/dihapus.
-            $entries = MemberContribution::query()
+            $entries = $inYear(MemberContribution::query()
                 ->with('creator:id,name')
-                ->where('period_year', $year)
-                ->whereIn('type', MemberContribution::SAVINGS_TYPES) // angsuran pinjaman bukan simpanan (dicek di menu Pembiayaan)
+                ->whereIn('type', MemberContribution::SAVINGS_TYPES)) // angsuran pinjaman bukan simpanan (dicek di menu Pembiayaan)
+                ->orderBy('period_year')
                 ->orderBy('period_month')
                 ->orderBy('id')
-                ->get(['id', 'customer_id', 'type', 'period_month', 'amount', 'source', 'source_name', 'notes', 'created_by']);
+                ->get(['id', 'customer_id', 'type', 'period_year', 'period_month', 'amount', 'source', 'source_name', 'notes', 'created_by']);
             $people = Customer::whereIn('id', $entries->pluck('customer_id')->unique())
                 ->get(['id', 'name', 'nip', 'employee_type', 'employment_status'])
                 ->keyBy('id');
 
-            $history = $entries->groupBy(fn ($e) => $e->customer_id.'|'.$e->type)->map(function ($group) use ($people) {
+            $history = $entries->groupBy(fn ($e) => $e->customer_id.'|'.$e->type.'|'.$e->period_year)->map(function ($group) use ($people) {
                 $first = $group->first();
                 $person = $people->get($first->customer_id);
                 $months = array_fill(1, 12, 0);
@@ -68,7 +71,8 @@ class MemberContributionController extends Controller
                 }
 
                 return [
-                    'key' => $first->customer_id.'|'.$first->type,
+                    'key' => $first->customer_id.'|'.$first->type.'|'.$first->period_year,
+                    'year' => (int) $first->period_year,
                     'customer_id' => $first->customer_id,
                     'name' => $person?->name,
                     'nip' => $person?->nip,
@@ -82,21 +86,27 @@ class MemberContributionController extends Controller
             })->values();
         }
 
-        $totals = MemberContribution::where('period_year', $year)
+        // Setoran per jenis (nilai positif) dan penarikan/pengembalian (nilai negatif) dipisah.
+        $totals = $inYear(MemberContribution::query())
             ->whereIn('type', MemberContribution::SAVINGS_TYPES)
+            ->where('amount', '>', 0)
             ->selectRaw('type, SUM(amount) as total')
             ->groupBy('type')
             ->pluck('total', 'type');
+        $totals['withdrawn'] = (int) -$inYear(MemberContribution::query())
+            ->whereIn('type', MemberContribution::SAVINGS_TYPES)
+            ->where('amount', '<', 0)
+            ->sum('amount');
 
         return Inertia::render('Dashboard/Cooperative/Savings/Index', [
             'tab' => $tab,
-            'year' => $year,
+            'year' => $year ?? 'all',
             'years' => $years ?: [now()->year],
             'filters' => ['customer_id' => $customerId, 'all' => $request->boolean('all')],
             'recap' => $recap,
             'history' => $history,
             'totals' => $totals,
-            'payers' => MemberContribution::where('period_year', $year)->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('amount', '>', 0)->distinct()->count('customer_id'),
+            'payers' => $inYear(MemberContribution::query())->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('amount', '>', 0)->distinct()->count('customer_id'),
             'typeLabels' => array_intersect_key(MemberContribution::TYPE_LABELS, array_flip(MemberContribution::SAVINGS_TYPES)),
             'employees' => Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type', 'employment_status']),
         ]);
@@ -186,6 +196,7 @@ class MemberContributionController extends Controller
         foreach (array_chunk($rows, 500) as $chunk) {
             MemberContribution::insert($chunk);
         }
+        \App\Services\Accounting\AutoJournalHooks::bulkChanged(); // insert massal: jurnal otomatis tetap dibuat
 
         app(MemberSync::class)->syncMembers();
 
@@ -204,7 +215,14 @@ class MemberContributionController extends Controller
         $preview = null;
         if ($path) {
             try {
-                $preview = $this->importService->preview($this->importService->parse($path)) + ['token' => $token];
+                $data = $this->importService->inspect($path, $this->importName($request, $token));
+                $preview = $this->importService->preview($data['rows']);
+                $preview += [
+                    'token' => $token,
+                    'file_name' => $this->importName($request, $token),
+                    'sheets' => array_map(fn ($s) => array_intersect_key($s, array_flip(['sheet', 'label', 'rows'])), $data['sheets']),
+                    'checks' => $this->importService->validate($data, $this->importService->autoMapping($preview)),
+                ];
             } catch (RuntimeException $e) {
                 $this->files->forget('savings', $token);
 
@@ -214,7 +232,7 @@ class MemberContributionController extends Controller
 
         return Inertia::render('Dashboard/Cooperative/Savings/Import', [
             'preview' => $preview,
-            'employees' => $path ? Customer::employees()->orderBy('name')->get(['id', 'name', 'nip']) : [],
+            'employees' => $path ? Customer::employees()->orderBy('name')->get(['id', 'name', 'nip', 'employee_type', 'employment_status']) : [],
         ]);
     }
 
@@ -222,8 +240,38 @@ class MemberContributionController extends Controller
     {
         $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:20480']]);
         $token = $this->files->put($request->file('file'), 'savings');
+        // Nama file asli dipakai menebak jenis simpanan (mis. "SIMPANAN WAJIB PPNPN 2024-2025.xlsx").
+        $request->session()->put("savings_import_name.{$token}", $request->file('file')->getClientOriginalName());
 
         return to_route('savings.import', ['token' => $token]);
+    }
+
+    /** Validasi ulang dengan pemetaan nama terbaru (dipanggil dari layar pratinjau sebelum simpan). */
+    public function validateImport(Request $request)
+    {
+        set_time_limit(600);
+        $validated = $request->validate(['token' => ['required', 'uuid'], 'mapping' => ['array']]);
+        $path = $this->files->path('savings', $validated['token']);
+        if (! $path) {
+            return response()->json(['message' => 'File pratinjau sudah kedaluwarsa. Upload ulang.'], 410);
+        }
+        $data = $this->importService->inspect($path, $this->importName($request, $validated['token']));
+
+        return response()->json(['checks' => $this->importService->validate($data, $this->cleanMapping($validated['mapping'] ?? []))]);
+    }
+
+    private function importName(Request $request, ?string $token): string
+    {
+        return (string) $request->session()->get("savings_import_name.{$token}", '');
+    }
+
+    /** @return array<string, int|string|null> */
+    private function cleanMapping(array $raw): array
+    {
+        $mapping = collect($raw)->map(fn ($v) => $v === 'new' ? 'new' : (is_numeric($v) ? (int) $v : null))->all();
+        $validIds = Customer::employees()->whereIn('id', array_filter($mapping, 'is_int'))->pluck('id')->all();
+
+        return array_map(fn ($v) => is_int($v) && ! in_array($v, $validIds, true) ? null : $v, $mapping);
     }
 
     public function commitImport(Request $request)
@@ -238,16 +286,22 @@ class MemberContributionController extends Controller
             return to_route('savings.import')->with('error', 'File pratinjau sudah kedaluwarsa. Upload ulang.');
         }
 
-        $mapping = collect($validated['mapping'] ?? [])
-            ->map(fn ($v) => $v === 'new' ? 'new' : (is_numeric($v) ? (int) $v : null))
-            ->all();
-        $validIds = Customer::employees()->whereIn('id', array_filter($mapping, 'is_int'))->pluck('id')->all();
-        $mapping = array_map(fn ($v) => is_int($v) && ! in_array($v, $validIds, true) ? null : $v, $mapping);
+        $mapping = $this->cleanMapping($validated['mapping'] ?? []);
 
-        $summary = $this->importService->commit($this->importService->parse($path), $mapping, $request->user()->id);
+        // Validasi dulu: kesalahan (mis. total tidak cocok, pengembalian melebihi saldo) menahan penyimpanan.
+        $data = $this->importService->inspect($path, $this->importName($request, $validated['token']));
+        $checks = $this->importService->validate($data, $mapping);
+        if (ContributionImportService::hasErrors($checks)) {
+            $first = collect($checks)->firstWhere('level', 'error');
+
+            return to_route('savings.import', ['token' => $validated['token']])->with('error', 'Belum disimpan — validasi menemukan kesalahan: '.$first['title']);
+        }
+
+        $summary = $this->importService->commit($data['rows'], $mapping, $request->user()->id);
         $this->files->forget('savings', $validated['token']);
+        $request->session()->forget("savings_import_name.{$validated['token']}");
 
-        return to_route('savings.index')->with('success', "Import simpanan selesai: {$summary['saved']} catatan disimpan, {$summary['created_employees']} pegawai baru, {$summary['skipped_names']} nama dilewati.");
+        return to_route('savings.index')->with('success', "Import simpanan selesai: {$summary['saved']} catatan disimpan, {$summary['created_employees']} pegawai baru, {$summary['skipped_names']} nama dilewati".($summary['skipped_amount'] ? ' (Rp '.number_format($summary['skipped_amount'], 0, ',', '.').' tidak disimpan — pilih pegawainya lalu impor ulang, tidak dobel)' : '').'.');
     }
 
     public function template()
@@ -261,22 +315,31 @@ class MemberContributionController extends Controller
 
     public function export(Request $request)
     {
-        $year = (int) $request->query('year', now()->year);
+        $year = $request->query('year') === 'all' ? null : (int) $request->query('year', now()->year);
         $rows = $this->recapQuery($year)
-            ->whereHas('contributions', fn ($c) => $c->where('period_year', $year)->whereIn('type', MemberContribution::SAVINGS_TYPES))
+            ->whereHas('contributions', fn ($c) => $c->when($year, fn ($q) => $q->where('period_year', $year))->whereIn('type', MemberContribution::SAVINGS_TYPES))
             ->orderBy('name')
             ->get()
             ->map(fn (Customer $c) => [
                 $c->nip, $c->name, $c->employee_type, $c->employment_status,
-                (int) $c->opening_balance, (int) $c->wajib_total, (int) $c->pokok_total, (int) $c->sukarela_total,
-                (int) $c->withdrawal_total, (int) $c->savings_balance,
+                ...($year ? [(int) $c->opening_balance] : []),
+                (int) $c->pokok_total, (int) $c->wajib_total, (int) $c->sukarela_total, (int) -$c->withdrawn_total,
+                (int) $c->savings_balance,
             ])->all();
 
+        // Saldo s.d. tahun lalu + setoran tahun berjalan − penarikan = saldo akhir (semua tahun: tanpa saldo awal).
+        $headers = ['NIP', 'Nama', 'Jenis', 'Status'];
+        if ($year) {
+            $headers[] = 'Saldo s.d. '.($year - 1);
+        }
+        $suffix = $year ? ' '.$year : '';
+        $headers = [...$headers, 'Pokok'.$suffix, 'Wajib'.$suffix, 'Sukarela'.$suffix, 'Penarikan'.$suffix, $year ? 'Saldo Akhir '.$year : 'Saldo'];
+
         return Excel::download(new ArrayExport(
-            ['NIP', 'Nama', 'Jenis', 'Status', 'Saldo s.d. '.($year - 1), 'Wajib '.$year, 'Pokok '.$year, 'Sukarela '.$year, 'Penarikan '.$year, 'Saldo Akhir '.$year],
+            $headers,
             $rows,
             ['A' => '@'],
-        ), "rekap-simpanan-{$year}.xlsx");
+        ), 'rekap-simpanan-'.($year ?? 'semua-tahun').'.xlsx');
     }
 
     /**
@@ -311,20 +374,23 @@ class MemberContributionController extends Controller
         ), 'data-simpanan'.($year && $year !== 'all' ? "-{$year}" : '').'.xlsx');
     }
 
-    private function recapQuery(int $year)
+    /** @param  int|null  $year  null = semua tahun */
+    private function recapQuery(?int $year)
     {
         // Saldo s.d. tahun lalu + setoran tahun berjalan (per jenis) + penarikan = saldo akhir tahun berjalan.
         $query = Customer::employees()->select(['id', 'name', 'nip', 'employee_type', 'employment_status']);
+        $inYear = fn ($q) => $q->when($year, fn ($q) => $q->where('period_year', $year));
+        // Kolom per jenis = setoran saja; penarikan/pengembalian (nilai negatif) di kolom sendiri.
         foreach (MemberContribution::SAVINGS_TYPES as $type) {
-            $query->withSum(["contributions as {$type}_total" => fn ($q) => $q->where('type', $type)->where('period_year', $year)->where('amount', '>', 0)], 'amount');
+            $query->withSum(["contributions as {$type}_total" => fn ($q) => $inYear($q->where('type', $type))->where('amount', '>', 0)], 'amount');
         }
+        $query->withSum(['contributions as withdrawn_total' => fn ($q) => $inYear($q->whereIn('type', MemberContribution::SAVINGS_TYPES))->where('amount', '<', 0)], 'amount');
 
         return $query
-            ->withSum(['contributions as opening_balance' => fn ($q) => $q->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('period_year', '<', $year)], 'amount')
-            ->withSum(['contributions as withdrawal_total' => fn ($q) => $q->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('period_year', $year)->where('amount', '<', 0)], 'amount')
+            ->when($year, fn ($q) => $q->withSum(['contributions as opening_balance' => fn ($c) => $c->whereIn('type', MemberContribution::SAVINGS_TYPES)->where('period_year', '<', $year)], 'amount'))
             ->withSum(['contributions as savings_balance' => fn ($q) => $q
                 ->whereIn('type', MemberContribution::SAVINGS_TYPES)
-                ->where('period_year', '<=', $year)], 'amount');
+                ->when($year, fn ($q) => $q->where('period_year', '<=', $year))], 'amount');
     }
 
     /**

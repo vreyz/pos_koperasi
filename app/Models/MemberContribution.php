@@ -20,8 +20,8 @@ class MemberContribution extends Model
 
     public const SAVINGS_TYPES = [self::TYPE_POKOK, self::TYPE_WAJIB, self::TYPE_SUKARELA];
 
-    /** Urutan kolom menu Angsuran & Potongan Koperasi (seperti sheet potongan gaji). */
-    public const DEDUCTION_TYPES = [self::TYPE_PINJAMAN, self::TYPE_WAJIB, self::TYPE_POKOK, self::TYPE_SUKARELA, self::TYPE_ANGSURAN, self::TYPE_PG];
+    /** Urutan kolom menu Angsuran & Potongan Koperasi: simpanan pokok, wajib, sukarela, lalu lainnya. */
+    public const DEDUCTION_TYPES = [self::TYPE_POKOK, self::TYPE_WAJIB, self::TYPE_SUKARELA, self::TYPE_PINJAMAN, self::TYPE_ANGSURAN, self::TYPE_PG];
 
     public const TYPES = [self::TYPE_POKOK, self::TYPE_WAJIB, self::TYPE_SUKARELA, self::TYPE_ANGSURAN, self::TYPE_PINJAMAN, self::TYPE_PG];
 

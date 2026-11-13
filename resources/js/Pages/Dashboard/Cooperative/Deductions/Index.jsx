@@ -2,19 +2,21 @@ import React from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { IconReceipt2, IconUpload } from "@tabler/icons-react";
-import SortableTable from "@/Components/Cooperative/SortableTable";
+import SortableTable, { useFilteredRows } from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, PageHeader, Panel, Stat, btn, inputBase, rupiah } from "@/Components/Cooperative/ui";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-const TYPES = ["pinjaman", "wajib", "pokok", "sukarela", "angsuran", "pg"];
+const TYPES = ["pokok", "wajib", "sukarela", "pinjaman", "angsuran", "pg"]; // urutan simpanan: pokok, wajib, sukarela
 const SHORT = { pinjaman: "Simpanan Pinjaman", wajib: "Simpanan Wajib", pokok: "Simpanan Pokok", sukarela: "Simpanan Sukarela", angsuran: "Angsuran Koperasi", pg: "Potong Gaji Koperasi" };
 const num = (v) => Math.round(Number(v || 0)).toLocaleString("id-ID");
 
 export default function Index({ year, month, years, rows, typeLabels }) {
     const { can } = useAuthorization();
     const go = (params) => router.get(route("deductions.index"), { year, month, ...params }, { preserveState: true });
-    const totals = Object.fromEntries(TYPES.map((t) => [t, rows.reduce((s, r) => s + r[t], 0)]));
+    // Kartu per jenis ikut saringan tabel.
+    const view = useFilteredRows(rows, (r) => r.customer_id);
+    const totals = Object.fromEntries(TYPES.map((t) => [t, view.shown.reduce((s, r) => s + r[t], 0)]));
     const rowTotal = (r) => TYPES.reduce((s, t) => s + r[t], 0);
 
     const columns = [
@@ -58,11 +60,11 @@ export default function Index({ year, month, years, rows, typeLabels }) {
             </div>
 
             <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-                {TYPES.map((t) => <Stat key={t} label={typeLabels[t]} value={rupiah(totals[t])} />)}
+                {TYPES.map((t) => <Stat key={t} label={typeLabels[t]} value={rupiah(totals[t])} helper={view.filtered ? `sesuai saringan (${view.shown.length} orang)` : ""} />)}
             </div>
 
             <Panel title={`Potongan ${month ? MONTHS[month - 1] + " " : ""}${year} (${rows.length} pegawai)`}>
-                <SortableTable rows={rows} rowKey={(r) => r.customer_id} columns={columns} initialSort={{ key: "name", dir: "asc" }} footer={footer} emptyText="Belum ada data. Klik Impor Excel." />
+                <SortableTable rows={rows} rowKey={(r) => r.customer_id} onFilter={view.onFilter} columns={columns} initialSort={{ key: "name", dir: "asc" }} footer={footer} emptyText="Belum ada data. Klik Impor Excel." />
             </Panel>
         </>
     );

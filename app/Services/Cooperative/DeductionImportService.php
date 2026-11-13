@@ -316,6 +316,8 @@ class DeductionImportService
             foreach (array_chunk($insert, 500) as $chunk) {
                 MemberContribution::insert($chunk);
             }
+            // Hasil upload juga dijurnal otomatis (termasuk baris yang terhapus/berubah), mulai tanggal otomatis akuntansi.
+            \App\Services\Accounting\AutoJournalHooks::bulkChanged();
         });
 
         app(MemberSync::class)->syncMembers();

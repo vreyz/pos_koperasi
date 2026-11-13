@@ -22,22 +22,17 @@ use RuntimeException;
  *    memberi base × (bulan membayar / 12).
  *  - SHU Pengurus Koperasi (nominal per tahun × bulan bertugas ÷ 12) dan koreksi manual per orang
  *    dipotong dari SHU dulu.
- *  - Sisa dibagi ke jasa simpanan / pembelian / pembiayaan dana / pembiayaan barang sesuai porsi.
- *    Jasa pembiayaan diukur dari pendapatan koperasi (biaya formulir, bagi hasil, biaya lain),
- *    bukan dari cicilan/angsuran. Bagian SHU pembiayaan (dalam rupiah) paling banyak 50% dari
- *    pendapatan koperasi dari pembiayaan itu di tahun Y, supaya tidak membagi lebih dari yang didapat.
+ *  - Sisa dibagi ke jasa simpanan / pembelian / pendapatan pembiayaan sesuai porsi.
+ *    Pendapatan pembiayaan = biaya formulir pembiayaan dana + bagi hasil & biaya lain pembiayaan
+ *    barang per pegawai (bukan cicilan/angsuran). Bagian SHU pendapatan pembiayaan (dalam rupiah)
+ *    paling banyak 30% dari pendapatan pembiayaan koperasi di tahun Y, supaya tidak membagi lebih dari yang didapat.
  */
 class ShuCalculator
 {
     public const PURCHASE_STATUSES = ['paid', 'unpaid'];
 
-    /** Batas bagian SHU pembiayaan dana/barang terhadap pendapatan koperasi dari pembiayaan tersebut. */
-    public const FINANCING_SHU_MAX_SHARE = 0.5;
-
-    private const FINANCING_PORTIONS = [
-        'dana' => ['portion_financing_dana', 'Pembiayaan Dana', 'biaya formulir'],
-        'barang' => ['portion_financing_barang', 'Pembiayaan Barang', 'bagi hasil + biaya lain'],
-    ];
+    /** Batas bagian SHU pendapatan pembiayaan terhadap pendapatan pembiayaan koperasi. */
+    public const FINANCING_SHU_MAX_SHARE = 0.3;
 
     public function __construct(private readonly FinancingService $financings) {}
 
@@ -49,9 +44,9 @@ class ShuCalculator
         if ($period->isFinal()) {
             throw new RuntimeException('SHU tahun ini sudah final. Buka kunci dulu untuk menghitung ulang.');
         }
-        $portionTotal = $period->portion_savings + $period->portion_purchases + $period->portion_financing_dana + $period->portion_financing_barang;
+        $portionTotal = $period->portion_savings + $period->portion_purchases + $period->portion_financing;
         if (abs($portionTotal - 100) > 0.001) {
-            throw new RuntimeException('Total porsi simpanan + belanja + pembiayaan dana + pembiayaan barang harus 100%.');
+            throw new RuntimeException('Total porsi simpanan + belanja + pendapatan pembiayaan harus 100%.');
         }
 
         $data = $this->collect($period);
@@ -68,7 +63,7 @@ class ShuCalculator
             throw new RuntimeException(implode(' ', $capErrors));
         }
 
-        $components = ['savings' => 'portion_savings', 'purchases' => 'portion_purchases', 'dana' => 'portion_financing_dana', 'barang' => 'portion_financing_barang'];
+        $components = ['savings' => 'portion_savings', 'purchases' => 'portion_purchases', 'financing' => 'portion_financing'];
         $pools = [];
         $sums = [];
         foreach ($components as $key => $portion) {
@@ -76,7 +71,7 @@ class ShuCalculator
             $sums[$key] = array_sum($data[$key]);
         }
 
-        $ids = array_unique(array_merge(array_keys($bases), array_keys($data['savings']), array_keys($data['purchases']), array_keys($data['dana']), array_keys($data['barang']), array_keys($board), $adjustments->keys()->all()));
+        $ids = array_unique(array_merge(array_keys($bases), array_keys($data['savings']), array_keys($data['purchases']), array_keys($data['financing']), array_keys($board), $adjustments->keys()->all()));
         $now = now();
         $rows = [];
         $distributed = 0.0;
@@ -105,19 +100,18 @@ class ShuCalculator
                 'customer_id' => $customerId,
                 'savings_amount' => $amounts['savings'],
                 'purchase_amount' => $amounts['purchases'],
-                'financing_dana_amount' => $amounts['dana'],
-                'financing_barang_amount' => $amounts['barang'],
+                'financing_dana_amount' => $data['dana'][$customerId] ?? 0,
+                'financing_barang_amount' => $data['barang'][$customerId] ?? 0,
+                'financing_amount' => $amounts['financing'],
                 'months_paid' => $data['months'][$customerId] ?? 0,
                 'savings_share' => $shares['savings'],
                 'purchase_share' => $shares['purchases'],
-                'financing_dana_share' => $shares['dana'],
-                'financing_barang_share' => $shares['barang'],
+                'financing_share' => $shares['financing'],
                 'base_amount' => $base,
                 'board_amount' => $boardAmount,
                 'shu_savings' => round($shu['savings'], 2),
                 'shu_purchases' => round($shu['purchases'], 2),
-                'shu_financing_dana' => round($shu['dana'], 2),
-                'shu_financing_barang' => round($shu['barang'], 2),
+                'shu_financing' => round($shu['financing'], 2),
                 'adjustment_amount' => $extra,
                 'adjustment_note' => $adjustment?->note,
                 'total' => round($total, 2),
@@ -169,21 +163,21 @@ class ShuCalculator
             'base_total' => array_sum($bases),
             'purchase_total' => array_sum($data['purchases']),
             'purchase_buyers' => count($data['purchases']),
-            'financing_dana_total' => array_sum($data['dana']),
-            'financing_barang_total' => array_sum($data['barang']),
-            // Pendapatan koperasi dari semua pembiayaan di tahun Y (dasar batas 50% bagian SHU pembiayaan).
-            'financing_dana_income' => $this->financingIncome('dana', $period->year),
-            'financing_barang_income' => $this->financingIncome('barang', $period->year),
+            'financing_total' => array_sum($data['financing']),
+            // Pendapatan koperasi dari semua pembiayaan di tahun Y (dasar batas 30% bagian SHU pendapatan pembiayaan).
+            'financing_dana_income' => $danaIncome = $this->financingIncome('dana', $period->year),
+            'financing_barang_income' => $barangIncome = $this->financingIncome('barang', $period->year),
+            'financing_income' => $danaIncome + $barangIncome,
             'financing_max_share' => self::FINANCING_SHU_MAX_SHARE,
             'adjustment_total' => (int) $adjustments->sum('amount'),
             'board_total' => array_sum($this->boardBonuses($period)),
-            // Pegawai aktif yang belanja di tahun Y tapi tidak tercatat iuran di tahun Y (bahan pertimbangan pengecualian).
+            // Pegawai aktif yang belanja di tahun Y tapi tidak tercatat simpanan di tahun Y (bahan pertimbangan pengecualian).
             'buyers_without_dues' => collect($data['purchases'])->diffKeys($payers)->map(fn ($amount, $id) => ['customer_id' => $id, 'amount' => $amount])->values()->all(),
         ];
     }
 
     /**
-     * Bagian SHU pembiayaan dana/barang (rupiah) yang melebihi 50% pendapatan koperasi dari pembiayaan itu.
+     * Bagian SHU pendapatan pembiayaan (rupiah) yang melebihi 30% pendapatan pembiayaan koperasi (dana + barang).
      * Tanpa $remainder, sisa SHU dihitung dari pengaturan periode (dipakai saat menyimpan pengaturan).
      *
      * @return array<string, string> kolom porsi => pesan
@@ -196,22 +190,19 @@ class ShuCalculator
         }
         $remainder = max(0.0, $remainder);
 
-        $errors = [];
-        foreach (self::FINANCING_PORTIONS as $type => [$field, $label, $source]) {
-            $pool = $remainder * $period->{$field} / 100;
-            if ($pool <= 0) {
-                continue;
-            }
-            $income = $this->financingIncome($type, $period->year);
-            $cap = $income * self::FINANCING_SHU_MAX_SHARE;
-            if ($pool > $cap + 0.5) {
-                $maxPercent = $remainder > 0 ? floor($cap / $remainder * 10000) / 100 : 0;
-                $errors[$field] = "Bagian SHU {$label} {$period->{$field}}% = {$this->rupiah((int) round($pool))} melebihi 50% pendapatan {$label} {$period->year} "
-                    ."({$source} {$this->rupiah($income)}, maksimal {$this->rupiah((int) floor($cap))}). Isi paling banyak ".str_replace('.', ',', (string) $maxPercent).'%.';
-            }
+        $pool = $remainder * $period->portion_financing / 100;
+        if ($pool <= 0) {
+            return [];
         }
+        $income = $this->financingIncome('dana', $period->year) + $this->financingIncome('barang', $period->year);
+        $cap = $income * self::FINANCING_SHU_MAX_SHARE;
+        if ($pool <= $cap + 0.5) {
+            return [];
+        }
+        $maxPercent = $remainder > 0 ? floor($cap / $remainder * 10000) / 100 : 0;
 
-        return $errors;
+        return ['portion_financing' => "Bagian SHU Pendapatan Pembiayaan {$period->portion_financing}% = {$this->rupiah((int) round($pool))} melebihi ".(self::FINANCING_SHU_MAX_SHARE * 100)."% pendapatan pembiayaan {$period->year} "
+            ."(biaya formulir + bagi hasil + biaya lain {$this->rupiah($income)}, maksimal {$this->rupiah((int) floor($cap))}). Isi paling banyak ".str_replace('.', ',', (string) $maxPercent).'%.'];
     }
 
     private function financingIncome(string $type, int $year): int
@@ -220,7 +211,7 @@ class ShuCalculator
     }
 
     /**
-     * @return array{active: array<int, ?string>, months: array<int, int>, savings: array<int, int>, purchases: array<int, int>, dana: array<int, int>, barang: array<int, int>}
+     * @return array{active: array<int, ?string>, months: array<int, int>, savings: array<int, int>, purchases: array<int, int>, dana: array<int, int>, barang: array<int, int>, financing: array<int, int>}
      */
     private function collect(ShuPeriod $period): array
     {
@@ -263,7 +254,13 @@ class ShuCalculator
 
         $purchases = array_intersect_key($this->purchases($period, $excluded), $active);
 
-        return compact('active', 'months', 'savings', 'purchases', 'dana', 'barang');
+        // Pendapatan pembiayaan per pegawai = dana (biaya formulir) + barang (bagi hasil + biaya lain).
+        $financing = $dana;
+        foreach ($barang as $id => $amount) {
+            $financing[$id] = ($financing[$id] ?? 0) + $amount;
+        }
+
+        return compact('active', 'months', 'savings', 'purchases', 'dana', 'barang', 'financing');
     }
 
     /**
@@ -274,7 +271,7 @@ class ShuCalculator
         $bases = [];
         $participants = $period->base_requires_savings
             ? array_keys($data['months'])
-            : array_unique(array_merge(array_keys($data['months']), array_keys($data['purchases']), array_keys($data['dana']), array_keys($data['barang'])));
+            : array_unique(array_merge(array_keys($data['months']), array_keys($data['purchases']), array_keys($data['financing'])));
 
         foreach ($participants as $customerId) {
             if (! $period->base_for_ppnpn && ($data['active'][$customerId] ?? null) === 'PPNPN') {

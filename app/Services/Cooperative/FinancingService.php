@@ -87,7 +87,12 @@ class FinancingService
         return sprintf('%02d/KOP/%s/%s/%d', $last + 1, $code, $roman, $year);
     }
 
-    public function advance(Financing $financing, string $step, int $userId): void
+    /**
+     * Naikkan status satu tahap. Bila atasan tidak login, akun yang berwenang mencatat atas namanya:
+     * $signer = nama pejabat yang menyetujui (kosong = akun pencatat sendiri), $date = tanggal persetujuan
+     * (boleh mundur, tidak boleh ke depan). Akun pencatat & waktu pencatatan tetap disimpan.
+     */
+    public function advance(Financing $financing, string $step, int $userId, ?string $signer = null, ?string $date = null): void
     {
         $rule = self::STEPS[$step] ?? throw new RuntimeException('Langkah tidak dikenal.');
         if ($financing->status !== $rule['from']) {
@@ -96,16 +101,49 @@ class FinancingService
         $financing->update([
             'status' => $rule['to'],
             "{$rule['column']}_by" => $userId,
-            "{$rule['column']}_at" => now(),
+            "{$rule['column']}_at" => $this->decisionDate($financing, $date, $rule['column']),
+            "{$rule['column']}_signer" => $this->signer($signer),
+            "{$rule['column']}_recorded_at" => now(),
         ]);
     }
 
-    public function reject(Financing $financing, string $reason, int $userId): void
+    public function reject(Financing $financing, string $reason, int $userId, ?string $signer = null, ?string $date = null): void
     {
         if (! in_array($financing->status, ['pengajuan', 'diperiksa', 'direview', 'disetujui'], true)) {
             throw new RuntimeException('Pembiayaan yang sudah dicairkan tidak bisa ditolak.');
         }
-        $financing->update(['status' => 'ditolak', 'rejection_reason' => $reason, 'rejected_by' => $userId, 'rejected_at' => now()]);
+        $financing->update(['status' => 'ditolak', 'rejection_reason' => $reason, 'rejected_by' => $userId,
+            'rejected_at' => $this->decisionDate($financing, $date, 'rejected'), 'rejected_signer' => $this->signer($signer), 'rejected_recorded_at' => now()]);
+    }
+
+    private function signer(?string $signer): ?string
+    {
+        $signer = trim(preg_replace('/\s+/', ' ', (string) $signer));
+
+        return $signer === '' ? null : mb_substr($signer, 0, 120);
+    }
+
+    /** Tanggal keputusan: hari ini bila kosong; tidak boleh sebelum tahap sebelumnya / tanggal pengajuan, tidak boleh ke depan. */
+    private function decisionDate(Financing $financing, ?string $date, string $column): Carbon
+    {
+        if (! $date) {
+            return now();
+        }
+        $at = Carbon::parse($date);
+        $at = $at->isToday() ? now() : $at->setTime(12, 0);
+        if ($at->isAfter(now()->endOfDay())) {
+            throw new RuntimeException('Tanggal persetujuan tidak boleh setelah hari ini.');
+        }
+        $previous = match ($column) {
+            'reviewed' => $financing->checked_at,
+            'approved' => $financing->reviewed_at,
+            default => null,
+        } ?? $financing->applied_at;
+        if ($previous && $at->copy()->endOfDay()->isBefore(Carbon::parse($previous)->startOfDay())) {
+            throw new RuntimeException('Tanggal persetujuan tidak boleh sebelum '.Carbon::parse($previous)->format('d/m/Y').' (tahap sebelumnya / tanggal pengajuan).');
+        }
+
+        return $at;
     }
 
     /**
@@ -245,12 +283,15 @@ class FinancingService
             ->whereYear('financing_installments.due_month', $year)
             // Cicilan yang dilunasi sekaligus (pelunasan dipercepat / dipotong dari pencairan baru) tidak diharapkan muncul di potongan gaji.
             ->where(fn ($q) => $q->whereNull('financing_installments.paid_source')->orWhere('financing_installments.paid_source', '!=', 'pelunasan'))
-            ->get(['financings.customer_id', 'financings.type', 'financing_installments.due_month', 'financing_installments.amount', 'financing_installments.paid_at']);
+            ->get(['financings.customer_id', 'financings.type', 'financing_installments.due_month', 'financing_installments.amount', 'financing_installments.paid_at', 'financing_installments.paid_source']);
         foreach ($installments as $i) {
             $key = $i->customer_id.'|'.(int) Carbon::parse($i->due_month)->month;
-            $rows[$key] ??= ['customer_id' => $i->customer_id, 'month' => (int) Carbon::parse($i->due_month)->month, 'scheduled' => 0, 'marked_paid' => 0, 'deducted' => 0, 'types' => []];
+            $rows[$key] ??= ['customer_id' => $i->customer_id, 'month' => (int) Carbon::parse($i->due_month)->month, 'scheduled' => 0, 'marked_paid' => 0, 'paid_elsewhere' => 0, 'deducted' => 0, 'types' => []];
             $rows[$key]['scheduled'] += $i->amount;
             $rows[$key]['marked_paid'] += $i->paid_at ? $i->amount : 0;
+            if ($i->paid_at && $i->paid_source === 'potong_gaji' && Carbon::parse($i->paid_at)->format('Y-m') !== Carbon::parse($i->due_month)->format('Y-m')) {
+                $rows[$key]['paid_elsewhere'] += $i->amount;
+            }
             $rows[$key]['types'][$i->type] = true;
         }
 
@@ -262,7 +303,7 @@ class FinancingService
             ->get()
             ->each(function ($c) use (&$rows) {
                 $key = $c->customer_id.'|'.(int) $c->period_month;
-                $rows[$key] ??= ['customer_id' => (int) $c->customer_id, 'month' => (int) $c->period_month, 'scheduled' => 0, 'marked_paid' => 0, 'deducted' => 0, 'types' => []];
+                $rows[$key] ??= ['customer_id' => (int) $c->customer_id, 'month' => (int) $c->period_month, 'scheduled' => 0, 'marked_paid' => 0, 'paid_elsewhere' => 0, 'deducted' => 0, 'types' => []];
                 $rows[$key]['deducted'] += (int) $c->total;
             });
 
@@ -278,11 +319,12 @@ class FinancingService
             $row['difference'] = $row['deducted'] === 0 && $person?->employee_type === 'PPNPN' ? 0 : $diff;
             $row['note'] = match (true) {
                 $row['deducted'] === 0 && $row['employee_type'] === 'PPNPN' => 'PPNPN: dibayar di luar potongan gaji (cek bukti transfer)',
-                $row['scheduled'] === 0 => 'Ada potongan gaji, tidak ada jadwal cicilan (pembiayaan belum tercatat?)',
+                $row['scheduled'] > 0 && $row['paid_elsewhere'] >= $row['scheduled'] => 'Dilunasi dari potongan bulan lain (tunggakan/bayar di muka)',
+                $row['scheduled'] === 0 && $row['deducted'] > 0 => 'Ada potongan gaji, tidak ada jadwal cicilan bulan ini: dipakai untuk tunggakan/cicilan berikutnya; bila tidak punya pembiayaan, cek pencatatan',
                 $row['deducted'] === 0 && $row['marked_paid'] > 0 => 'Tercatat lunas di monitoring, tapi tidak ada potongan gaji',
                 $row['deducted'] === 0 => 'Belum dipotong',
                 $diff < 0 => 'Potongan kurang dari jadwal',
-                $diff > 0 => 'Potongan lebih dari jadwal',
+                $diff > 0 => 'Potongan lebih dari jadwal: dipakai untuk tunggakan, lalu cicilan berikutnya',
                 $row['marked_paid'] < $row['scheduled'] => 'Sudah dipotong, belum ditandai lunas',
                 default => 'Cocok',
             };
@@ -291,29 +333,137 @@ class FinancingService
         })->sortBy([['name', 'asc'], ['month', 'asc']])->values()->all();
     }
 
+    /** Sumber lunas yang ditentukan dari potongan gaji (boleh dihitung ulang). */
+    public const PAYROLL_SOURCES = ['potong_gaji'];
+
+    /** Cicilan lunas lewat impor data pembiayaan: dianggap dibayar dari potongan gaji bulan jatuh temponya. */
+    private const FIXED_PAYROLL_SOURCES = ['import'];
+
+    private array $planCache = [];
+
     /**
-     * Tandai lunas cicilan yang potongan gajinya sudah sesuai jadwal di tahun Y.
+     * Rencana alokasi potongan angsuran (realisasi) satu pegawai. Uang potongan setiap bulan
+     * mengisi cicilan berurutan menurut jatuh tempo: tunggakan terlama dulu, lalu cicilan bulan itu,
+     * lalu cicilan berikutnya (bayar di muka). Cicilan yang terisi penuh dianggap lunas pada akhir
+     * bulan potongan (tanggal riil), bukan tanggal jatuh tempo. Sisa setelah semua cicilan lunas =
+     * kelebihan potong. Cicilan yang dilunasi lewat transfer/pelunasan tidak menyerap potongan.
+     *
+     * @return array{paid: array<int, string>, split: array<string, array<string, int>>, excess: int}
+     *   paid: installment_id => tanggal lunas; split: 'Y-m' => [jenis (dana|barang|lebih) => jumlah]
      */
-    public function markPaidFromPayroll(int $year): int
+    public function payrollPlan(int $customerId): array
     {
-        $count = 0;
-        foreach ($this->reconcile($year) as $row) {
-            if ($row['scheduled'] > 0 && $row['deducted'] >= $row['scheduled'] && $row['marked_paid'] < $row['scheduled']) {
-                $ids = FinancingInstallment::query()
-                    ->join('financings', 'financings.id', '=', 'financing_installments.financing_id')
-                    ->where('financings.customer_id', $row['customer_id'])
-                    ->whereIn('financings.status', Financing::DISBURSED_STATUSES)
-                    ->whereYear('financing_installments.due_month', $year)
-                    ->whereMonth('financing_installments.due_month', $row['month'])
-                    ->whereNull('financing_installments.paid_at')
-                    ->pluck('financing_installments.id');
-                foreach (FinancingInstallment::whereIn('id', $ids)->get() as $installment) {
-                    $this->setPaid($installment, true, 'potong_gaji', $installment->due_month->toDateString());
-                    $count++;
+        if (isset($this->planCache[$customerId])) {
+            return $this->planCache[$customerId];
+        }
+        $deductions = MemberContribution::query()
+            ->where('customer_id', $customerId)->where('type', MemberContribution::TYPE_ANGSURAN)
+            ->groupBy('period_year', 'period_month')
+            ->selectRaw('period_year, period_month, SUM(amount) as total')
+            ->orderBy('period_year')->orderBy('period_month')->get();
+
+        $queue = FinancingInstallment::query()
+            ->join('financings', 'financings.id', '=', 'financing_installments.financing_id')
+            ->where('financings.customer_id', $customerId)
+            ->whereIn('financings.status', Financing::DISBURSED_STATUSES)
+            ->where(fn ($q) => $q->whereNull('financing_installments.paid_at')
+                ->orWhereIn('financing_installments.paid_source', [...self::PAYROLL_SOURCES, ...self::FIXED_PAYROLL_SOURCES]))
+            ->orderBy('financing_installments.due_month')->orderBy('financings.id')->orderBy('financing_installments.seq')
+            ->get(['financing_installments.id', 'financing_installments.due_month', 'financing_installments.amount',
+                'financing_installments.paid_source', 'financings.type', 'financings.disbursed_at'])
+            ->map(fn ($i) => ['id' => $i->id, 'due' => Carbon::parse($i->due_month)->format('Y-m'), 'amount' => (int) $i->amount, 'type' => $i->type,
+                'since' => $i->disbursed_at ? Carbon::parse($i->disbursed_at)->format('Y-m') : '0000-00',
+                'fixed' => in_array($i->paid_source, self::FIXED_PAYROLL_SOURCES, true), 'filled' => 0])
+            ->all();
+
+        $paid = [];
+        $split = [];
+        $excess = 0;
+        foreach ($deductions as $d) {
+            $period = sprintf('%04d-%02d', $d->period_year, $d->period_month);
+            $money = (int) $d->total;
+            if ($money <= 0) {
+                continue;
+            }
+            $date = Carbon::parse($period.'-01')->endOfMonth()->toDateString();
+            foreach ($queue as &$item) {
+                if ($money <= 0) {
+                    break;
                 }
+                $open = $item['amount'] - $item['filled'];
+                // Cicilan yang sudah lunas dari impor data pembiayaan hanya menyerap potongan sejak bulan jatuh temponya.
+                // Uang potongan hanya untuk pinjaman yang sudah cair saat bulan potong.
+                if ($open <= 0 || $item['since'] > $period || ($item['fixed'] && $item['due'] > $period)) {
+                    continue;
+                }
+                $take = min($open, $money);
+                $item['filled'] += $take;
+                $money -= $take;
+                $split[$period][$item['type']] = ($split[$period][$item['type']] ?? 0) + $take;
+                if (! $item['fixed'] && $item['filled'] >= $item['amount']) {
+                    $paid[$item['id']] = $date;
+                }
+            }
+            unset($item);
+            if ($money > 0) {
+                $split[$period]['lebih'] = ($split[$period]['lebih'] ?? 0) + $money;
+                $excess += $money;
             }
         }
 
+        return $this->planCache[$customerId] = ['paid' => $paid, 'split' => $split, 'excess' => $excess];
+    }
+
+    /**
+     * Tandai lunas/belum cicilan sesuai alokasi potongan gaji (lihat payrollPlan). Aman diulang:
+     * hasilnya selalu sama dengan data potongan terbaru.
+     *
+     * @param  list<int>|null  $customerIds
+     * @return int jumlah cicilan yang baru ditandai lunas
+     */
+    public function allocatePayroll(?array $customerIds = null): int
+    {
+        $this->planCache = [];
+        $customers = $customerIds ?? MemberContribution::where('type', MemberContribution::TYPE_ANGSURAN)->distinct()->pluck('customer_id')
+            ->merge(FinancingInstallment::whereIn('paid_source', self::PAYROLL_SOURCES)->join('financings', 'financings.id', '=', 'financing_installments.financing_id')->pluck('financings.customer_id'))
+            ->unique()->values()->all();
+        $count = 0;
+        foreach ($customers as $customerId) {
+            $plan = $this->payrollPlan((int) $customerId);
+            DB::transaction(function () use ($customerId, $plan, &$count) {
+                $touched = [];
+                $current = FinancingInstallment::query()
+                    ->join('financings', 'financings.id', '=', 'financing_installments.financing_id')
+                    ->where('financings.customer_id', $customerId)
+                    ->whereIn('financings.status', Financing::DISBURSED_STATUSES)
+                    ->where(fn ($q) => $q->whereNull('financing_installments.paid_at')->orWhereIn('financing_installments.paid_source', self::PAYROLL_SOURCES))
+                    ->get(['financing_installments.*']);
+                foreach ($current as $i) {
+                    $want = $plan['paid'][$i->id] ?? null;
+                    $have = $i->paid_at ? $i->paid_at->toDateString() : null;
+                    if ($want === $have) {
+                        continue;
+                    }
+                    $i->update(['paid_at' => $want, 'paid_source' => $want ? 'potong_gaji' : null]);
+                    $touched[$i->financing_id] = true;
+                    $count += ($want && ! $have) ? 1 : 0;
+                }
+                foreach (array_keys($touched) as $fid) {
+                    $this->refreshStatus(Financing::find($fid));
+                }
+            });
+        }
+        $this->planCache = [];
+
         return $count;
+    }
+
+    /**
+     * Dipanggil setelah impor potongan. Tidak lagi per bulan: kelebihan potongan melunasi tunggakan
+     * atau cicilan berikutnya, kekurangan menunggu potongan bulan berikutnya.
+     */
+    public function markPaidFromPayroll(int $year): int
+    {
+        return $this->allocatePayroll();
     }
 }

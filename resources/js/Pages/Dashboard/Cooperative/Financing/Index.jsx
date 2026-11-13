@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { IconAlertTriangle, IconChecklist, IconCash, IconDownload, IconPlus, IconPrinter, IconSettings, IconUpload } from "@tabler/icons-react";
-import SortableTable from "@/Components/Cooperative/SortableTable";
+import SortableTable, { useFilteredRows } from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, Field, PageHeader, Panel, Stat, btn, inputClass, rupiah, useFlashToasts } from "@/Components/Cooperative/ui";
 import { MoneyInput, PercentInput } from "@/Components/Cooperative/inputs";
@@ -30,7 +30,21 @@ const SETTING_FIELDS = {
     ],
 };
 
-export default function Index({ type, typeLabel, financings, statusLabels, summary, settings, templates = {} }) {
+export default function Index({ type, typeLabel, financings, statusLabels, summary: serverSummary, settings, templates = {} }) {
+    // Kartu ringkasan ikut saringan tabel (pendapatan tahun ini tetap dari server: dihitung dari jadwal cicilan).
+    const view = useFilteredRows(financings, (f) => f.id);
+    const summary = useMemo(() => {
+        if (!view.filtered) return serverSummary;
+        const running = view.shown.filter((f) => f.status === "berjalan");
+        return {
+            ...serverSummary,
+            active: running.length,
+            outstanding: running.reduce((s, f) => s + Number(f.outstanding || 0), 0),
+            bad_debt: running.filter((f) => f.is_bad_debt).length,
+            waiting: view.shown.filter((f) => ["pengajuan", "diperiksa", "direview", "disetujui"].includes(f.status)).length,
+        };
+    }, [view, serverSummary]);
+    const fNote = view.filtered ? " · sesuai saringan" : "";
     useFlashToasts();
     const { can } = useAuthorization();
     const [showSettings, setShowSettings] = useState(false);
@@ -110,11 +124,11 @@ export default function Index({ type, typeLabel, financings, statusLabels, summa
             />
 
             <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
-                <Stat label="Berjalan" value={summary.active} />
-                <Stat label="Sisa piutang" value={rupiah(summary.outstanding)} helper="belum dibayar" />
-                <Stat label="Macet" value={summary.bad_debt} />
-                <Stat label="Menunggu proses" value={summary.waiting} helper="pengajuan s.d. siap cair" />
-                <Stat label={`Pendapatan ${new Date().getFullYear()}`} value={rupiah(summary.income_year)} helper={type === "dana" ? "biaya formulir" : "bagi hasil + biaya lain"} />
+                <Stat label="Berjalan" value={summary.active} helper={fNote.slice(3)} />
+                <Stat label="Sisa piutang" value={rupiah(summary.outstanding)} helper={`belum dibayar${fNote}`} />
+                <Stat label="Macet" value={summary.bad_debt} helper={fNote.slice(3)} />
+                <Stat label="Menunggu proses" value={summary.waiting} helper={`pengajuan s.d. siap cair${fNote}`} />
+                <Stat label={`Pendapatan ${new Date().getFullYear()}`} value={rupiah(summary.income_year)} helper={`${type === "dana" ? "biaya formulir" : "bagi hasil + biaya lain"}${view.filtered ? " · semua data (tidak ikut saringan)" : ""}`} />
             </div>
 
             {showSettings && (
@@ -172,6 +186,7 @@ export default function Index({ type, typeLabel, financings, statusLabels, summa
                 <SortableTable
                     rows={financings}
                     rowKey={(f) => f.id}
+                    onFilter={view.onFilter}
                     columns={columns}
                     initialSort={{ key: "disbursed_at", dir: "desc" }}
                     emptyText="Belum ada data. Buat pengajuan baru atau impor dari Excel."

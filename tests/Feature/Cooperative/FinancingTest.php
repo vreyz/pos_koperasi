@@ -71,6 +71,15 @@ class FinancingTest extends TestCase
         $this->assertSame(['07/KOP/FPD/2025', '08/KOP/FPD/X/2025', '09/KOP/FPD/XI/2025', '01/KOP/FPD/I/2026'],
             Financing::where('type', 'dana')->orderBy('id')->pluck('number')->all());
         $this->assertSame('01/KOP/FPB/X/2025', Financing::where('type', 'barang')->value('number'));
+
+        // Form langsung terisi nomor otomatis; ganti tanggal → nomor ikut (bulan romawi & urutan tahun itu).
+        $this->actingAs($creator)->get(route('financing.create', 'dana'))->assertInertia(fn (Assert $page) => $page->has('nextNumber'));
+        $this->actingAs($creator)->getJson(route('financing.next-number', ['type' => 'dana', 'date' => '2025-12-01']))
+            ->assertOk()->assertJson(['number' => '10/KOP/FPD/XII/2025']);
+        // Nomor yang sudah dipakai ditolak.
+        $this->actingAs($creator)->post(route('financing.store', 'dana'), [
+            'customer_id' => $budi->id, 'principal' => 5000000, 'tenor' => 12, 'applied_at' => '2025-12-01', 'number' => '08/KOP/FPD/X/2025',
+        ])->assertSessionHasErrors('number');
     }
 
     public function test_settings_are_separate_per_type_and_coop_identity_comes_from_profile_and_sk(): void
@@ -140,6 +149,38 @@ class FinancingTest extends TestCase
         }
         $this->actingAs($creator)->get(route('financing.blank-form', ['type' => 'dana', 'ppnpn' => 1]))->assertOk()
             ->assertInertia(fn (Assert $page) => $page->where('ppnpn', true)->where('settings.financing_fee_ppnpn', 150000));
+    }
+
+    public function test_one_authorized_user_records_approvals_on_behalf_of_superiors(): void
+    {
+        // Atasan tidak login: satu akun (staf + hak atasan) mencatat tiap tahap atas nama pejabatnya, dengan tanggal keputusan.
+        $f = Financing::create(app(FinancingService::class)->compute(['type' => 'dana', 'principal' => 5000000, 'tenor' => 5], $this->person('Budi'))
+            + ['type' => 'dana', 'customer_id' => Customer::first()->id, 'status' => 'pengajuan', 'applied_at' => now()->subDays(10)->toDateString()]);
+        $staff = $this->user(['financing-create', 'financing-check', 'financing-review', 'financing-approve']);
+
+        $this->actingAs($staff)->post(route('financing.advance', [$f, 'check']), ['decided_at' => now()->subDays(4)->toDateString()])->assertSessionHas('success');
+        $this->actingAs($staff)->post(route('financing.advance', [$f, 'review']), ['signer' => 'Kepala Unit Contoh', 'decided_at' => now()->subDays(3)->toDateString()])
+            ->assertSessionHas('success');
+        // Tanggal ke depan / sebelum tahap sebelumnya ditolak.
+        $this->actingAs($staff)->post(route('financing.advance', [$f, 'approve']), ['signer' => 'Ketua Contoh', 'decided_at' => now()->addDay()->toDateString()])
+            ->assertSessionHas('error');
+        $this->actingAs($staff)->post(route('financing.advance', [$f, 'approve']), ['signer' => 'Ketua Contoh', 'decided_at' => now()->subDays(5)->toDateString()])
+            ->assertSessionHas('error');
+        $this->actingAs($staff)->post(route('financing.advance', [$f, 'approve']), ['signer' => '  Ketua   Contoh ', 'decided_at' => now()->subDays(2)->toDateString()])
+            ->assertSessionHas('success');
+
+        $f->refresh();
+        $this->assertSame('disetujui', $f->status);
+        $this->assertNull($f->checked_signer, 'tanpa nama = akun pencatat sendiri');
+        $this->assertSame($staff->id, $f->checked_by);
+        $this->assertSame('Kepala Unit Contoh', $f->reviewed_signer);
+        $this->assertSame('Ketua Contoh', $f->approved_signer);
+        $this->assertSame($staff->id, $f->approved_by, 'akun pencatat tetap tersimpan');
+        $this->assertSame(now()->subDays(2)->toDateString(), $f->approved_at->toDateString());
+        $this->assertTrue($f->approved_recorded_at->isToday());
+
+        $this->actingAs($staff)->get(route('financing.show', $f))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('financing.approved_signer', 'Ketua Contoh')->has('signers.suggestions'));
     }
 
     public function test_rejection_requires_reason_and_blocks_disbursement(): void

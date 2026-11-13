@@ -41,8 +41,7 @@ class ShuCalculationTest extends TestCase
             'base_per_person' => 100000,
             'portion_savings' => 70,
             'portion_purchases' => 30,
-            'portion_financing_dana' => 0,
-            'portion_financing_barang' => 0,
+            'portion_financing' => 0,
             'savings_types' => MemberContribution::SAVINGS_TYPES,
             'savings_period' => 'year',
             'sales_source' => 'excel',
@@ -269,24 +268,27 @@ class ShuCalculationTest extends TestCase
         $dana = Financing::create($service->compute(['type' => 'dana', 'principal' => 15000000, 'tenor' => 10], $b) + ['type' => 'dana', 'customer_id' => $b->id, 'status' => 'berjalan', 'disbursed_at' => '2025-02-10', 'first_due_month' => '2025-03-01']);
         $service->buildSchedule($dana, 3);
         $barang = Financing::create($service->compute(['type' => 'barang', 'principal' => 12000000, 'tenor' => 12, 'margin_percent' => 7.5, 'admin_fee' => 0], $a) + ['type' => 'barang', 'customer_id' => $a->id, 'status' => 'berjalan', 'disbursed_at' => '2025-06-10', 'first_due_month' => '2025-07-01']);
-        $service->buildSchedule($barang, 3);  // 3 cicilan × bagi hasil 75.000 → batas 50% = 112.500 ≥ bagian barang 100rb
+        $service->buildSchedule($barang, 3);  // 3 cicilan × bagi hasil 75.000
 
-        $period = $this->period(['sales_source' => 'pos', 'total_shu' => 1200000, 'portion_savings' => 50, 'portion_purchases' => 30, 'portion_financing_dana' => 10, 'portion_financing_barang' => 10, 'rounding' => 'ceil']);
+        $period = $this->period(['sales_source' => 'pos', 'total_shu' => 1200000, 'portion_savings' => 50, 'portion_purchases' => 30, 'portion_financing' => 20, 'rounding' => 'ceil']);
         app(ShuCalculator::class)->calculate($period);
         $alloc = $period->allocations()->get()->keyBy('customer_id');
 
         $this->assertSame(400000, $alloc[$a->id]->purchase_amount);
         $this->assertSame(750000, $alloc[$b->id]->financing_dana_amount);
         $this->assertSame(225000, $alloc[$a->id]->financing_barang_amount);
-        // sisa 1jt: simpanan 500rb rata, belanja 300rb A, dana 100rb B, barang 100rb A
-        $this->assertEqualsWithDelta(100000 + 250000 + 300000 + 100000, $alloc[$a->id]->total, 0.01);
-        $this->assertEqualsWithDelta(100000 + 250000 + 100000, $alloc[$b->id]->total, 0.01);
-        $this->assertSame(750000, $alloc[$a->id]->total_rounded);
+        $this->assertSame(750000, $alloc[$b->id]->financing_amount);
+        $this->assertSame(225000, $alloc[$a->id]->financing_amount);
+        // sisa 1jt: simpanan 500rb rata, belanja 300rb A, pendapatan pembiayaan 200rb dibagi 750rb (B) : 225rb (A)
+        $this->assertEqualsWithDelta(200000 * 225 / 975, $alloc[$a->id]->shu_financing, 0.01);
+        $this->assertEqualsWithDelta(100000 + 250000 + 300000 + 200000 * 225 / 975, $alloc[$a->id]->total, 0.01);
+        $this->assertEqualsWithDelta(100000 + 250000 + 200000 * 750 / 975, $alloc[$b->id]->total, 0.01);
+        $this->assertSame(697000, $alloc[$a->id]->total_rounded);
     }
 
-    public function test_financing_portion_cannot_exceed_half_of_financing_income(): void
+    public function test_financing_portion_cannot_exceed_30_percent_of_financing_income(): void
     {
-        // 3 pegawai pinjam dana 10 jt → biaya formulir 3 × 500rb = 1,5 jt → bagian SHU dana maks 750rb.
+        // 3 pegawai pinjam dana 10 jt → biaya formulir 3 × 500rb = 1,5 jt → bagian SHU pendapatan pembiayaan maks 30% = 450rb.
         $service = app(FinancingService::class);
         foreach (['A', 'B', 'C'] as $name) {
             $person = $this->person($name);
@@ -295,27 +297,26 @@ class ShuCalculationTest extends TestCase
                 + ['type' => 'dana', 'customer_id' => $person->id, 'status' => 'berjalan', 'disbursed_at' => '2025-03-10', 'first_due_month' => '2025-04-01']);
         }
         // Sisa SHU = 10,3 jt − base 300rb = 10 jt.
-        $period = $this->period(['total_shu' => 10300000, 'portion_savings' => 60, 'portion_purchases' => 30, 'portion_financing_dana' => 10]);
+        $period = $this->period(['total_shu' => 10300000, 'portion_savings' => 60, 'portion_purchases' => 30, 'portion_financing' => 10]);
         $calculator = app(ShuCalculator::class);
 
-        $this->assertSame(1500000, $calculator->summary($period)['financing_dana_income']);
+        $this->assertSame(1500000, $calculator->summary($period)['financing_income']);
         $errors = $calculator->financingCapErrors($period);
-        $this->assertArrayHasKey('portion_financing_dana', $errors);
-        $this->assertStringContainsString('Isi paling banyak 7,5%', $errors['portion_financing_dana']);
-        $this->assertArrayNotHasKey('portion_financing_barang', $errors);
+        $this->assertArrayHasKey('portion_financing', $errors);
+        $this->assertStringContainsString('Isi paling banyak 4,5%', $errors['portion_financing']);
         try {
             $calculator->calculate($period);
-            $this->fail('Bagian SHU dana 1 jt melebihi batas 750rb, seharusnya ditolak.');
+            $this->fail('Bagian SHU pendapatan pembiayaan 1 jt melebihi batas 450rb, seharusnya ditolak.');
         } catch (RuntimeException $e) {
-            $this->assertStringContainsString('melebihi 50% pendapatan Pembiayaan Dana 2025', $e->getMessage());
+            $this->assertStringContainsString('melebihi 30% pendapatan pembiayaan 2025', $e->getMessage());
         }
         $this->assertSame(0, $period->allocations()->count());
 
-        // Tepat 50% (7,5% × 10 jt = 750rb) boleh.
-        $period->update(['portion_savings' => 62.5, 'portion_financing_dana' => 7.5]);
+        // Tepat 30% (4,5% × 10 jt = 450rb) boleh.
+        $period->update(['portion_savings' => 65.5, 'portion_financing' => 4.5]);
         $this->assertSame([], $calculator->financingCapErrors($period->fresh()));
         $calculator->calculate($period->fresh());
-        $this->assertEqualsWithDelta(750000, $period->allocations()->sum('shu_financing_dana'), 0.05);
+        $this->assertEqualsWithDelta(450000, $period->allocations()->sum('shu_financing'), 0.05);
     }
 
     public function test_saving_shu_settings_rejects_financing_portion_above_cap(): void
@@ -329,16 +330,88 @@ class ShuCalculationTest extends TestCase
         $period = $this->period();
         $settings = [
             'total_shu' => 1100000, 'base_per_person' => 100000, 'base_requires_savings' => true, 'base_for_ppnpn' => true, 'base_mode' => 'full',
-            'portion_savings' => 50, 'portion_purchases' => 30, 'portion_financing_dana' => 20, 'portion_financing_barang' => 0,
+            'portion_savings' => 55, 'portion_purchases' => 30, 'portion_financing' => 15,
             'savings_types' => ['pokok', 'wajib', 'sukarela'], 'savings_period' => 'year', 'sales_source' => 'excel', 'rounding' => 'round', 'rounding_unit' => 1000,
         ];
 
-        // Biaya formulir 500rb → batas 250rb. Sisa SHU 1 jt × 20% = 200rb → boleh.
+        // Biaya formulir 500rb → batas 30% = 150rb. Sisa SHU 1 jt × 15% = 150rb → boleh.
         $this->actingAs($user)->put(route('shu.update', $period), $settings)->assertSessionHasNoErrors();
-        // 30% = 300rb > 250rb → ditolak, pengaturan lama tetap.
-        $this->actingAs($user)->put(route('shu.update', $period), ['portion_savings' => 40, 'portion_financing_dana' => 30] + $settings)
-            ->assertSessionHasErrors('portion_financing_dana');
-        $this->assertEquals(20, $period->fresh()->portion_financing_dana);
+        // 30% = 300rb > 150rb → ditolak, pengaturan lama tetap.
+        $this->actingAs($user)->put(route('shu.update', $period), ['portion_savings' => 40, 'portion_financing' => 30] + $settings)
+            ->assertSessionHasErrors('portion_financing');
+        $this->assertEquals(15, $period->fresh()->portion_financing);
+    }
+
+    public function test_sales_import_is_validated_and_names_mapped_before_saving(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo(['shu-access', 'shu-manage']);
+        $budi = $this->person('Budi Santoso');
+        $period = $this->period(['sales_source' => 'excel']);
+        ExternalSale::create(['year' => 2025, 'buyer_name' => 'LAMA', 'amount' => 999]);
+
+        // Format rekap setahun "Penjualan 2025" Sheet1: kolom per transaksi (TOTAL BELANJA, PG, CASH) di baris pertama.
+        $path = $this->xlsx([
+            ['Bulan', 'TGL BELANJA', 'NAMA PEGAWAI', 'BARANG YANG DIBELI', 'JUMLAH BARANG', 'HARGA BARANG', 'TOTAL HARGA', 'TOTAL BELANJA', 'PG', 'QR', 'CASH', 'VC', 'TGL BAYAR'],
+            [1, 45658, 'BUDI S', 'NASI', 1, 15000, 15000, 20000, 20000],
+            [1, 45658, 'BUDI S', 'TEH', 1, 5000, 5000],
+            [1, 45659, 'UMUM', 'KOPI', 2, 5000, 10000, 10000, null, null, 10000],
+            [12, 45292, 'BUDI S', 'TAHUN LALU', 1, 7000, 7000, 7000, 7000],
+        ], 'Sheet1', ['PEMBELI' => [['NAMA PEGAWAI', 'NOMINAL'], ['BUDI S', 20000]]]);
+
+        $response = $this->actingAs($user)->post(route('shu.sales-import.preview', $period), ['file' => $this->upload($path)]);
+        parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+        $this->assertSame(999, (int) ExternalSale::where('year', 2025)->sum('amount'), 'pratinjau belum mengubah data');
+
+        $this->actingAs($user)->get(route('shu.sales-import.page', [$period, 'token' => $query['token']]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard/Cooperative/Shu/SalesImport')
+                ->where('preview.rows', 3)
+                ->where('preview.total', 30000)
+                ->where('preview.names.0.key', 'BUDI S')
+                ->where('preview.names.0.suggestions.0.id', $budi->id)
+                ->where('preview.checks', fn ($checks) => collect($checks)->where('level', 'error')->isEmpty()
+                    && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'Pembayaran (PG + QR + Cash + Voucher) = total penjualan'))
+                    && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'di luar 2025 dilewati'))
+                    && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'akan diganti'))));
+
+        $this->actingAs($user)->post(route('shu.sales-import.commit', $period), ['token' => $query['token'], 'mapping' => ['BUDI S' => (string) $budi->id]])
+            ->assertRedirect(route('shu.show', $period));
+        $this->assertSame(30000, (int) ExternalSale::where('year', 2025)->sum('amount'));
+        $this->assertSame(20000, (int) ExternalSale::where('customer_id', $budi->id)->sum('amount'));
+        $this->assertDatabaseHas('customer_aliases', ['alias' => 'BUDI S', 'customer_id' => $budi->id]);
+
+        // SHU final → validasi error, data tidak diganti.
+        $period->update(['status' => 'final']);
+        $response = $this->actingAs($user)->post(route('shu.sales-import.preview', $period), ['file' => $this->upload($path)]);
+        parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+        ExternalSale::where('year', 2025)->delete();
+        $this->actingAs($user)->post(route('shu.sales-import.commit', $period), ['token' => $query['token'], 'mapping' => []])
+            ->assertSessionHas('error');
+        $this->assertSame(0, ExternalSale::where('year', 2025)->count());
+    }
+
+    public function test_saving_settings_accepts_board_member_without_months(): void
+    {
+        // Pengurus tanpa simpanan setahun: layar mengosongkan bulannya; simpan tetap berhasil dan langsung dihitung.
+        $user = User::factory()->create();
+        $user->givePermissionTo(['shu-access', 'shu-manage']);
+        $a = $this->person('A');
+        $this->pay($a, 'wajib', 2025, [1], 100000);
+        $ketua = $this->person('Ketua Tanpa Simpanan');
+        $period = $this->period();
+
+        $this->actingAs($user)->put(route('shu.update', $period), [
+            'total_shu' => 1000000, 'base_per_person' => 0, 'base_requires_savings' => true, 'base_for_ppnpn' => true, 'base_mode' => 'full',
+            'board_amount' => 50000, 'board_members' => [['customer_id' => $ketua->id, 'months' => []]],
+            'portion_savings' => 100, 'portion_purchases' => 0, 'portion_financing' => 0,
+            'savings_types' => ['pokok', 'wajib', 'sukarela'], 'savings_period' => 'year', 'sales_source' => 'excel', 'rounding' => 'round', 'rounding_unit' => 1000,
+        ])->assertSessionHasNoErrors()->assertSessionHas('success', fn ($m) => str_contains($m, 'dihitung ulang'));
+
+        $this->assertSame([], $period->fresh()->board_members[0]['months']);
+        $this->assertNotNull($period->fresh()->calculated_at);
+        $this->assertSame(0, (int) $period->allocations()->sum('board_amount'));
     }
 
     public function test_shu_pages_excel_import_and_name_mapping(): void
@@ -352,7 +425,7 @@ class ShuCalculationTest extends TestCase
         $period = ShuPeriod::firstWhere('year', 2025);
         $this->actingAs($user)->put(route('shu.update', $period), [
             'total_shu' => 1000000, 'base_per_person' => 100000, 'base_requires_savings' => true, 'base_for_ppnpn' => true, 'base_mode' => 'full',
-            'portion_savings' => 70, 'portion_purchases' => 30, 'portion_financing_dana' => 0, 'portion_financing_barang' => 0,
+            'portion_savings' => 70, 'portion_purchases' => 30, 'portion_financing' => 0,
             'savings_types' => ['pokok', 'wajib', 'sukarela'], 'savings_period' => 'year', 'sales_source' => 'excel', 'rounding' => 'round', 'rounding_unit' => 1000,
         ])->assertSessionHasNoErrors();
 
@@ -365,7 +438,11 @@ class ShuCalculationTest extends TestCase
         $this->actingAs($user)->post(route('shu.sales-import', $period), ['file' => $this->upload($path)])->assertSessionHas('success');
         $this->assertSame(25000, (int) ExternalSale::where('year', 2025)->sum('amount'));
 
-        $this->actingAs($user)->post(route('shu.sales-map', $period), ['buyer_name' => 'BUDI', 'customer_id' => $budi->id]);
+        // Mencocokkan nama (seperti simpan pengaturan/koreksi) langsung menghitung ulang SHU, tanpa tombol "Hitung SHU".
+        $this->actingAs($user)->post(route('shu.sales-map', $period), ['buyer_name' => 'BUDI', 'customer_id' => $budi->id])
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'dihitung ulang'));
+        $this->assertNotNull($period->fresh()->calculated_at);
+        $this->assertSame(1, $period->allocations()->count());
         $this->actingAs($user)->post(route('shu.calculate', $period))->assertSessionHas('success');
 
         $this->actingAs($user)->get(route('shu.show', $period))

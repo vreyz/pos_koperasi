@@ -7,3 +7,72 @@
 @import 'tailwindcss/utilities';
 
 /* Google Fonts - loaded via HTML head for better performance */
+
+/*
+ * Jarak kiri/kanan kolom isian yang punya ikon tidak ikut skala padat (tailwind.config.js),
+ * supaya teks tidak menabrak ikon di kiri atau tombol di kanan (mis. ikon email, mata kata sandi).
+ * Selektor input.pl-10 lebih kuat dari .pl-10, jadi selalu menang.
+ */
+:is(input, select, textarea).pl-8 { padding-left: 2.25rem; }
+:is(input, select, textarea).pl-9 { padding-left: 2.5rem; }
+:is(input, select, textarea).pl-10 { padding-left: 2.75rem; }
+:is(input, select, textarea).pl-11 { padding-left: 3rem; }
+:is(input, select, textarea).pl-12 { padding-left: 3.25rem; }
+:is(input, select, textarea).pr-8 { padding-right: 2.25rem; }
+:is(input, select, textarea).pr-9 { padding-right: 2.5rem; }
+:is(input, select, textarea).pr-11 { padding-right: 3rem; }
+:is(input, select, textarea).pr-12 { padding-right: 3.25rem; }
+:is(input, select, textarea).pr-14 { padding-right: 3.75rem; }
+:is(input, select, textarea).pr-24 { padding-right: 6.25rem; }
+
+/* Baris menu yang bisa digeser ke samping tanpa batang gulir (menu divisi, tab akuntansi). */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Motif kawung (batik), sama dengan halaman login: latar halaman aplikasi dan sidebar. */
+.kawung-bg {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%230b1f3a' stroke-opacity='0.05' stroke-width='1.2'%3E%3Cellipse cx='28' cy='14' rx='7' ry='12'/%3E%3Cellipse cx='28' cy='42' rx='7' ry='12'/%3E%3Cellipse cx='14' cy='28' rx='12' ry='7'/%3E%3Cellipse cx='42' cy='28' rx='12' ry='7'/%3E%3Ccircle cx='28' cy='28' r='2'/%3E%3C/g%3E%3C/svg%3E");
+    background-attachment: local;
+}
+
+.dark .kawung-bg,
+.kawung-navy {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cg fill='none' stroke='%23d4a843' stroke-opacity='0.06' stroke-width='1.2'%3E%3Cellipse cx='28' cy='14' rx='7' ry='12'/%3E%3Cellipse cx='28' cy='42' rx='7' ry='12'/%3E%3Cellipse cx='14' cy='28' rx='12' ry='7'/%3E%3Cellipse cx='42' cy='28' rx='12' ry='7'/%3E%3Ccircle cx='28' cy='28' r='2'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.kawung-navy {
+    background-color: #0b1f3a;
+}
+
+/*
+ * Mode gelap untuk elemen yang belum punya varian dark: (banyak halaman bawaan):
+ * teks gelap jadi terang, latar putih jadi biru tua, garis terang jadi gelap.
+ * Elemen yang sudah menulis dark:text-/dark:bg-/dark:border- sendiri tidak diubah.
+ * Hanya di layar (cetakan tetap hitam di atas putih); area .light-surface (kertas cetak) dikecualikan.
+ */
+@media screen {
+    .dark :is(.text-slate-900, .text-slate-800, .text-gray-900, .text-gray-800, .text-black):not([class*="dark:text-"]):not(.light-surface, .light-surface *) {
+        color: #ebeff6;
+    }
+    .dark :is(.text-slate-700, .text-slate-600, .text-gray-700, .text-gray-600):not([class*="dark:text-"]):not(.light-surface, .light-surface *) {
+        color: #c3cedd;
+    }
+    .dark :is(.text-slate-500, .text-gray-500):not([class*="dark:text-"]):not(.light-surface, .light-surface *) {
+        color: #a3b0c4;
+    }
+    .dark :is(.text-primary-600, .text-primary-700, .text-primary-800, .text-primary-500):not([class*="dark:text-"]):not(.light-surface, .light-surface *) {
+        color: #9dbbe6;
+    }
+    .dark :is(.bg-white, .bg-slate-50, .bg-gray-50):not([class*="dark:bg-"]):not(.light-surface, .light-surface *) {
+        background-color: #132744;
+    }
+    .dark :is(.bg-slate-100, .bg-gray-100):not([class*="dark:bg-"]):not(.light-surface, .light-surface *) {
+        background-color: #1e2f4d;
+    }
+    .dark :is(.border-slate-200, .border-slate-100, .border-gray-200, .border-gray-100):not([class*="dark:border-"]):not(.light-surface, .light-surface *) {
+        border-color: #1e2f4d;
+    }
+    .dark :is(.divide-slate-100, .divide-slate-200, .divide-gray-100, .divide-gray-200):not([class*="dark:divide-"]):not(.light-surface, .light-surface *) > :not([hidden]) ~ :not([hidden]) {
+        border-color: #1e2f4d;
+    }
+}

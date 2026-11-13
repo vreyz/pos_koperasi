@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { usePage } from "@inertiajs/react";
 import Sidebar from "@/Components/Dashboard/Sidebar";
 import Navbar from "@/Components/Dashboard/Navbar";
+import DivisionBar from "@/Components/Dashboard/DivisionBar";
 import { Toaster } from "react-hot-toast";
 import { useTheme } from "@/Context/ThemeSwitcherContext";
 
@@ -67,8 +68,9 @@ export default function AppLayout({ children }) {
                     themeSwitcher={themeSwitcher}
                     darkMode={darkMode}
                 />
-                <main className="dashboard-scrollbar flex-1 overflow-y-auto">
-                    <div className="w-full py-6 px-4 md:px-6 lg:px-8 pb-20 md:pb-6">
+                <DivisionBar />
+                <main className="dashboard-scrollbar kawung-bg flex-1 overflow-y-auto">
+                    <div className="w-full py-4 px-3 md:px-5 lg:px-6 pb-20 md:pb-5">
                         {showSecurityWarnings && (
                             <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                                 <p className="text-sm font-semibold">
@@ -89,10 +91,10 @@ export default function AppLayout({ children }) {
                                 className: "text-sm",
                                 duration: 3000,
                                 style: {
-                                    background: darkMode ? "#1e293b" : "#fff",
-                                    color: darkMode ? "#f1f5f9" : "#1e293b",
+                                    background: darkMode ? "#132744" : "#fff",
+                                    color: darkMode ? "#ebeff6" : "#132744",
                                     border: `1px solid ${
-                                        darkMode ? "#334155" : "#e2e8f0"
+                                        darkMode ? "#33435f" : "#d9e0eb"
                                     }`,
                                     borderRadius: "12px",
                                 },

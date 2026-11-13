@@ -1,6 +1,26 @@
 import defaultTheme from "tailwindcss/defaultTheme";
 import forms from "@tailwindcss/forms";
 
+// Versi padat dari skala jarak Tailwind (bawaan: 3 = 0.75rem, 4 = 1rem, 6 = 1.5rem, 8 = 2rem).
+const compactSpacing = {
+    "3": "0.625rem",
+    "4": "0.8125rem",
+    "5": "0.875rem",
+    "6": "1rem",
+    "7": "1.125rem",
+    "8": "1.25rem",
+    "9": "1.375rem",
+    "10": "1.5rem",
+    "11": "1.75rem",
+    "12": "2rem",
+    "14": "2.25rem",
+    "16": "2.5rem",
+    "20": "3rem",
+    "24": "3.5rem",
+    "2.5": "0.5625rem",
+    "3.5": "0.75rem"
+};
+
 /** @type {import('tailwindcss').Config} */
 export default {
     content: [
@@ -25,33 +45,60 @@ export default {
                 ],
             },
             colors: {
-                // Primary - Indigo
+                // Primary - biru tua Koperasi (selaras halaman login)
                 primary: {
-                    50: "#eef2ff",
-                    100: "#e0e7ff",
-                    200: "#c7d2fe",
-                    300: "#a5b4fc",
-                    400: "#818cf8",
-                    500: "#6366f1",
-                    600: "#4f46e5",
-                    700: "#4338ca",
-                    800: "#3730a3",
-                    900: "#312e81",
-                    950: "#1e1b4b",
+                    50: "#eef3fa",
+                    100: "#d8e3f3",
+                    200: "#b3c8e7",
+                    300: "#84a5d6",
+                    400: "#5a84c2",
+                    500: "#2f63a8",
+                    600: "#244f8d",
+                    700: "#1c3f73",
+                    800: "#15305a",
+                    900: "#0f2444",
+                    950: "#0b1f3a",
                 },
-                // Accent - Cyan
+                // Accent - emas Koperasi
                 accent: {
-                    50: "#ecfeff",
-                    100: "#cffafe",
-                    200: "#a5f3fc",
-                    300: "#67e8f9",
-                    400: "#22d3ee",
-                    500: "#06b6d4",
-                    600: "#0891b2",
-                    700: "#0e7490",
-                    800: "#155e75",
-                    900: "#164e63",
-                    950: "#083344",
+                    50: "#fdf8eb",
+                    100: "#f9edcc",
+                    200: "#f2dc9c",
+                    300: "#e9c970",
+                    400: "#dfb755",
+                    500: "#d4a843",
+                    600: "#b78b2c",
+                    700: "#916c23",
+                    800: "#6e5220",
+                    900: "#513d1a",
+                    950: "#2e210b",
+                },
+                // Abu-abu kebiruan (slate & gray): mode gelap bernuansa biru tua seperti halaman login
+                slate: {
+                    50: "#f5f7fb",
+                    100: "#ebeff6",
+                    200: "#d9e0eb",
+                    300: "#bcc7d8",
+                    400: "#8b9ab2",
+                    500: "#64748f",
+                    600: "#4a5973",
+                    700: "#33435f",
+                    800: "#1e2f4d",
+                    900: "#132744",
+                    950: "#0b1f3a",
+                },
+                gray: {
+                    50: "#f5f7fb",
+                    100: "#ebeff6",
+                    200: "#d9e0eb",
+                    300: "#bcc7d8",
+                    400: "#8b9ab2",
+                    500: "#64748f",
+                    600: "#4a5973",
+                    700: "#33435f",
+                    800: "#1e2f4d",
+                    900: "#132744",
+                    950: "#0b1f3a",
                 },
                 // Success - Emerald
                 success: {
@@ -103,6 +150,11 @@ export default {
                 112: "28rem",
                 128: "32rem",
             },
+            // Jarak antar elemen dipadatkan di semua halaman (padding, margin, gap, space-x/y); ukuran w-/h- tetap.
+            padding: compactSpacing,
+            margin: compactSpacing,
+            gap: compactSpacing,
+            space: compactSpacing,
             minHeight: {
                 touch: "2.75rem", // 44px - minimum touch target
                 "touch-lg": "3rem", // 48px - comfortable touch target
@@ -115,8 +167,8 @@ export default {
                 "4xl": "2rem",
             },
             boxShadow: {
-                glow: "0 0 20px rgba(99, 102, 241, 0.3)",
-                "glow-lg": "0 0 40px rgba(99, 102, 241, 0.4)",
+                glow: "0 0 20px rgba(212, 168, 67, 0.3)",
+                "glow-lg": "0 0 40px rgba(212, 168, 67, 0.4)",
                 "inner-lg": "inset 0 4px 6px -1px rgb(0 0 0 / 0.1)",
             },
             animation: {

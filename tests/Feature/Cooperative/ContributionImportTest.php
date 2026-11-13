@@ -97,7 +97,7 @@ class ContributionImportTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('history', 2)
-                ->where('history.0.key', $a->id.'|wajib')
+                ->where('history.0.key', $a->id.'|wajib|2025')
                 ->where('history.0.months.1', 100000)
                 ->where('history.0.months.2', 150000)
                 ->where('history.0.total', 250000)
@@ -124,7 +124,7 @@ class ContributionImportTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('recap.0.opening_balance', 1250000)
                 ->where('recap.0.wajib_total', 300000)
-                ->where('recap.0.withdrawal_total', -1000000)
+                ->where('recap.0.withdrawn_total', -1000000)
                 ->where('recap.0.savings_balance', 550000));
     }
 
@@ -155,5 +155,111 @@ class ContributionImportTest extends TestCase
         // Hanya B: A sudah punya wajib Feb, C bukan AKTIF, D PPNPN tidak dipilih.
         $this->assertSame(1, MemberContribution::where('source', 'potong_gaji')->count());
         $this->assertSame($b->id, MemberContribution::where('source', 'potong_gaji')->value('customer_id'));
+    }
+
+    private function previewToken(User $user, string $path): string
+    {
+        $response = $this->actingAs($user)->post(route('savings.import.preview'), ['file' => $this->upload($path)]);
+        parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+        return $query['token'];
+    }
+
+    /** Rekap bulanan per nama (kolom JAN..DES), tahun dari baris "Periode". */
+    private function monthlySheet(string $period, array $people, ?array $jumlah = null): array
+    {
+        $rows = [[null, 'KEMENTERIAN KEUANGAN'], [null, 'Periode : '.$period], ['No', 'Nama', 'JAN', 'FEB', 'MAR', 'APR', 'MEI', 'JUN', 'JUL', 'AGS', 'SEP', 'OKT', 'NOV', 'DES']];
+        foreach ($people as $i => [$name, $months]) {
+            $rows[] = [$i + 1, $name, ...$months];
+        }
+        $rows[] = ['Jumlah', null, ...($jumlah ?? array_map(fn ($m) => array_sum(array_column(array_column($people, 1), $m)), range(0, 11)))];
+        $rows[] = [null, 'Kepala Bagian Umum'];
+
+        return $rows;
+    }
+
+    public function test_monthly_rekap_sheets_are_imported_after_validation(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo(['savings-access', 'savings-import']);
+        $dewi = Customer::create(['name' => 'Dewi Lestari', 'employee_type' => 'PPNPN', 'employment_status' => 'AKTIF', 'no_telp' => 0, 'address' => '']);
+        $eka = Customer::create(['name' => 'Eka Putra', 'employee_type' => 'PPNPN', 'employment_status' => 'AKTIF', 'no_telp' => 0, 'address' => '']);
+
+        $full = array_fill(0, 12, 50000);
+        $half = [...array_fill(0, 6, 0), ...array_fill(0, 6, 50000)];
+        $path = $this->xlsx(
+            $this->monthlySheet('2025', [['Dewi Lestari', $full], ['Eka Putra', $full]]),
+            'rekap simpanan ppnpn 25',
+            ['rekap simpanan ppnpn' => $this->monthlySheet('2024', [['Dewi Lestari', $half]]), 'gaji' => [['No', 'Nama', 'Bank', 'No Rekening']]],
+        );
+        $token = $this->previewToken($user, $path);
+
+        $this->actingAs($user)->get(route('savings.import', ['token' => $token]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('preview.years', [2024, 2025])
+                ->has('preview.sheets', 2)
+                ->where('preview.checks', fn ($checks) => collect($checks)->where('level', 'error')->isEmpty()
+                    && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'dianggap Simpanan Wajib'))
+                    && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'sama dengan baris Jumlah'))));
+
+        $mapping = ['DEWI LESTARI' => (string) $dewi->id, 'EKA PUTRA' => (string) $eka->id];
+        $this->actingAs($user)->post(route('savings.import.commit'), ['token' => $token, 'mapping' => $mapping])
+            ->assertRedirect(route('savings.index'));
+        $this->assertSame(600000 + 300000, (int) $dewi->contributions()->where('type', 'wajib')->sum('amount'));
+        $this->assertSame(600000, (int) $eka->contributions()->where('type', 'wajib')->where('period_year', 2025)->sum('amount'));
+
+        // Baris Jumlah di file tidak sama dengan isi → validasi error, tidak disimpan.
+        $bad = $this->xlsx($this->monthlySheet('2023', [['Dewi Lestari', $full]], array_fill(0, 12, 60000)), 'rekap 2023');
+        $token = $this->previewToken($user, $bad);
+        $this->actingAs($user)->post(route('savings.import.commit'), ['token' => $token, 'mapping' => $mapping])
+            ->assertRedirect(route('savings.import', ['token' => $token]))
+            ->assertSessionHas('error');
+        $this->assertSame(0, $dewi->contributions()->where('period_year', 2023)->count());
+    }
+
+    public function test_withdrawal_file_is_recorded_as_negative_and_cannot_exceed_balance(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo(['savings-access', 'savings-import']);
+        $a = Customer::create(['name' => 'Agus Mutasi', 'employee_type' => 'PNS', 'employment_status' => 'MUTASI', 'no_telp' => 0, 'address' => '']);
+        $b = Customer::create(['name' => 'Budi Baru', 'employee_type' => 'PNS', 'employment_status' => 'MUTASI', 'no_telp' => 0, 'address' => '']);
+        foreach (range(1, 12) as $month) {
+            MemberContribution::create(['customer_id' => $a->id, 'type' => 'wajib', 'period_year' => 2024, 'period_month' => $month, 'amount' => 100000, 'source' => 'potong_gaji']);
+        }
+
+        $sheet = fn (array $people) => [
+            [null, 'DATA PENGEMBALIAN SIMPANAN ANGGOTA KOPERASI'],
+            ['mutasi', 'Nama', 'Tanggal', 'No Rek', 'Pengembalian wajib', 'Pengembalian Sukarela', 'Total Pengembalian'],
+            ...array_map(fn ($p) => [null, $p[0], 45726, 'x', $p[1], 0, $p[1]], $people), // 45726 = 10 Maret 2025
+            [null, null, null, null, array_sum(array_column($people, 1)), 0],
+            [null, 'hutang pengembalian simpanan', null, null, null, -250000],
+        ];
+
+        $token = $this->previewToken($user, $this->xlsx($sheet([['Agus Mutasi', 1000000]]), 'Simpanan'));
+        $this->actingAs($user)->post(route('savings.import.validate'), ['token' => $token, 'mapping' => ['AGUS MUTASI' => (string) $a->id]])
+            ->assertOk()
+            ->assertJson(fn ($json) => $json->where('checks', fn ($checks) => collect($checks)->where('level', 'error')->isEmpty()
+                && collect($checks)->contains(fn ($c) => str_contains($c['title'], 'tidak menghabiskan saldo')))->etc());
+        $this->actingAs($user)->post(route('savings.import.commit'), ['token' => $token, 'mapping' => ['AGUS MUTASI' => (string) $a->id]])
+            ->assertRedirect(route('savings.index'));
+
+        $withdrawal = $a->contributions()->where('amount', '<', 0)->sole();
+        $this->assertSame(-1000000, $withdrawal->amount);
+        $this->assertSame([2025, 3], [$withdrawal->period_year, $withdrawal->period_month]);
+        $this->assertStringContainsString('Pengembalian simpanan 10/03/2025', $withdrawal->notes);
+        $this->assertSame(200000, (int) $a->contributions()->sum('amount'));
+
+        // Rekap: kolom setoran tidak berkurang, penarikan di kolom sendiri.
+        $this->actingAs($user)->get(route('savings.index', ['year' => 2025]))
+            ->assertInertia(fn (Assert $page) => $page->where('recap.0.withdrawn_total', -1000000)->where('recap.0.wajib_total', null)->where('totals.withdrawn', 1000000));
+
+        // Impor ulang tidak dobel; Budi tanpa saldo → pengembalian ditolak, tidak ada yang tersimpan.
+        $token = $this->previewToken($user, $this->xlsx($sheet([['Agus Mutasi', 1000000], ['Budi Baru', 500000]]), 'Simpanan'));
+        $this->actingAs($user)->post(route('savings.import.commit'), ['token' => $token, 'mapping' => ['AGUS MUTASI' => (string) $a->id, 'BUDI BARU' => (string) $b->id]])
+            ->assertRedirect(route('savings.import', ['token' => $token]))
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'melebihi saldo'));
+        $this->assertSame(0, $b->contributions()->count());
+        $this->assertSame(1, $a->contributions()->where('amount', '<', 0)->count());
     }
 }

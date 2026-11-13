@@ -64,7 +64,7 @@ export const employeeOptions = (employees) =>
     employees.map((e) => ({
         value: e.id,
         label: e.name,
-        sub: [e.nip, e.employee_type === "PPNPN" ? "PPNPN" : null, e.employment_status && e.employment_status !== "AKTIF" ? e.employment_status : null].filter(Boolean).join(" · "),
+        sub: [e.nip, e.employee_type, e.employment_status].filter(Boolean).join(" · "), // jenis & status selalu tampil (PNS, PPNPN, AKTIF, MUTASI, PENSIUN, SUDAH PINDAH, …)
     }));
 
 const normalize = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");

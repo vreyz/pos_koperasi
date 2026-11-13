@@ -30,6 +30,9 @@ class Financing extends Model
         'is_bad_debt', 'notes', 'rejection_reason',
         'created_by', 'checked_by', 'reviewed_by', 'approved_by', 'rejected_by',
         'checked_at', 'reviewed_at', 'approved_at', 'rejected_at',
+        // Atas nama atasan: nama pejabat yang menyetujui & kapan dicatat (lihat FinancingService::advance).
+        'checked_signer', 'reviewed_signer', 'approved_signer', 'rejected_signer',
+        'checked_recorded_at', 'reviewed_recorded_at', 'approved_recorded_at', 'rejected_recorded_at',
     ];
 
     protected $casts = [
@@ -48,6 +51,10 @@ class Financing extends Model
         'reviewed_at' => 'datetime',
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
+        'checked_recorded_at' => 'datetime',
+        'reviewed_recorded_at' => 'datetime',
+        'approved_recorded_at' => 'datetime',
+        'rejected_recorded_at' => 'datetime',
     ];
 
     public function customer()

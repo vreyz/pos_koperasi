@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import SortableTable from "@/Components/Cooperative/SortableTable";
+import SortableTable, { useFilteredRows } from "@/Components/Cooperative/SortableTable";
 import Modal from "@/Components/Modal";
 import { IconCalendarPlus, IconDownload, IconPigMoney, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { useAuthorization } from "@/Utils/authorization";
@@ -19,11 +19,14 @@ export default function Index({ tab, year, years, filters, recap, history, total
     const [modal, setModal] = useState(null);
     const [errors, setErrors] = useState({});
     const now = new Date();
-    const [entry, setEntry] = useState({ customer_id: "", type: "sukarela", period_year: year, period_month: now.getMonth() + 1, direction: "in", amount: "", source: "tunai", notes: "" });
+    const allYears = year === "all";
+    const yl = allYears ? "" : ` ${year}`; // akhiran label kolom: " 2025", atau kosong untuk semua tahun
+    const [entry, setEntry] = useState({ customer_id: "", type: "sukarela", period_year: allYears ? now.getFullYear() : year, period_month: now.getMonth() + 1, direction: "in", amount: "", source: "tunai", notes: "" });
     const [gen, setGen] = useState({ type: "wajib", period_year: now.getFullYear(), period_month: now.getMonth() + 1, amount: 100000, employee_types: ["PNS", "PPPK"] });
 
     const go = (changes) => router.get(route("savings.index"), { tab, year, ...filters, ...changes }, { preserveState: true, replace: true });
-    const savingsTotal = ["pokok", "wajib", "sukarela"].reduce((s, t) => s + Number(totals[t] || 0), 0);
+    const deposits = (r) => Number(r.pokok_total || 0) + Number(r.wajib_total || 0) + Number(r.sukarela_total || 0);
+    const withdrawn = (r) => -Number(r.withdrawn_total || 0);
     const num = (v) => (v ? Math.round(v).toLocaleString("id-ID") : "");
     const num0 = (v) => Math.round(Number(v || 0)).toLocaleString("id-ID");
     const typeOptions = Object.entries(typeLabels).map(([value, label]) => ({ value, label }));
@@ -34,7 +37,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
         if (!merged) return history;
         const byPerson = {};
         history.forEach((r) => {
-            const p = (byPerson[r.customer_id] ??= { ...r, key: `${r.customer_id}|simpanan`, type: "simpanan", months: {}, total: 0, entries: {} });
+            const p = (byPerson[`${r.customer_id}|${r.year}`] ??= { ...r, key: `${r.customer_id}|simpanan|${r.year}`, type: "simpanan", months: {}, total: 0, entries: {} });
             for (let m = 1; m <= 12; m++) {
                 p.months[m] = (p.months[m] || 0) + Number(r.months[m] || 0);
                 (r.entries[m] || []).forEach((e) => (p.entries[m] ??= []).push({ ...e, type: r.type }));
@@ -78,6 +81,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
         merged
             ? { key: "type", label: "Jenis", value: () => "Simpanan" }
             : { key: "type", label: "Jenis", filter: "select", options: typeOptions, value: (r) => r.type, render: (r) => typeLabels[r.type] },
+        ...(allYears ? [{ key: "year", label: "Tahun", filter: "select", options: years.map((y) => ({ value: y, label: String(y) })), value: (r) => r.year }] : []),
         ...monthColumns,
         { key: "total", label: "Total", align: "right", filter: "number", value: (r) => r.total, render: (r) => <span className="font-semibold">{num(r.total)}</span> },
     ];
@@ -111,15 +115,53 @@ export default function Index({ tab, year, years, filters, recap, history, total
         },
         { key: "employee_type", label: "Jenis", filter: "select", options: ["PNS", "PPPK", "PPNPN", "LAINNYA"].map((v) => ({ value: v, label: v })), value: (r) => r.employee_type, render: (r) => <Badge>{r.employee_type}</Badge> },
         { key: "employment_status", label: "Status", filter: "select", options: statusOptions, value: (r) => r.employment_status || "" },
-        // Saldo s.d. tahun lalu + setoran tahun berjalan (Wajib, Pokok, Sukarela) + penarikan = saldo akhir.
-        { key: "opening", label: `Saldo s.d. ${year - 1}`, align: "right", filter: "number", value: (r) => Number(r.opening_balance || 0), render: (r) => num0(r.opening_balance) },
-        { key: "wajib", label: `Wajib ${year}`, align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num0(r.wajib_total) },
-        { key: "pokok", label: `Pokok ${year}`, align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0), render: (r) => num0(r.pokok_total) },
-        { key: "sukarela", label: `Sukarela ${year}`, align: "right", filter: "number", value: (r) => Number(r.sukarela_total || 0), render: (r) => num0(r.sukarela_total) },
-        { key: "withdrawal", label: `Penarikan ${year}`, align: "right", filter: "number", value: (r) => Number(r.withdrawal_total || 0), render: (r) => (Number(r.withdrawal_total) ? <span className="text-danger-600">{num0(r.withdrawal_total)}</span> : "0") },
-        { key: "balance", label: `Saldo Akhir ${year}`, align: "right", filter: "number", value: (r) => Number(r.savings_balance || 0), render: (r) => <span className="font-semibold">{num0(r.savings_balance)}</span> },
+        // Saldo s.d. tahun lalu + setoran tahun berjalan (Pokok, Wajib, Sukarela) − penarikan = saldo akhir.
+        // Semua Tahun: tanpa saldo awal, saldo = total semua tahun.
+        ...(allYears ? [] : [{ key: "opening", label: `Saldo s.d. ${year - 1}`, align: "right", filter: "number", value: (r) => Number(r.opening_balance || 0), render: (r) => num0(r.opening_balance) }]),
+        { key: "pokok", label: `Pokok${yl}`, align: "right", filter: "number", value: (r) => Number(r.pokok_total || 0), render: (r) => num0(r.pokok_total) },
+        { key: "wajib", label: `Wajib${yl}`, align: "right", filter: "number", value: (r) => Number(r.wajib_total || 0), render: (r) => num0(r.wajib_total) },
+        { key: "sukarela", label: `Sukarela${yl}`, align: "right", filter: "number", value: (r) => Number(r.sukarela_total || 0), render: (r) => num0(r.sukarela_total) },
+        { key: "withdrawn", label: `Penarikan${yl}`, align: "right", filter: "number", value: withdrawn, render: (r) => (withdrawn(r) ? <span className="text-danger-600 dark:text-danger-400">−{num0(withdrawn(r))}</span> : num0(0)) },
+        { key: "balance", label: allYears ? "Saldo" : `Saldo Akhir ${year}`, align: "right", filter: "number", value: (r) => Number(r.savings_balance || 0), render: (r) => <span className="font-semibold">{num0(r.savings_balance)}</span> },
     ];
     const initialHistoryFilters = filters.customer_id ? { name: employees.find((e) => e.id === filters.customer_id)?.name || "" } : {};
+
+    // Kartu ringkasan: tanpa saringan = angka server; dengan saringan = dihitung dari baris tabel yang tampil.
+    const recapView = useFilteredRows(recap, (r) => r.id);
+    const historyView = useFilteredRows(historyRows, (r) => r.key);
+    const view = tab === "recap" ? recapView : historyView;
+    const cards = useMemo(() => {
+        if (!view.filtered) {
+            return { payers, pokok: Number(totals.pokok || 0), wajib: Number(totals.wajib || 0), sukarela: Number(totals.sukarela || 0), withdrawn: Number(totals.withdrawn || 0) };
+        }
+        const c = { pokok: 0, wajib: 0, sukarela: 0, withdrawn: 0 };
+        const paying = new Set();
+        if (tab === "recap") {
+            view.shown.forEach((r) => {
+                c.pokok += Number(r.pokok_total || 0);
+                c.wajib += Number(r.wajib_total || 0);
+                c.sukarela += Number(r.sukarela_total || 0);
+                c.withdrawn += withdrawn(r);
+                if (deposits(r) > 0) paying.add(r.id);
+            });
+        } else {
+            view.shown.forEach((r) => {
+                Object.values(r.entries || {}).flat().forEach((e) => {
+                    const amount = Number(e.amount || 0);
+                    if (amount > 0) {
+                        c[e.type || r.type] = (c[e.type || r.type] || 0) + amount;
+                        paying.add(r.customer_id);
+                    } else {
+                        c.withdrawn += -amount;
+                    }
+                });
+            });
+        }
+        return { ...c, payers: paying.size };
+    }, [view, tab, totals, payers]);
+    const savingsTotal = cards.pokok + cards.wajib + cards.sukarela - cards.withdrawn;
+    const periodText = allYears ? "semua tahun" : `${year}`;
+    const filteredNote = view.filtered ? ` · sesuai saringan (${view.shown.length} baris)` : "";
 
     const submit = (url, data) => (e) => {
         e.preventDefault();
@@ -135,8 +177,8 @@ export default function Index({ tab, year, years, filters, recap, history, total
                 subtitle="Simpanan pokok, wajib, dan sukarela per bulan. Angsuran pinjaman tidak termasuk simpanan (dicek di menu Pembiayaan → Cek angsuran)."
                 actions={
                     <>
-                        <a href={route("savings.export", { year })} className={btn.secondary} title="Rekap per pegawai untuk laporan."><IconDownload size={18} /> Rekap {year}</a>
-                        <a href={route("savings.export-data", { year })} className={btn.secondary} title="Data per pegawai per bulan. Bisa diedit lalu diunggah ulang di Impor Excel: memperbarui total bulan itu, tidak dobel."><IconDownload size={18} /> Data {year}</a>
+                        <a href={route("savings.export", { year })} className={btn.secondary} title="Rekap per pegawai untuk laporan."><IconDownload size={18} /> Rekap {allYears ? "semua tahun" : year}</a>
+                        <a href={route("savings.export-data", { year })} className={btn.secondary} title="Data per pegawai per bulan. Bisa diedit lalu diunggah ulang di Impor Excel: memperbarui total bulan itu, tidak dobel."><IconDownload size={18} /> Data {allYears ? "semua tahun" : year}</a>
                         {can("savings-import") && <Link href={route("savings.import")} className={btn.secondary}><IconUpload size={18} /> Impor Excel</Link>}
                         {can("savings-create") && (
                             <>
@@ -150,17 +192,18 @@ export default function Index({ tab, year, years, filters, recap, history, total
 
             <div className="mb-4 flex flex-wrap items-center gap-2">
                 <span className="text-sm text-slate-500">Tahun:</span>
-                {years.map((y) => (
-                    <button key={y} onClick={() => go({ year: y })} className={`rounded-lg px-3 py-1 text-sm ${y === year ? "bg-primary-500 text-white" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>{y}</button>
+                {[...years, "all"].map((y) => (
+                    <button key={y} onClick={() => go({ year: y })} className={`rounded-lg px-3 py-1 text-sm ${y === year ? "bg-primary-500 text-white" : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"}`}>{y === "all" ? "Semua Tahun" : y}</button>
                 ))}
             </div>
 
-            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
-                <Stat label="Anggota membayar" value={payers} helper={`membayar simpanan di ${year}`} />
-                <Stat label="Pokok" value={rupiah(totals.pokok)} />
-                <Stat label="Wajib" value={rupiah(totals.wajib)} />
-                <Stat label="Sukarela" value={rupiah(totals.sukarela)} />
-                <Stat label="Total simpanan" value={rupiah(savingsTotal)} />
+            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-6">
+                <Stat label="Anggota membayar" value={cards.payers} helper={`membayar simpanan di ${periodText}${filteredNote}`} />
+                <Stat label="Pokok" value={rupiah(cards.pokok)} helper={view.filtered ? "sesuai saringan" : ""} />
+                <Stat label="Wajib" value={rupiah(cards.wajib)} helper={view.filtered ? "sesuai saringan" : ""} />
+                <Stat label="Sukarela" value={rupiah(cards.sukarela)} helper={view.filtered ? "sesuai saringan" : ""} />
+                <Stat label="Penarikan" value={rupiah(cards.withdrawn)} helper={`pengembalian / tarik simpanan${view.filtered ? " · sesuai saringan" : ""}`} />
+                <Stat label="Total simpanan" value={rupiah(savingsTotal)} helper={`setoran − penarikan${view.filtered ? " · sesuai saringan" : ""}`} />
             </div>
 
             <Panel
@@ -183,7 +226,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
                     )
                 }
             >
-                <p className="px-4 pt-3 text-xs text-slate-500">Klik judul kolom untuk mengurutkan. Kotak di bawah judul untuk menyaring — kolom angka menerima &gt;0, 0, &gt;=100000, 50000-100000, atau "kosong".{tab === "history" && " Klik angka bulan untuk melihat atau menghapus catatannya."}</p>
+                <p className="px-4 pt-3 text-xs text-slate-500">Klik judul kolom untuk mengurutkan; Shift+klik kolom lain untuk urutan kedua (mis. Nama lalu nilai). Kotak di bawah judul untuk menyaring — kolom angka menerima &gt;0, 0, &gt;=100000, 50000-100000, atau "kosong".{tab === "history" && " Klik angka bulan untuk melihat atau menghapus catatannya."}</p>
                 {tab === "recap" ? (
                     <SortableTable
                         key={`recap-${year}-${filters.all}`}
@@ -191,8 +234,9 @@ export default function Index({ tab, year, years, filters, recap, history, total
                         rowKey={(r) => r.id}
                         columns={recapColumns}
                         initialSort={{ key: "name", dir: "asc" }}
-                        emptyText={`Belum ada simpanan di tahun ${year}.`}
-                        footer={sumFooter(recapColumns, ["opening", "wajib", "pokok", "sukarela", "withdrawal", "balance"])}
+                        onFilter={recapView.onFilter}
+                        emptyText={`Belum ada simpanan di ${allYears ? "semua tahun" : `tahun ${year}`}.`}
+                        footer={sumFooter(recapColumns, ["opening", "pokok", "wajib", "sukarela", "withdrawn", "balance"])}
                     />
                 ) : (
                     <SortableTable
@@ -202,7 +246,8 @@ export default function Index({ tab, year, years, filters, recap, history, total
                         columns={historyColumns}
                         initialSort={{ key: "name", dir: "asc" }}
                         initialFilters={initialHistoryFilters}
-                        emptyText={`Tidak ada catatan di tahun ${year}.`}
+                        onFilter={historyView.onFilter}
+                        emptyText={`Tidak ada catatan di ${allYears ? "semua tahun" : `tahun ${year}`}.`}
                         footer={sumFooter(historyColumns, [...monthColumns.map((c) => c.key), "total"])}
                     />
                 )}
@@ -212,7 +257,7 @@ export default function Index({ tab, year, years, filters, recap, history, total
                 {detail && (
                     <div className="space-y-4 p-6">
                         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                            {detail.row.name} — {MONTHS[detail.month - 1]} {year}
+                            {detail.row.name} — {MONTHS[detail.month - 1]} {detail.row.year ?? year}
                         </h2>
                         <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                             {(detail.row.entries[detail.month] || []).map((e) => (

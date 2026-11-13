@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import SortableTable from "@/Components/Cooperative/SortableTable";
+import SortableTable, { useFilteredRows } from "@/Components/Cooperative/SortableTable";
 import Modal from "@/Components/Modal";
 import { IconAlertTriangle, IconDownload, IconId, IconPencil, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { useAuthorization } from "@/Utils/authorization";
@@ -13,6 +13,7 @@ const statusColor = (status) =>
     status === "AKTIF" ? "green" : ["MUTASI", "PENSIUN", "KELUAR"].includes(status) ? "amber" : "gray";
 
 export default function Index({ employees, types, statuses, summary }) {
+    const view = useFilteredRows(employees, (e) => e.id); // kartu jumlah pegawai ikut saringan tabel
     useFlashToasts();
     const { can } = useAuthorization();
     const [editing, setEditing] = useState(null);
@@ -57,7 +58,7 @@ export default function Index({ employees, types, statuses, summary }) {
                         <a href={route("employees.export")} className={btn.secondary} title="Format sama dengan template impor: unggah ulang memperbarui data (kunci NIP), tidak dobel.">
                             <IconDownload size={18} /> Unduh pegawai
                         </a>
-                        <a href={route("cooperative-members.export")} className={btn.secondary} title="Anggota koperasi = pembayar iuran pokok/wajib/sukarela (otomatis).">
+                        <a href={route("cooperative-members.export")} className={btn.secondary} title="Anggota koperasi = pembayar simpanan pokok/wajib/sukarela (otomatis).">
                             <IconDownload size={18} /> Unduh anggota
                         </a>
                         {can("employees-import") && (
@@ -75,9 +76,9 @@ export default function Index({ employees, types, statuses, summary }) {
             />
 
             <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
-                <Stat label="Total pegawai" value={summary.total} />
+                <Stat label="Total pegawai" value={view.filtered ? view.shown.length : summary.total} helper={view.filtered ? `sesuai saringan, dari ${summary.total}` : ""} />
                 {types.map((t) => (
-                    <Stat key={t} label={t} value={summary.by_type?.[t] || 0} />
+                    <Stat key={t} label={t} value={view.filtered ? view.shown.filter((e) => e.employee_type === t).length : summary.by_type?.[t] || 0} helper={view.filtered ? "sesuai saringan" : ""} />
                 ))}
             </div>
             {summary.without_nip > 0 && (
@@ -90,6 +91,7 @@ export default function Index({ employees, types, statuses, summary }) {
                 <SortableTable
                     rows={employees}
                     rowKey={(e) => e.id}
+                    onFilter={view.onFilter}
                     initialSort={{ key: "name", dir: "asc" }}
                     emptyText="Belum ada data pegawai. Gunakan Impor Excel untuk memasukkan daftar pegawai."
                     columns={[

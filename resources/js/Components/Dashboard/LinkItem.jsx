@@ -18,26 +18,27 @@ export default function LinkItem({
 
     if (!canAccess) return null;
 
+    // Sidebar selalu biru tua (seperti halaman login): menu aktif ditandai garis & ikon emas.
     const baseClasses = `
         flex items-center gap-3
         transition-all duration-200
-        text-slate-600 dark:text-slate-400
+        text-slate-300
     `;
 
     const activeClasses = isActive
-        ? "bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-400 border-l-[3px] border-primary-500"
-        : "hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 border-l-[3px] border-transparent";
+        ? "bg-white/[0.07] text-white border-l-[3px] border-accent-500"
+        : "hover:bg-white/5 hover:text-white border-l-[3px] border-transparent";
 
     if (sidebarOpen) {
         return (
             <Link
                 href={href}
-                className={`${baseClasses} ${activeClasses} px-4 py-2.5 text-sm font-medium`}
+                className={`${baseClasses} ${activeClasses} px-4 py-2 text-sm font-medium`}
                 {...props}
             >
                 <span
                     className={
-                        isActive ? "text-primary-600 dark:text-primary-400" : ""
+                        isActive ? "text-accent-400" : "text-slate-400"
                     }
                 >
                     {icon}
@@ -52,12 +53,12 @@ export default function LinkItem({
         <Link
             href={href}
             className={`
-                w-full flex justify-center py-3
+                w-full flex justify-center py-2.5
                 transition-all duration-200
                 ${
                     isActive
-                        ? "text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        ? "text-accent-400 bg-white/[0.07]"
+                        : "text-slate-400 hover:text-white hover:bg-white/5"
                 }
             `}
             title={title}

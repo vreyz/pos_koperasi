@@ -5,6 +5,7 @@ import i18n from './i18n';
 import { createRoot } from 'react-dom/client';
 import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
+import { showValidationPopup } from './Utils/errorPopup';
 import { ThemeSwitcherProvider } from './Context/ThemeSwitcherContext';
 import { OnlineStatusProvider } from './Context/OnlineStatusContext';
 
@@ -26,6 +27,9 @@ createInertiaApp({
         const syncLocale = (locale) => locale && i18n.language !== locale && i18n.changeLanguage(locale);
         syncLocale(props.initialPage.props.locale?.current);
         router.on('navigate', (event) => syncLocale(event.detail.page.props.locale?.current));
+        // Error isian dari server: bila banyak / kolomnya tidak terlihat, popup daftar kolom yang perlu dicek.
+        // Ditunda sebentar supaya pesan error di bawah kolom sudah tampil (dipakai untuk menemukan kolomnya).
+        router.on('error', (event) => setTimeout(() => showValidationPopup(event.detail.errors), 150));
 
         root.render(
             <ThemeSwitcherProvider>

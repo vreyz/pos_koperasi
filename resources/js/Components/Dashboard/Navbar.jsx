@@ -52,9 +52,9 @@ export default function Navbar({ toggleSidebar, themeSwitcher, darkMode }) {
 
     return (
         <header
-            className="sticky top-0 z-30 h-16 flex items-center justify-between px-4 md:px-6
+            className="sticky top-0 z-30 h-14 flex items-center justify-between px-4 md:px-6
             bg-white dark:bg-slate-900
-            border-b border-slate-200 dark:border-slate-800
+            border-b-2 border-accent-500/70
             transition-colors duration-200"
         >
             {/* Left Section */}
@@ -70,8 +70,8 @@ export default function Navbar({ toggleSidebar, themeSwitcher, darkMode }) {
 
                 {/* Mobile Logo */}
                 <div className="md:hidden flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-                        <span className="text-white font-bold text-xs">{storeInitial}</span>
+                    <div className="w-7 h-7 rounded-full bg-accent-500 flex items-center justify-center">
+                        <span className="text-primary-950 font-extrabold text-xs">{storeInitial}</span>
                     </div>
                     <span className="text-lg font-bold text-slate-800 dark:text-white">
                         {storeName}

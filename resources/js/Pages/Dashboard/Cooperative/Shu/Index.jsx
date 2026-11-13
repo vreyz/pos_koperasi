@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
-import { IconCoins, IconPlus } from "@tabler/icons-react";
+import { IconCoins, IconDownload, IconPlus } from "@tabler/icons-react";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, PageHeader, Panel, btn, inputBase, inputClass, rupiah, td, th, useFlashToasts } from "@/Components/Cooperative/ui";
 
@@ -51,6 +51,7 @@ export default function Index({ periods, suggestedYear }) {
                                 <th className={th + " text-right"}>Penerima</th>
                                 <th className={th + " text-right"}>Total dibulatkan</th>
                                 <th className={th}>Status</th>
+                                <th className={th}>Excel</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -63,9 +64,10 @@ export default function Index({ periods, suggestedYear }) {
                                     <td className={td + " text-right"}>{p.allocations_count}</td>
                                     <td className={td + " text-right"}>{rupiah(p.allocations_sum_total_rounded)}</td>
                                     <td className={td}>{p.status === "final" ? <Badge color="green">Final</Badge> : <Badge color="amber">Draf</Badge>}</td>
+                                    <td className={td}><a href={route("shu.export", p.id)} className="inline-flex items-center gap-1 text-sm text-primary-600 hover:underline dark:text-primary-300"><IconDownload size={16} /> Unduh</a></td>
                                 </tr>
                             ))}
-                            {periods.length === 0 && <tr><td colSpan={7} className="p-10 text-center text-slate-500">Belum ada perhitungan SHU.</td></tr>}
+                            {periods.length === 0 && <tr><td colSpan={8} className="p-10 text-center text-slate-500">Belum ada perhitungan SHU.</td></tr>}
                         </tbody>
                     </table>
                 </div>

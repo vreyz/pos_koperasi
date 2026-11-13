@@ -106,6 +106,7 @@ class NameLinkController extends Controller
 
         $name = Customer::find($customerId)->name;
 
+        \App\Services\Accounting\AutoJournalHooks::bulkChanged(); // simpanan/penjualan pindah pegawai
         return back()->with('success', "\"{$data['name']}\" dihubungkan ke {$name}".($moved ? " ({$moved} baris data dipindahkan)" : '').'. Hitung ulang SHU agar hasilnya ikut berubah.');
     }
 
@@ -122,6 +123,7 @@ class NameLinkController extends Controller
             app(MemberSync::class)->syncBuyers(); // kembali jadi pembeli umum
         }
 
+        \App\Services\Accounting\AutoJournalHooks::bulkChanged(); // simpanan/penjualan pindah pegawai
         return back()->with('success', "Hubungan \"{$data['name']}\" diputus. Hitung ulang SHU agar hasilnya ikut berubah.");
     }
 }

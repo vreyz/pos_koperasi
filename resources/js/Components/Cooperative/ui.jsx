@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { usePage } from "@inertiajs/react";
 import toast from "react-hot-toast";
+import { showErrorPopup } from "@/Utils/errorPopup";
 
 export const rupiah = (value = 0) =>
     "Rp " + Math.round(Number(value || 0)).toLocaleString("id-ID");
@@ -14,19 +15,20 @@ export function useFlashToasts() {
     const { flash } = usePage().props;
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
-        if (flash?.error) toast.error(flash.error);
+        // Error fatal (gagal simpan/hitung di server): popup yang harus ditutup, bukan toast yang cepat hilang.
+        if (flash?.error) showErrorPopup(flash.error, "Gagal");
     }, [flash]);
 }
 
 export function PageHeader({ icon: Icon, title, subtitle, actions }) {
     return (
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-                <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-white">
-                    {Icon && <Icon size={28} className="text-primary-500" />}
+                <h1 className="flex items-center gap-2 text-xl font-bold text-slate-900 dark:text-white">
+                    {Icon && <Icon size={24} className="text-accent-500" />}
                     {title}
                 </h1>
-                {subtitle && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
+                {subtitle && <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
             </div>
             {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
         </div>
@@ -35,9 +37,9 @@ export function PageHeader({ icon: Icon, title, subtitle, actions }) {
 
 export function Panel({ title, actions, children, className = "" }) {
     return (
-        <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 ${className}`}>
+        <div className={`overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 ${className}`}>
             {(title || actions) && (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
                     <h3 className="font-semibold text-slate-800 dark:text-white">{title}</h3>
                     {actions}
                 </div>
@@ -49,10 +51,10 @@ export function Panel({ title, actions, children, className = "" }) {
 
 export function Stat({ label, value, helper }) {
     return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{value}</p>
-            {helper && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{helper}</p>}
+        <div className="rounded-xl border border-slate-200 border-t-2 border-t-accent-500/70 bg-white px-3.5 py-2.5 dark:border-slate-800 dark:border-t-accent-500/70 dark:bg-slate-900">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="text-lg font-bold text-slate-900 dark:text-white">{value}</p>
+            {helper && <p className="text-xs text-slate-500 dark:text-slate-400">{helper}</p>}
         </div>
     );
 }
@@ -95,7 +97,7 @@ export function Tip({ text }) {
 
 export function Field({ label, error, hint, tip, children }) {
     return (
-        <label className="block">
+        <label className="block" data-label={typeof label === "string" ? label : undefined}>
             <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}<Tip text={tip} /></span>
             {children}
             {hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
@@ -104,5 +106,5 @@ export function Field({ label, error, hint, tip, children }) {
     );
 }
 
-export const th = "whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
-export const td = "whitespace-nowrap px-4 py-3 text-sm text-slate-700 dark:text-slate-300";
+export const th = "whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
+export const td = "whitespace-nowrap px-3 py-1.5 text-sm text-slate-700 dark:text-slate-300";

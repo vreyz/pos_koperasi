@@ -28,9 +28,10 @@ export default function LinkItemDropdown({ icon, title, data, access, sidebarOpe
         return null;
     }
 
+    // Sidebar selalu biru tua: teks terang, sorotan putih transparan, penanda emas.
     const buttonClass = sidebarOpen
-        ? "min-w-full flex items-center font-medium gap-x-3.5 px-4 py-3 hover:border-r-2 capitalize hover:cursor-pointer text-sm justify-between text-gray-500 hover:border-r-gray-700 hover:text-gray-900 dark:text-gray-500 dark:hover:border-r-gray-50 dark:hover:text-gray-100"
-        : "min-w-full flex justify-center py-3 hover:border-r-2 hover:cursor-pointer text-gray-500 hover:border-r-gray-700 hover:text-gray-900 dark:text-gray-500 dark:hover:border-r-gray-50 dark:hover:text-gray-100";
+        ? "min-w-full flex items-center font-medium gap-x-3 px-4 py-2 capitalize hover:cursor-pointer text-sm justify-between text-slate-300 hover:bg-white/5 hover:text-white"
+        : "min-w-full flex justify-center py-2.5 hover:cursor-pointer text-slate-400 hover:bg-white/5 hover:text-white";
 
     return (
         <>
@@ -66,12 +67,13 @@ export default function LinkItemDropdown({ icon, title, data, access, sidebarOpe
                             }
                         }}
                         className={`${
-                            url === item.href &&
-                            "border-r-2 border-r-gray-400 bg-gray-100 text-gray-700 dark:border-r-gray-500 dark:bg-gray-900 dark:text-white"
+                            url === item.href
+                                ? "border-l-[3px] border-accent-500 bg-white/[0.07] text-white"
+                                : "border-l-[3px] border-transparent text-slate-400"
                         } ${
                             sidebarOpen
-                                ? "min-w-full flex items-center font-medium gap-x-3.5 px-5 py-3 hover:border-r-2 capitalize hover:cursor-pointer text-sm line-clamp-1 text-gray-500 hover:border-r-gray-700 hover:text-gray-900 dark:text-gray-500 dark:hover:border-r-gray-50 dark:hover:text-gray-100"
-                                : "min-w-full flex justify-center py-3 hover:border-r-2 hover:cursor-pointer text-gray-500 hover:border-r-gray-700 hover:text-gray-900 dark:text-gray-500 dark:hover:border-r-gray-50 dark:hover:text-gray-100"
+                                ? "min-w-full flex items-center font-medium gap-x-3 pl-6 pr-4 py-1.5 capitalize hover:cursor-pointer text-sm line-clamp-1 hover:bg-white/5 hover:text-white"
+                                : "min-w-full flex justify-center py-2.5 hover:cursor-pointer hover:bg-white/5 hover:text-white"
                         }`}
                         {...props}
                     >

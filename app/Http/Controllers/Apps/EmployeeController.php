@@ -156,7 +156,7 @@ class EmployeeController extends Controller
         return Excel::download(new ArrayExport(['NIP', 'Nama', 'Jenis', 'Pangkat', 'Gol', 'Jabatan', 'Unit', 'Status', 'Alias', 'Aktif Sejak', 'Aktif Sampai'], $rows, ['A' => '@', 'J' => '@', 'K' => '@']), 'pegawai.xlsx');
     }
 
-    /** Daftar anggota koperasi (otomatis dari pembayar iuran pokok/wajib/sukarela). */
+    /** Daftar anggota koperasi (otomatis dari pembayar simpanan pokok/wajib/sukarela). */
     public function exportMembers()
     {
         $rows = Customer::where('is_loyalty_member', true)

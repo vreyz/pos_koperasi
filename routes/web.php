@@ -11,6 +11,9 @@ use App\Http\Controllers\Apps\CrmReminderController;
 use App\Http\Controllers\Apps\CustomerController;
 use App\Http\Controllers\Apps\CustomerSegmentController;
 use App\Http\Controllers\Apps\CustomerVoucherController;
+use App\Http\Controllers\Apps\AccountingController;
+use App\Http\Controllers\Apps\ConsignmentController;
+use App\Http\Controllers\Apps\KantinInvoiceController;
 use App\Http\Controllers\Apps\DeductionController;
 use App\Http\Controllers\Apps\DineAreaController;
 use App\Http\Controllers\Apps\DineTableController;
@@ -210,6 +213,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('savings/import', [MemberContributionController::class, 'import'])->middleware('permission:savings-import')->name('savings.import');
     Route::get('savings/import/template', [MemberContributionController::class, 'template'])->middleware('permission:savings-import')->name('savings.import.template');
     Route::post('savings/import/preview', [MemberContributionController::class, 'previewImport'])->middleware('permission:savings-import')->name('savings.import.preview');
+    Route::post('savings/import/validate', [MemberContributionController::class, 'validateImport'])->middleware('permission:savings-import')->name('savings.import.validate');
     Route::post('savings/import/commit', [MemberContributionController::class, 'commitImport'])->middleware('permission:savings-import')->name('savings.import.commit');
     Route::post('savings', [MemberContributionController::class, 'store'])->middleware('permission:savings-create')->name('savings.store');
     Route::post('savings/generate', [MemberContributionController::class, 'generate'])->middleware('permission:savings-create')->name('savings.generate');
@@ -240,6 +244,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('financing/item/{financing}/print/{doc}', [FinancingController::class, 'print'])->middleware('permission:financing-access')->name('financing.print');
     Route::get('financing/{type}/blank-form', [FinancingController::class, 'blankForm'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.blank-form');
     Route::get('financing/{type}', [FinancingController::class, 'index'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-access')->name('financing.index');
+    Route::get('financing/{type}/next-number', [FinancingController::class, 'nextNumber'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.next-number');
     Route::get('financing/{type}/create', [FinancingController::class, 'create'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.create');
     Route::post('financing/{type}', [FinancingController::class, 'store'])->whereIn('type', ['dana', 'barang'])->middleware('permission:financing-create')->name('financing.store');
 
@@ -250,6 +255,33 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::post('deductions/import/analyze', [DeductionController::class, 'analyze'])->middleware('permission:deductions-import')->name('deductions.import.analyze');
     Route::post('deductions/import/preview', [DeductionController::class, 'preview'])->middleware('permission:deductions-import')->name('deductions.import.preview');
     Route::post('deductions/import/commit', [DeductionController::class, 'commit'])->middleware('permission:deductions-import')->name('deductions.import.commit');
+
+    // Akuntansi: jurnal, catat kejadian, buku besar, neraca saldo, laporan keuangan
+    Route::prefix('accounting')->name('accounting.')->group(function () {
+        Route::get('/', [AccountingController::class, 'journals'])->middleware('permission:accounting-access')->name('journals');
+        Route::get('record', [AccountingController::class, 'record'])->middleware('permission:accounting-create')->name('record');
+        Route::post('record/preview', [AccountingController::class, 'preview'])->middleware('permission:accounting-create')->name('record.preview');
+        Route::post('record', [AccountingController::class, 'storeEvent'])->middleware('permission:accounting-create')->name('record.store');
+        Route::get('manual', [AccountingController::class, 'manual'])->middleware('permission:accounting-manage')->name('manual');
+        Route::post('manual', [AccountingController::class, 'storeManual'])->middleware('permission:accounting-manage')->name('manual.store');
+        Route::post('journals/{entry}/reverse', [AccountingController::class, 'reverse'])->middleware('permission:accounting-manage')->name('reverse');
+        Route::get('ledger', [AccountingController::class, 'ledger'])->middleware('permission:accounting-access')->name('ledger');
+        Route::get('trial-balance', [AccountingController::class, 'trialBalance'])->middleware('permission:accounting-access')->name('trial-balance');
+        Route::get('reports', [AccountingController::class, 'reports'])->middleware('permission:accounting-access')->name('reports');
+        Route::get('accounts', [AccountingController::class, 'accounts'])->middleware('permission:accounting-access')->name('accounts');
+        Route::post('accounts', [AccountingController::class, 'storeAccount'])->middleware('permission:accounting-manage')->name('accounts.store');
+        Route::put('accounts/{account}', [AccountingController::class, 'updateAccount'])->middleware('permission:accounting-manage')->name('accounts.update');
+        Route::get('kantin', [AccountingController::class, 'kantin'])->middleware('permission:accounting-access')->name('kantin');
+        Route::post('kantin/invoices', [KantinInvoiceController::class, 'store'])->middleware('permission:accounting-create')->name('kantin.invoices.store');
+        Route::get('kantin/invoices/{invoice}/print', [KantinInvoiceController::class, 'print'])->middleware('permission:accounting-access')->name('kantin.invoices.print');
+        Route::post('kantin/invoices/{invoice}/pay', [KantinInvoiceController::class, 'pay'])->middleware('permission:accounting-create')->name('kantin.invoices.pay');
+        Route::delete('kantin/invoices/{invoice}', [KantinInvoiceController::class, 'destroy'])->middleware('permission:accounting-create')->name('kantin.invoices.destroy');
+        Route::put('settings', [AccountingController::class, 'updateSettings'])->middleware('permission:accounting-manage')->name('settings');
+        Route::get('opening', [AccountingController::class, 'opening'])->middleware('permission:accounting-access')->name('opening');
+        Route::post('opening', [AccountingController::class, 'storeOpening'])->middleware('permission:accounting-manage')->name('opening.store');
+        Route::post('close-year', [AccountingController::class, 'closeYear'])->middleware('permission:accounting-manage')->name('close-year');
+        Route::post('sync', [AccountingController::class, 'sync'])->middleware('permission:accounting-manage')->name('sync');
+    });
     Route::get('board', [BoardController::class, 'index'])->middleware('permission:board-access')->name('board.index');
     Route::post('board/preview', [BoardController::class, 'preview'])->middleware('permission:board-manage')->name('board.preview');
     Route::post('board', [BoardController::class, 'store'])->middleware('permission:board-manage')->name('board.store');
@@ -265,6 +297,10 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::delete('shu/{shu}', [ShuController::class, 'destroy'])->middleware('permission:shu-manage')->name('shu.destroy');
     Route::post('shu/{shu}/calculate', [ShuController::class, 'calculate'])->middleware('permission:shu-manage')->name('shu.calculate');
     Route::post('shu/{shu}/sales-import', [ShuController::class, 'importSales'])->middleware('permission:shu-manage')->name('shu.sales-import');
+    Route::get('shu/{shu}/sales-import', [ShuController::class, 'salesImportPage'])->middleware('permission:shu-manage')->name('shu.sales-import.page');
+    Route::post('shu/{shu}/sales-import/preview', [ShuController::class, 'previewSales'])->middleware('permission:shu-manage')->name('shu.sales-import.preview');
+    Route::post('shu/{shu}/sales-import/validate', [ShuController::class, 'validateSales'])->middleware('permission:shu-manage')->name('shu.sales-import.validate');
+    Route::post('shu/{shu}/sales-import/commit', [ShuController::class, 'commitSales'])->middleware('permission:shu-manage')->name('shu.sales-import.commit');
     Route::post('shu/{shu}/sales-map', [ShuController::class, 'mapSalesName'])->middleware('permission:shu-manage')->name('shu.sales-map');
     Route::post('shu/{shu}/adjustments', [ShuController::class, 'saveAdjustment'])->middleware('permission:shu-manage')->name('shu.adjustments.save');
     Route::post('shu/{shu}/finalize', [ShuController::class, 'finalize'])->middleware('permission:shu-finalize')->name('shu.finalize');
@@ -392,6 +428,23 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::patch('/receivables/{receivable}/collection-notes', [ReceivableController::class, 'updateCollectionNotes'])->middleware('permission:receivables-access')->name('receivables.collection-notes');
     Route::post('/receivables/{receivable}/pay', [ReceivableController::class, 'pay'])->middleware('permission:receivables-pay')->name('receivables.pay');
     Route::post('/receivables/{receivable}/share-campaign', [CrmCampaignController::class, 'shareReceivable'])->middleware('permission:crm-campaigns-create')->name('receivables.share-campaign');
+    // konsinyasi (barang titipan)
+    Route::prefix('consignments')->name('consignments.')->group(function () {
+        Route::get('/', [ConsignmentController::class, 'index'])->middleware('permission:products-access')->name('index');
+        Route::post('/', [ConsignmentController::class, 'store'])->middleware('permission:products-edit')->name('store');
+        Route::get('next-number', [ConsignmentController::class, 'nextNumber'])->middleware('permission:products-access')->name('next-number');
+        Route::get('payments/{payment}/print', [ConsignmentController::class, 'printPayment'])->middleware('permission:products-access')->name('payments.print');
+        Route::post('payments/{payment}/pay', [ConsignmentController::class, 'payPayment'])->middleware('permission:payables-pay')->name('payments.pay');
+        Route::delete('payments/{payment}', [ConsignmentController::class, 'destroyPayment'])->middleware('permission:products-edit')->name('payments.destroy');
+        Route::get('{consignor}', [ConsignmentController::class, 'show'])->middleware('permission:products-access')->name('show');
+        Route::put('{consignor}', [ConsignmentController::class, 'update'])->middleware('permission:products-edit')->name('update');
+        Route::post('{consignor}/products', [ConsignmentController::class, 'storeProduct'])->middleware('permission:products-edit')->name('products.store');
+        Route::post('{consignor}/products/attach', [ConsignmentController::class, 'attachProduct'])->middleware('permission:products-edit')->name('products.attach');
+        Route::put('{consignor}/products/{product}', [ConsignmentController::class, 'updatePrice'])->middleware('permission:products-edit')->name('products.price');
+        Route::post('{consignor}/moves', [ConsignmentController::class, 'move'])->middleware('permission:products-edit')->name('moves.store');
+        Route::post('{consignor}/payments', [ConsignmentController::class, 'storePayment'])->middleware('permission:products-edit')->name('payments.store');
+    });
+
     // suppliers & payables
     Route::get('/suppliers', [SupplierController::class, 'index'])->middleware('permission:suppliers-access')->name('suppliers.index');
     Route::post('/suppliers', [SupplierController::class, 'store'])->middleware('permission:suppliers-access')->name('suppliers.store');

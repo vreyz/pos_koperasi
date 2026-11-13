@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import DashboardLayout from "@/Layouts/DashboardLayout";
 import { IconArrowLeft, IconChecklist } from "@tabler/icons-react";
-import SortableTable from "@/Components/Cooperative/SortableTable";
+import SortableTable, { useFilteredRows } from "@/Components/Cooperative/SortableTable";
 import { useAuthorization } from "@/Utils/authorization";
 import { Badge, MONTHS, PageHeader, Panel, Stat, btn, inputBase, rupiah, td, useFlashToasts } from "@/Components/Cooperative/ui";
 
@@ -13,7 +13,10 @@ export default function Reconcile({ year, rows }) {
     const { can } = useAuthorization();
     const [onlyIssues, setOnlyIssues] = useState(true);
     const visible = useMemo(() => (onlyIssues ? rows.filter((r) => r.note !== "Cocok") : rows), [rows, onlyIssues]);
-    const sum = (key) => rows.reduce((s, r) => s + Number(r[key] || 0), 0);
+    // Kartu ikut saringan tabel (tanpa saringan: semua pegawai-bulan tahun ini).
+    const view = useFilteredRows(visible, (r) => `${r.customer_id}-${r.month}`);
+    const base = view.filtered ? view.shown : rows;
+    const sum = (key) => base.reduce((s, r) => s + Number(r[key] || 0), 0);
     const now = new Date();
     const notes = [...new Set(rows.map((r) => r.note))].map((v) => ({ value: v, label: v }));
     const fixable = rows.filter((r) => r.scheduled > 0 && r.deducted >= r.scheduled && r.marked_paid < r.scheduled).length;
@@ -56,7 +59,7 @@ export default function Reconcile({ year, rows }) {
                 <Stat label="Jadwal cicilan" value={rupiah(sum("scheduled"))} />
                 <Stat label="Potongan gaji" value={rupiah(sum("deducted"))} helper="kolom Angsuran Koperasi" />
                 <Stat label="Selisih total" value={rupiah(sum("deducted") - sum("scheduled"))} />
-                <Stat label="Baris bermasalah" value={rows.filter((r) => r.note !== "Cocok").length} helper={`dari ${rows.length} pegawai-bulan`} />
+                <Stat label="Baris bermasalah" value={base.filter((r) => r.note !== "Cocok").length} helper={`dari ${base.length} pegawai-bulan${view.filtered ? " · sesuai saringan" : ""}`} />
             </div>
             <Panel
                 title={`Perbandingan ${year}`}
@@ -66,6 +69,7 @@ export default function Reconcile({ year, rows }) {
                     key={`${year}-${onlyIssues}`}
                     rows={visible}
                     rowKey={(r) => `${r.customer_id}-${r.month}`}
+                    onFilter={view.onFilter}
                     columns={columns}
                     initialSort={{ key: "name", dir: "asc" }}
                     emptyText="Semua cocok."
