@@ -426,7 +426,8 @@ class AutoJournalService
         if (! self::enabledFor($p->paid_at)) {
             return;
         }
-        $cash = $p->method === 'cash' ? '11101' : '11102';
+        // Pembelian tunai dibayar dari kas toko (uang tunai di kasir); transfer dari rekening BSI.
+        $cash = $p->method === 'cash' ? '11104' : '11102';
         $this->apply($key, [['date' => Carbon::parse($p->paid_at)->toDateString(), 'description' => 'Bayar hutang supplier '.($p->payable?->document_number ?? ''),
             'division' => 'toko', 'event_code' => 'TK-04', 'lines' => [self::D('21111', $p->amount), self::K($cash, $p->amount)]]], $p);
     }

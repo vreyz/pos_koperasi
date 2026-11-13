@@ -270,4 +270,19 @@ class AutoJournalTest extends TestCase
         app(AutoJournalService::class)->syncAll();
         $this->assertSame(1, JournalEntry::where('auto_key', 'like', 'inst:%')->count());
     }
+
+    public function test_supplier_payment_cash_comes_from_store_cash_and_transfer_from_bsi(): void
+    {
+        // Pembelian tunai dibayar dari kas toko (11104); transfer dari rekening BSI (11102).
+        $supplier = \App\Models\Supplier::create(['name' => 'Supplier Contoh']);
+        $payable = \App\Models\Payable::create(['supplier_id' => $supplier->id, 'document_number' => 'GR-UJI', 'total' => 300000, 'paid' => 0, 'status' => 'unpaid']);
+        \App\Models\PayablePayment::create(['payable_id' => $payable->id, 'paid_at' => '2027-03-01', 'amount' => 100000, 'method' => 'cash']);
+        \App\Models\PayablePayment::create(['payable_id' => $payable->id, 'paid_at' => '2027-03-02', 'amount' => 200000, 'method' => 'bank_transfer']);
+        app(AutoJournalService::class)->syncAll();
+
+        $this->assertSame(-100000, $this->bal('11104'));
+        $this->assertSame(-200000, $this->bal('11102'));
+        $this->assertSame(0, $this->bal('11101'));
+        $this->assertSame(300000, $this->bal('21111'));
+    }
 }

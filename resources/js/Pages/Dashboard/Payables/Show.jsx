@@ -274,7 +274,7 @@ export default function PayableShow({ payable, bankAccounts = [] }) {
                                         }`}
                                     >
                                         <IconCash size={16} />
-                                        Tunai
+                                        Tunai (kas toko)
                                     </button>
                                     <button
                                         type="button"
@@ -286,7 +286,7 @@ export default function PayableShow({ payable, bankAccounts = [] }) {
                                         }`}
                                     >
                                         <IconCreditCard size={16} />
-                                        Transfer
+                                        Transfer (BSI)
                                     </button>
                                 </div>
                                 {data.method === "bank_transfer" && (
