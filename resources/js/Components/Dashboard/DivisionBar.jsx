@@ -19,7 +19,7 @@ function useDivisions() {
     return [
         {
             key: "toko", title: "Toko & Kantin", icon: IconBuildingStore,
-            match: ["/dashboard/transactions", "/dashboard/goods-receivings", "/dashboard/stock-opnames", "/dashboard/products"],
+            match: ["/dashboard/transactions", "/dashboard/goods-receivings", "/dashboard/stock-opnames", "/dashboard/products", "/dashboard/consignments"],
             items: [
                 { title: "Kasir (POS)", href: safeRoute("transactions.index"), perm: ["transactions-access"] },
                 { title: "Riwayat penjualan", href: safeRoute("transactions.history"), perm: ["transactions-access"] },
@@ -27,6 +27,7 @@ function useDivisions() {
                 { title: "Stock opname", href: safeRoute("stock-opnames.index"), perm: ["stock-opnames-access"] },
                 { title: "Produk", href: safeRoute("products.index"), perm: ["products-access"] },
                 { title: "Rekap & bayar penjaga kantin", href: safeRoute("accounting.kantin"), perm: ["accounting-access"] },
+                { title: "Konsinyasi (barang titipan)", href: safeRoute("consignments.index"), perm: ["products-access"] },
                 rec("toko"), jur("toko"),
             ],
         },

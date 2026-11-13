@@ -289,6 +289,13 @@ export default function Menu({ includeHidden = false } = {}) {
                     permissions: hasAnyPermission(["goods-receivings-access"]),
                 },
                 {
+                    title: "Konsinyasi (titipan)",
+                    href: route("consignments.index"),
+                    active: url.startsWith("/dashboard/consignments"),
+                    icon: <IconTruckDelivery size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["products-access"]),
+                },
+                {
                     title: t("sidebar.items.supplierReturns"),
                     href: route("supplier-returns.index"),
                     active: url.startsWith("/dashboard/supplier-returns"),

@@ -9,6 +9,22 @@ class TransactionDetail extends Model
 {
     use HasFactory;
 
+    /** Barang titipan: catat penitip & bagian penitip (harga titip x jumlah dasar) saat terjual. */
+    protected static function booted(): void
+    {
+        static::creating(function (TransactionDetail $detail) {
+            if ($detail->consignor_id || ! $detail->product_id) {
+                return;
+            }
+            $product = Product::query()->select(['id', 'consignor_id', 'buy_price'])->find($detail->product_id);
+            if ($product?->consignor_id) {
+                $baseQty = (float) $detail->qty * (float) ($detail->conversion_factor ?: 1);
+                $detail->consignor_id = $product->consignor_id;
+                $detail->consignment_cost = (int) round($baseQty * (int) $product->buy_price);
+            }
+        });
+    }
+
     /**
      * fillable
      *
@@ -17,6 +33,8 @@ class TransactionDetail extends Model
     protected $fillable = [
         'transaction_id',
         'product_id',
+        'consignor_id',
+        'consignment_cost',
         'unit_id',
         'conversion_factor',
         'qty',

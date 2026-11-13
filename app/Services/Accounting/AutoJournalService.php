@@ -2,11 +2,13 @@
 
 namespace App\Services\Accounting;
 
+use App\Models\ConsignmentPayment;
 use App\Models\Customer;
 use App\Models\Financing;
 use App\Models\FinancingInstallment;
 use App\Models\GoodsReceiving;
 use App\Models\JournalEntry;
+use App\Models\KantinInvoice;
 use App\Models\MemberContribution;
 use App\Models\PayablePayment;
 use App\Models\ReceivablePayment;
@@ -106,6 +108,8 @@ class AutoJournalService
             'supplier_return' => $this->syncSupplierReturn((int) $id),
             'init' => $this->syncInitialStock((int) $id),
             'cash_move' => $this->syncCashMovement((int) $id),
+            'consignment_payment' => $this->syncConsignmentPayment((int) $id),
+            'kantin_invoice' => $this->syncKantinInvoice((int) $id),
             'all' => $this->syncAll(),
             default => null,
         };
@@ -150,6 +154,8 @@ class AutoJournalService
         StockMutation::where('reference_type', 'product_create')->whereBetween('created_at', [$from, $end])->pluck('id')
             ->each(fn ($id) => $this->safely(fn () => $this->syncInitialStock($id)));
         ShiftCashMovement::whereBetween('created_at', [$from, $end])->pluck('id')->each(fn ($id) => $this->safely(fn () => $this->syncCashMovement($id)));
+        ConsignmentPayment::whereBetween('paid_at', [$from, $to])->pluck('id')->each(fn ($id) => $this->safely(fn () => $this->syncConsignmentPayment($id)));
+        KantinInvoice::whereBetween('paid_at', [$from, $to])->pluck('id')->each(fn ($id) => $this->safely(fn () => $this->syncKantinInvoice($id)));
 
         // Sapu bersih: jurnal otomatis yang sumbernya sudah dihapus/diubah tanpa pemicu (mis. upload massal).
         foreach (JournalEntry::whereNotNull('auto_key')->distinct()->pluck('auto_key') as $key) {
@@ -179,6 +185,8 @@ class AutoJournalService
             'sr' => $this->syncSupplierReturn((int) $p[1]),
             'init' => $this->syncInitialStock((int) $p[1]),
             'cm' => $this->syncCashMovement((int) $p[1]),
+            'csp' => $this->syncConsignmentPayment((int) $p[1]),
+            'kinv' => $this->syncKantinInvoice((int) $p[1]),
             default => null,
         };
         if (! isset($this->visited[$key])) {
@@ -303,7 +311,7 @@ class AutoJournalService
         $kantin = $this->kantinWarehouseIds();
         $txs = Transaction::query()
             ->whereDate('created_at', $date)
-            ->with(['tenders', 'details:id,transaction_id,price', 'profits:id,transaction_id,total', 'receivable:id,transaction_id,source'])
+            ->with(['tenders', 'details:id,transaction_id,price,consignor_id,consignment_cost', 'profits:id,transaction_id,total', 'receivable:id,transaction_id,source'])
             ->get();
         $byWarehouse = $txs->groupBy(fn ($t) => (int) $t->warehouse_id);
         $keys = JournalEntry::where('auto_key', 'like', "pos:{$date}:%")->pluck('auto_key')->unique()->all();
@@ -313,6 +321,8 @@ class AutoJournalService
             $debits = [];
             $revenue = 0;
             $hpp = 0;
+            $consSales = 0; // barang titipan: bagian penitip jadi hutang, koperasi hanya dapat komisi
+            $consCost = 0;
             foreach ($list as $t) {
                 $parts = $this->paymentParts($t);
                 if (! $parts) {
@@ -323,7 +333,10 @@ class AutoJournalService
                     $debits[$k] = [$acc, ($debits[$k][1] ?? 0) + $amount, $cust];
                     $revenue += $amount;
                 }
-                $hpp += max(0, (int) $t->details->sum('price') - (int) $t->discount - (int) $t->profits->sum('total'));
+                $cons = $t->details->whereNotNull('consignor_id');
+                $consSales += (int) $cons->sum('price');
+                $consCost += (int) $cons->sum('consignment_cost');
+                $hpp += max(0, (int) $t->details->sum('price') - (int) $t->discount - (int) $t->profits->sum('total') - (int) $cons->sum('consignment_cost'));
             }
             $key = "pos:{$date}:{$warehouseId}";
             $keys = array_diff($keys, [$key]);
@@ -343,14 +356,50 @@ class AutoJournalService
                         'lines' => [self::D('21112', $revenue), self::K('43101', $koperasi), self::K('21104', $revenue - $koperasi)]],
                 ];
             } else {
-                $entries = [['date' => $date, 'description' => 'Penjualan toko - rekap kasir', 'division' => 'toko', 'event_code' => 'TK-05',
-                    'lines' => [...$lines, self::K('41100', $revenue), self::D('51100', $hpp), self::K('11501', $hpp)]]];
+                $consSales = min($consSales, $revenue);
+                $entries = [['date' => $date, 'description' => 'Penjualan toko - rekap kasir'.($consSales ? ' (termasuk barang titipan)' : ''), 'division' => 'toko', 'event_code' => 'TK-05',
+                    'lines' => [...$lines, self::K('41100', $revenue - $consSales), self::K('21101', min($consCost, $consSales)), self::K('42101', max(0, $consSales - $consCost)),
+                        self::D('51100', $hpp), self::K('11501', $hpp)]]];
             }
             $this->apply($key, $entries);
         }
         foreach ($keys as $stale) {
             $this->apply($stale, []); // gudang yang tidak lagi punya penjualan hari itu
         }
+    }
+
+    /** Instruksi pembayaran konsinyasi yang sudah dibayar: hutang ke penitip berkurang. */
+    public function syncConsignmentPayment(int $id): void
+    {
+        $p = ConsignmentPayment::with('consignor:id,name')->find($id);
+        $key = "csp:{$id}";
+        if (! $p || $p->status !== 'paid' || ! $p->paid_at || ! self::enabledFor($p->paid_at) || $p->total <= 0) {
+            $this->apply($key, []);
+
+            return;
+        }
+        $this->apply($key, [['date' => $p->paid_at->toDateString(), 'description' => "Bayar hasil penjualan titipan {$p->number} - {$p->consignor?->name}", 'division' => 'toko', 'event_code' => 'TK-13',
+            'lines' => [self::D('21101', $p->total), self::K($p->cash_account ?: '11102', $p->total)]]], $p);
+    }
+
+    /** Invoice kantin yang sudah dibayar: bagian penjaga (penjualan - fee) dilunasi, potongan ke akunnya, sisanya keluar kas. */
+    public function syncKantinInvoice(int $id): void
+    {
+        $inv = KantinInvoice::find($id);
+        $key = "kinv:{$id}";
+        if (! $inv || $inv->status !== 'paid' || ! $inv->paid_at || ! self::enabledFor($inv->paid_at)) {
+            $this->apply($key, []);
+
+            return;
+        }
+        $lines = [self::D('21104', $inv->sales - $inv->fee())];
+        foreach ($inv->deductions ?? [] as $d) {
+            if ((int) ($d['amount'] ?? 0) > 0) {
+                $lines[] = self::K($d['account'] ?? '11205', (int) $d['amount'], null, $d['label'] ?? null);
+            }
+        }
+        $lines[] = self::K($inv->cash_account ?: '11102', $inv->total);
+        $this->apply($key, [['date' => $inv->paid_at->toDateString(), 'description' => "Bayar invoice kantin {$inv->number}", 'division' => 'toko', 'event_code' => 'TK-16', 'lines' => $lines]], $inv);
     }
 
     /**

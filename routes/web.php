@@ -12,6 +12,8 @@ use App\Http\Controllers\Apps\CustomerController;
 use App\Http\Controllers\Apps\CustomerSegmentController;
 use App\Http\Controllers\Apps\CustomerVoucherController;
 use App\Http\Controllers\Apps\AccountingController;
+use App\Http\Controllers\Apps\ConsignmentController;
+use App\Http\Controllers\Apps\KantinInvoiceController;
 use App\Http\Controllers\Apps\DeductionController;
 use App\Http\Controllers\Apps\DineAreaController;
 use App\Http\Controllers\Apps\DineTableController;
@@ -270,6 +272,10 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
         Route::post('accounts', [AccountingController::class, 'storeAccount'])->middleware('permission:accounting-manage')->name('accounts.store');
         Route::put('accounts/{account}', [AccountingController::class, 'updateAccount'])->middleware('permission:accounting-manage')->name('accounts.update');
         Route::get('kantin', [AccountingController::class, 'kantin'])->middleware('permission:accounting-access')->name('kantin');
+        Route::post('kantin/invoices', [KantinInvoiceController::class, 'store'])->middleware('permission:accounting-create')->name('kantin.invoices.store');
+        Route::get('kantin/invoices/{invoice}/print', [KantinInvoiceController::class, 'print'])->middleware('permission:accounting-access')->name('kantin.invoices.print');
+        Route::post('kantin/invoices/{invoice}/pay', [KantinInvoiceController::class, 'pay'])->middleware('permission:accounting-create')->name('kantin.invoices.pay');
+        Route::delete('kantin/invoices/{invoice}', [KantinInvoiceController::class, 'destroy'])->middleware('permission:accounting-create')->name('kantin.invoices.destroy');
         Route::put('settings', [AccountingController::class, 'updateSettings'])->middleware('permission:accounting-manage')->name('settings');
         Route::get('opening', [AccountingController::class, 'opening'])->middleware('permission:accounting-access')->name('opening');
         Route::post('opening', [AccountingController::class, 'storeOpening'])->middleware('permission:accounting-manage')->name('opening.store');
@@ -422,6 +428,23 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::patch('/receivables/{receivable}/collection-notes', [ReceivableController::class, 'updateCollectionNotes'])->middleware('permission:receivables-access')->name('receivables.collection-notes');
     Route::post('/receivables/{receivable}/pay', [ReceivableController::class, 'pay'])->middleware('permission:receivables-pay')->name('receivables.pay');
     Route::post('/receivables/{receivable}/share-campaign', [CrmCampaignController::class, 'shareReceivable'])->middleware('permission:crm-campaigns-create')->name('receivables.share-campaign');
+    // konsinyasi (barang titipan)
+    Route::prefix('consignments')->name('consignments.')->group(function () {
+        Route::get('/', [ConsignmentController::class, 'index'])->middleware('permission:products-access')->name('index');
+        Route::post('/', [ConsignmentController::class, 'store'])->middleware('permission:products-edit')->name('store');
+        Route::get('next-number', [ConsignmentController::class, 'nextNumber'])->middleware('permission:products-access')->name('next-number');
+        Route::get('payments/{payment}/print', [ConsignmentController::class, 'printPayment'])->middleware('permission:products-access')->name('payments.print');
+        Route::post('payments/{payment}/pay', [ConsignmentController::class, 'payPayment'])->middleware('permission:payables-pay')->name('payments.pay');
+        Route::delete('payments/{payment}', [ConsignmentController::class, 'destroyPayment'])->middleware('permission:products-edit')->name('payments.destroy');
+        Route::get('{consignor}', [ConsignmentController::class, 'show'])->middleware('permission:products-access')->name('show');
+        Route::put('{consignor}', [ConsignmentController::class, 'update'])->middleware('permission:products-edit')->name('update');
+        Route::post('{consignor}/products', [ConsignmentController::class, 'storeProduct'])->middleware('permission:products-edit')->name('products.store');
+        Route::post('{consignor}/products/attach', [ConsignmentController::class, 'attachProduct'])->middleware('permission:products-edit')->name('products.attach');
+        Route::put('{consignor}/products/{product}', [ConsignmentController::class, 'updatePrice'])->middleware('permission:products-edit')->name('products.price');
+        Route::post('{consignor}/moves', [ConsignmentController::class, 'move'])->middleware('permission:products-edit')->name('moves.store');
+        Route::post('{consignor}/payments', [ConsignmentController::class, 'storePayment'])->middleware('permission:products-edit')->name('payments.store');
+    });
+
     // suppliers & payables
     Route::get('/suppliers', [SupplierController::class, 'index'])->middleware('permission:suppliers-access')->name('suppliers.index');
     Route::post('/suppliers', [SupplierController::class, 'store'])->middleware('permission:suppliers-access')->name('suppliers.store');

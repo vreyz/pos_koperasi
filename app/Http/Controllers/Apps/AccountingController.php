@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Customer;
 use App\Models\JournalEntry;
+use App\Models\KantinInvoice;
 use App\Models\Setting;
 use App\Models\Warehouse;
 use App\Services\Accounting\AutoJournalService;
@@ -13,6 +14,7 @@ use App\Services\Accounting\DefaultChart;
 use App\Services\Accounting\EventCatalog;
 use App\Services\Accounting\JournalService;
 use App\Services\Accounting\ReportService;
+use App\Services\Consignment\DocumentNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -343,6 +345,10 @@ class AccountingController extends Controller
             'kantinShare' => EventCatalog::kantinShare(),
             'kantinWarehouses' => Warehouse::whereIn('id', $kantinIds)->orderBy('name')->pluck('name'),
             'autoFrom' => AutoJournalService::autoFrom(),
+            'invoices' => KantinInvoice::where('year', $year)->orderByDesc('date')->orderByDesc('seq')->get(),
+            'nextInvoiceNumber' => DocumentNumber::next('kantin', now()->toDateString()),
+            'lastInvoice' => KantinInvoice::latest('id')->first(['payee_name', 'payee_bank', 'payee_account', 'signer', 'period_to']),
+            'today' => now()->toDateString(),
         ]);
     }
 

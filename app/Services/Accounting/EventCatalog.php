@@ -40,7 +40,7 @@ class EventCatalog
      */
     public const AUTO_CODES = [
         'TK-02' => 'Penerimaan Barang', 'TK-03' => 'Penerimaan Barang', 'TK-05' => 'Kasir (POS)', 'TK-11' => 'Retur Penjualan',
-        'TK-12' => 'Kasir (POS)', 'TK-14' => 'Stock Opname', 'TK-15' => 'Kasir (POS) outlet Kantin', 'TK-21' => 'Piutang',
+        'TK-12' => 'Kasir (POS)', 'TK-13' => 'Konsinyasi (Instruksi Pembayaran)', 'TK-14' => 'Stock Opname', 'TK-15' => 'Kasir (POS) outlet Kantin', 'TK-21' => 'Piutang',
         'PD-01' => 'Pembiayaan Dana', 'PD-02' => 'Pembiayaan Dana', 'PD-05' => 'Pembiayaan Dana', 'PD-06' => 'Pembiayaan Dana',
         'PB-01' => 'Pembiayaan Barang', 'PB-02' => 'Pembiayaan Barang', 'PB-03' => 'Pembiayaan Barang', 'PB-04' => 'Pembiayaan Barang',
         'SP-01' => 'Angsuran & Potongan', 'SP-05' => 'Simpanan Anggota', 'TB-04' => 'SHU',

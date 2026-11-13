@@ -40,7 +40,14 @@ class Product extends Model
         'min_stock',
         'max_stock',
         'is_composite',
+        'consignor_id',
     ];
+
+    /** Penitip bila barang ini titipan (konsinyasi); harga titip = buy_price. */
+    public function consignor()
+    {
+        return $this->belongsTo(Consignor::class);
+    }
 
     public function category()
     {
