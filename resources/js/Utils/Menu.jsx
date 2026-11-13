@@ -182,6 +182,7 @@ export default function Menu({ includeHidden = false } = {}) {
                 ["Catat Kejadian", "accounting.record", (u) => u.startsWith("/dashboard/accounting/record"), "accounting-create"],
                 ["Buku Besar", "accounting.ledger", (u) => u.startsWith("/dashboard/accounting/ledger"), "accounting-access"],
                 ["Neraca Saldo", "accounting.trial-balance", (u) => u.startsWith("/dashboard/accounting/trial-balance"), "accounting-access"],
+                ["Rekap Kantin", "accounting.kantin", (u) => u.startsWith("/dashboard/accounting/kantin"), "accounting-access"],
                 ["Laporan Keuangan", "accounting.reports", (u) => u.startsWith("/dashboard/accounting/reports"), "accounting-access"],
                 ["COA & Saldo Awal", "accounting.accounts", (u) => u.startsWith("/dashboard/accounting/accounts") || u.startsWith("/dashboard/accounting/opening") || u.startsWith("/dashboard/accounting/manual"), "accounting-access"],
             ].map(([title, name, isActive, perm]) => ({

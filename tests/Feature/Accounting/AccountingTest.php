@@ -84,6 +84,24 @@ class AccountingTest extends TestCase
         $this->assertSame(0, $this->balanceOf('21104'));
     }
 
+    public function test_kantin_recap_shows_monthly_sales_share_payments_and_actual_portion(): void
+    {
+        $user = $this->user();
+        $this->actingAs($user)->put(route('accounting.settings'), ['kantin_share_percent' => 10])->assertSessionHasNoErrors();
+        foreach ([['2026-01-10', 1000000], ['2026-02-07', 500000]] as [$date, $qris]) {
+            $this->actingAs($user)->post(route('accounting.record.store'), ['event' => 'TK-15', 'date' => $date, 'values' => ['qris' => $qris, 'cash' => '11102']])->assertSessionHasNoErrors();
+        }
+        $this->actingAs($user)->post(route('accounting.record.store'), ['event' => 'TK-16', 'date' => '2026-01-31', 'values' => ['amount' => 900000, 'cash' => '11102']])->assertSessionHasNoErrors();
+
+        $this->actingAs($user)->get(route('accounting.kantin', ['year' => 2026]))->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Dashboard/Accounting/Kantin')
+            ->where('kantinShare', 10)
+            ->where('months.0', ['month' => 1, 'sales' => 1000000, 'share' => 100000, 'keeper' => 900000, 'paid' => 900000, 'balance' => 0])
+            ->where('months.1', ['month' => 2, 'sales' => 500000, 'share' => 50000, 'keeper' => 450000, 'paid' => 0, 'balance' => 450000])
+            ->where('months.11.balance', 450000)
+            ->has('payments', 1));
+    }
+
     public function test_payroll_recap_is_one_journal_traceable_per_employee(): void
     {
         $user = $this->user();

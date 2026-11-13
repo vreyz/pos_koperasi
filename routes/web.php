@@ -269,6 +269,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
         Route::get('accounts', [AccountingController::class, 'accounts'])->middleware('permission:accounting-access')->name('accounts');
         Route::post('accounts', [AccountingController::class, 'storeAccount'])->middleware('permission:accounting-manage')->name('accounts.store');
         Route::put('accounts/{account}', [AccountingController::class, 'updateAccount'])->middleware('permission:accounting-manage')->name('accounts.update');
+        Route::get('kantin', [AccountingController::class, 'kantin'])->middleware('permission:accounting-access')->name('kantin');
         Route::put('settings', [AccountingController::class, 'updateSettings'])->middleware('permission:accounting-manage')->name('settings');
         Route::get('opening', [AccountingController::class, 'opening'])->middleware('permission:accounting-access')->name('opening');
         Route::post('opening', [AccountingController::class, 'storeOpening'])->middleware('permission:accounting-manage')->name('opening.store');

@@ -36,6 +36,7 @@ const TABS = [
     ["accounting.ledger", "Buku Besar"],
     ["accounting.trial-balance", "Neraca Saldo"],
     ["accounting.reports", "Laporan Keuangan"],
+    ["accounting.kantin", "Rekap Kantin"],
     ["accounting.accounts", "COA & Pengaturan"],
     ["accounting.opening", "Saldo Awal"],
 ];

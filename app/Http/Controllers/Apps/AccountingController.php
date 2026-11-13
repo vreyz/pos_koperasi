@@ -290,6 +290,62 @@ class AccountingController extends Controller
         return $data;
     }
 
+    /**
+     * Rekap kantin per bulan dari jurnal: penjualan (uang muka 21112), bagi hasil koperasi (43101),
+     * bagian penjaga (21104 kredit), yang sudah ditransfer (21104 debit), sisa hutang, dan porsi aktual.
+     * Sumbernya jurnal TK-15 (otomatis dari kasir outlet kantin atau dicatat dari rekap mingguan) & TK-16.
+     */
+    public function kantin(Request $request)
+    {
+        $year = (int) ($request->query('year') ?: now()->year);
+        $from = "{$year}-01-01";
+        $to = "{$year}-12-31";
+        $lines = DB::table('journal_lines as l')
+            ->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')
+            ->join('accounts as a', 'a.id', '=', 'l.account_id')
+            ->whereIn('a.code', ['21112', '43101', '21104'])
+            ->whereBetween('e.date', [$from, $to])
+            ->get(['e.id', 'e.date', 'e.number', 'e.description', 'e.event_code', 'a.code', 'l.debit', 'l.credit']);
+        $opening = (int) DB::table('journal_lines as l')
+            ->join('journal_entries as e', 'e.id', '=', 'l.journal_entry_id')
+            ->join('accounts as a', 'a.id', '=', 'l.account_id')
+            ->where('a.code', '21104')->where('e.date', '<', $from)
+            ->selectRaw('COALESCE(SUM(l.credit - l.debit), 0) as s')->value('s');
+
+        $months = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $months[$m] = ['month' => $m, 'sales' => 0, 'share' => 0, 'keeper' => 0, 'paid' => 0, 'balance' => 0];
+        }
+        foreach ($lines as $l) {
+            $m = (int) substr((string) $l->date, 5, 2);
+            match ($l->code) {
+                '21112' => $months[$m]['sales'] += (int) $l->credit,
+                '43101' => $months[$m]['share'] += (int) $l->credit - (int) $l->debit,
+                '21104' => [$months[$m]['keeper'] += (int) $l->credit, $months[$m]['paid'] += (int) $l->debit],
+            };
+        }
+        $run = $opening;
+        foreach ($months as &$row) {
+            $run += $row['keeper'] - $row['paid'];
+            $row['balance'] = $run;
+        }
+        unset($row);
+        $payments = $lines->where('code', '21104')->where('debit', '>', 0)->sortByDesc('date')->values()
+            ->map(fn ($l) => ['id' => $l->id, 'date' => substr((string) $l->date, 0, 10), 'number' => $l->number, 'description' => $l->description, 'amount' => (int) $l->debit]);
+        $kantinIds = app(AutoJournalService::class)->kantinWarehouseIds();
+
+        return Inertia::render('Dashboard/Accounting/Kantin', [
+            ...$this->common(),
+            'year' => $year,
+            'opening' => $opening,
+            'months' => array_values($months),
+            'payments' => $payments,
+            'kantinShare' => EventCatalog::kantinShare(),
+            'kantinWarehouses' => Warehouse::whereIn('id', $kantinIds)->orderBy('name')->pluck('name'),
+            'autoFrom' => AutoJournalService::autoFrom(),
+        ]);
+    }
+
     public function updateSettings(Request $request)
     {
         $data = $request->validate([
